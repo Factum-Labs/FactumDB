@@ -1,0 +1,37 @@
+# Evidence files - never commit these.
+# The evidence can contain real personal data, this repo is public,
+# and git history keeps a file forever even after you delete it.
+# Ignored by file type so a stray copy is caught anywhere in the repo.
+*.ibd
+mysql-bin.*
+raw_*.json
+raw_*.txt
+raw_*.sql
+evidence/
+working/
+
+# SQLite case database - holds everything extracted from the evidence,
+# so it is just as sensitive. (-wal and -shm are SQLite's side files.)
+*.db
+*.db-wal
+*.db-shm
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+.pytest_cache/
+
+# Frontend and Tauri build output
+node_modules/
+dist/
+src-tauri/target/
+
+# Editor and OS files
+.vscode/
+.DS_Store
+*.swp
+
+# Local tool paths and secrets (e.g. FACTUMDB_IBD2SQL_PATH)
+.env
