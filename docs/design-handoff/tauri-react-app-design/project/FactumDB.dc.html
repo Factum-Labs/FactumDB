@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#f7f7f5}
+*{box-sizing:border-box}
+a{color:oklch(0.52 0.14 255);text-decoration:none}
+a:hover{color:oklch(0.44 0.14 255);text-decoration:underline}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#d8d7d2;border:3px solid #f7f7f5;border-radius:6px}
+@keyframes fdbpulse{0%,100%{opacity:1}50%{opacity:.35}}
+</style>
+</helmet>
+<div style="display:flex;flex-direction:column;height:100vh;background:#f7f7f5;color:#1c1b19;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased">
+
+  <div style="display:flex;align-items:center;gap:12px;height:34px;flex:none;padding:0 12px;background:#efeeea;border-bottom:1px solid #e2e1dd">
+    <div style="display:flex;gap:6px;align-items:center">
+      <div style="width:11px;height:11px;border-radius:50%;background:#d9d8d3"></div>
+      <div style="width:11px;height:11px;border-radius:50%;background:#d9d8d3"></div>
+      <div style="width:11px;height:11px;border-radius:50%;background:#d9d8d3"></div>
+    </div>
+    <div style="font-weight:600;letter-spacing:.02em;font-size:12.5px">FactumDB</div>
+    <div style="width:1px;height:14px;background:#dedcd7"></div>
+    <div style="display:flex;align-items:center;gap:7px;font-size:11.5px;color:#6b6a65">
+      <span style="font-family:'IBM Plex Mono',monospace;color:#1c1b19">FDB-2026-014</span>
+      <span>Finance Balance Investigation</span>
+    </div>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#6b6a65">
+      <span style="width:6px;height:6px;border-radius:50%;background:oklch(0.6 0.13 150)"></span>
+      Read-only evidence mode
+    </div>
+    <div style="width:1px;height:14px;background:#dedcd7"></div>
+    <div style="font-size:11.5px;color:#6b6a65">Examiner: Analyst 01</div>
+  </div>
+
+  <sc-if value="{{ isTop }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:none;display:flex;align-items:center;gap:2px;padding:0 10px;background:#fff;border-bottom:1px solid #e2e1dd;overflow-x:auto">
+      <sc-for list="{{ nav }}" as="n" hint-placeholder-count="10">
+        <button onClick="{{ n.go }}" style="{{ n.tabStyle }}" style-hover="background:#f3f2ef">{{ n.label }}</button>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <div style="flex:1;display:flex;min-height:0">
+
+    <sc-if value="{{ isSide }}" hint-placeholder-val="{{ true }}">
+      <aside style="width:206px;flex:none;background:#fff;border-right:1px solid #e2e1dd;padding:10px 8px;overflow-y:auto">
+        <sc-for list="{{ navGroups }}" as="g" hint-placeholder-count="3">
+          <div style="margin-bottom:14px">
+            <div style="font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#9a998f;padding:0 8px 6px;font-weight:600">{{ g.title }}</div>
+            <sc-for list="{{ g.items }}" as="n" hint-placeholder-count="4">
+              <button onClick="{{ n.go }}" style="{{ n.itemStyle }}" style-hover="background:#f3f2ef">
+                <span style="{{ n.dotStyle }}"></span>
+                <span style="flex:1;text-align:left">{{ n.label }}</span>
+                <span style="{{ n.countStyle }}">{{ n.count }}</span>
+              </button>
+            </sc-for>
+          </div>
+        </sc-for>
+        <div style="margin:18px 8px 4px;padding:9px 10px;background:#f7f7f5;border:1px solid #e7e6e1;border-radius:5px">
+          <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#9a998f;font-weight:600;margin-bottom:6px">Pipeline</div>
+          <div style="display:flex;align-items:center;gap:7px;font-size:11.5px">
+            <span style="width:6px;height:6px;border-radius:50%;background:oklch(0.6 0.13 150)"></span>
+            <span>Complete · 13 / 13</span>
+          </div>
+          <div style="height:3px;background:#e2e1dd;border-radius:2px;margin-top:8px;overflow:hidden">
+            <div style="width:100%;height:100%;background:oklch(0.6 0.13 150)"></div>
+          </div>
+        </div>
+      </aside>
+    </sc-if>
+
+    <sc-if value="{{ isRail }}" hint-placeholder-val="{{ false }}">
+      <aside style="width:62px;flex:none;background:#fff;border-right:1px solid #e2e1dd;padding:10px 6px;display:flex;flex-direction:column;gap:3px;overflow-y:auto">
+        <sc-for list="{{ nav }}" as="n" hint-placeholder-count="10">
+          <button onClick="{{ n.go }}" title="{{ n.label }}" style="{{ n.railStyle }}" style-hover="background:#f3f2ef">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:500">{{ n.code }}</span>
+            <span style="font-size:8.5px;letter-spacing:.04em;color:#9a998f;text-align:center;line-height:1.1">{{ n.short }}</span>
+          </button>
+        </sc-for>
+      </aside>
+    </sc-if>
+
+    <main style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0">
+      <div style="flex:none;display:flex;align-items:flex-end;gap:14px;padding:12px 18px 11px;background:#fff;border-bottom:1px solid #e2e1dd">
+        <div style="min-width:0">
+          <div style="font-size:15px;font-weight:600;letter-spacing:-.005em">{{ title }}</div>
+          <div style="font-size:11.5px;color:#6b6a65;margin-top:2px">{{ subtitle }}</div>
+        </div>
+        <div style="flex:1"></div>
+        <div style="display:flex;gap:7px;align-items:center">
+          <button onClick="{{ cycleShell }}" style="height:27px;padding:0 10px;font-size:11.5px;font-family:inherit;color:#6b6a65;background:#fff;border:1px solid #dedcd7;border-radius:4px;cursor:pointer" style-hover="background:#f3f2ef">Shell: {{ shellLabel }}</button>
+          <button onClick="{{ goReport }}" style="height:27px;padding:0 11px;font-size:11.5px;font-weight:500;font-family:inherit;color:#fff;background:oklch(0.52 0.14 255);border:1px solid oklch(0.47 0.14 255);border-radius:4px;cursor:pointer" style-hover="background:oklch(0.47 0.14 255)">Export report</button>
+        </div>
+      </div>
+
+      <div style="flex:1;overflow:auto;padding:16px 18px 40px">
+
+        <sc-if value="{{ atCases }}" hint-placeholder-val="{{ true }}">
+          <div style="max-width:1080px">
+            <div style="display:flex;gap:10px;margin-bottom:14px">
+              <button onClick="{{ goIntake }}" style="height:29px;padding:0 12px;font-size:12px;font-weight:500;font-family:inherit;color:#fff;background:#1c1b19;border:none;border-radius:4px;cursor:pointer">New case</button>
+              <input placeholder="Filter cases…" style="height:29px;width:230px;padding:0 10px;font-size:12px;font-family:inherit;background:#fff;border:1px solid #dedcd7;border-radius:4px;color:#1c1b19">
+            </div>
+            <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;overflow:hidden">
+              <div style="display:grid;grid-template-columns:130px 1fr 110px 92px 108px 140px;gap:0;padding:7px 12px;background:#faf9f7;border-bottom:1px solid #e2e1dd;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:#8b8a82;font-weight:600">
+                <div>Case ID</div><div>Name</div><div>Examiner</div><div>Evidence</div><div>Status</div><div>Opened</div>
+              </div>
+              <sc-for list="{{ cases }}" as="c" hint-placeholder-count="5">
+                <div onClick="{{ goIntake }}" style="{{ c.rowStyle }}" style-hover="background:#faf9f7">
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:12px">{{ c.id }}</div>
+                  <div>{{ c.name }}</div>
+                  <div style="color:#6b6a65">{{ c.examiner }}</div>
+                  <div style="color:#6b6a65">{{ c.files }} files</div>
+                  <div><span style="{{ c.badgeStyle }}">{{ c.status }}</span></div>
+                  <div style="color:#6b6a65;font-family:'IBM Plex Mono',monospace;font-size:11.5px">{{ c.opened }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ atIntake }}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid;grid-template-columns:320px 1fr;gap:16px;max-width:1180px;align-items:start">
+            <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;padding:14px">
+              <div style="font-size:12px;font-weight:600;margin-bottom:12px">Case details</div>
+              <div style="display:flex;flex-direction:column;gap:11px">
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:#6b6a65">Case ID
+                  <input value="FDB-2026-014" style="height:29px;padding:0 9px;font-size:12px;font-family:'IBM Plex Mono',monospace;background:#fff;border:1px solid #dedcd7;border-radius:4px;color:#1c1b19"></label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:#6b6a65">Case name
+                  <input value="Finance Balance Investigation" style="height:29px;padding:0 9px;font-size:12px;font-family:inherit;background:#fff;border:1px solid #dedcd7;border-radius:4px;color:#1c1b19"></label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:#6b6a65">Examiner
+                  <input value="Analyst 01" style="height:29px;padding:0 9px;font-size:12px;font-family:inherit;background:#fff;border:1px solid #dedcd7;border-radius:4px;color:#1c1b19"></label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:#6b6a65">Case workspace
+                  <input value="~/factumdb/cases/FDB-2026-014" style="height:29px;padding:0 9px;font-size:11.5px;font-family:'IBM Plex Mono',monospace;background:#fff;border:1px solid #dedcd7;border-radius:4px;color:#1c1b19"></label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:#6b6a65">Examiner notes
+                  <textarea rows="3" style="padding:7px 9px;font-size:12px;font-family:inherit;background:#fff;border:1px solid #dedcd7;border-radius:4px;color:#1c1b19;resize:vertical">Acquired from imaged host FIN-DB-02.</textarea></label>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;align-items:center;justify-content:center;gap:10px;height:76px;background:#fff;border:1px dashed #cfcdc7;border-radius:6px;color:#6b6a65;font-size:12px">
+                Drop <span style="font-family:'IBM Plex Mono',monospace">.ibd</span> files and binary logs here, or
+                <button style="height:26px;padding:0 10px;font-size:11.5px;font-family:inherit;background:#fff;border:1px solid #dedcd7;border-radius:4px;cursor:pointer;color:#1c1b19" style-hover="background:#f3f2ef">Browse…</button>
+              </div>
+              <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid #e2e1dd">
+                  <div style="font-size:12px;font-weight:600">Registered evidence</div>
+                  <div style="font-size:11px;color:#6b6a65">5 files · 5 verified · originals untouched</div>
+                  <div style="flex:1"></div>
+                  <button onClick="{{ goPipeline }}" style="height:26px;padding:0 11px;font-size:11.5px;font-weight:500;font-family:inherit;color:#fff;background:oklch(0.52 0.14 255);border:none;border-radius:4px;cursor:pointer">Register &amp; verify</button>
+                </div>
+                <div style="display:grid;grid-template-columns:190px 92px 78px 1fr 108px;padding:7px 12px;background:#faf9f7;border-bottom:1px solid #e2e1dd;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:#8b8a82;font-weight:600">
+                  <div>File</div><div>Type</div><div>Size</div><div>SHA-256</div><div>Working copy</div>
+                </div>
+                <sc-for list="{{ evidence }}" as="e" hint-placeholder-count="5">
+                  <div style="display:grid;grid-template-columns:190px 92px 78px 1fr 108px;padding:8px 12px;border-bottom:1px solid #f0efec;font-size:12px;align-items:center">
+                    <div style="font-family:'IBM Plex Mono',monospace">{{ e.name }}</div>
+                    <div style="color:#6b6a65">{{ e.type }}</div>
+                    <div style="color:#6b6a65">{{ e.size }}</div>
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#6b6a65;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ e.hash }}</div>
+                    <div><span style="{{ e.badgeStyle }}">{{ e.state }}</span></div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:9px;align-items:flex-start;padding:10px 12px;background:oklch(0.97 0.03 85);border:1px solid oklch(0.88 0.06 85);border-radius:6px">
+                <span style="width:6px;height:6px;border-radius:50%;background:oklch(0.68 0.14 75);margin-top:6px;flex:none"></span>
+                <div style="font-size:11.5px;color:#5c4a20">
+                  <strong style="font-weight:600">Sequence gap in imported logs.</strong>
+                  binlog.000018 and binlog.000020 are present; binlog.000019 was not imported. Any timeline built from this set will be marked incomplete.
+                </div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ atPipeline }}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid;grid-template-columns:1fr 400px;gap:16px;max-width:1240px;align-items:start">
+            <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;overflow:hidden">
+              <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid #e2e1dd">
+                <div style="font-size:12px;font-weight:600">Processing pipeline</div>
+                <div style="flex:1"></div>
+                <button style="height:26px;padding:0 10px;font-size:11.5px;font-family:inherit;background:#fff;border:1px solid #dedcd7;border-radius:4px;cursor:pointer;color:#1c1b19" style-hover="background:#f3f2ef">Run stage</button>
+                <button onClick="{{ goTimeline }}" style="height:26px;padding:0 11px;font-size:11.5px;font-weight:500;font-family:inherit;color:#fff;background:#1c1b19;border:none;border-radius:4px;cursor:pointer">Run complete analysis</button>
+              </div>
+              <sc-for list="{{ stages }}" as="s" hint-placeholder-count="13">
+                <div style="display:grid;grid-template-columns:26px 1fr 128px 86px;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid #f0efec">
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#9a998f">{{ s.n }}</div>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="{{ s.dotStyle }}"></span>
+                    <span style="font-size:12px">{{ s.name }}</span>
+                  </div>
+                  <div style="font-size:11px;color:#6b6a65">{{ s.detail }}</div>
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#9a998f;text-align:right">{{ s.time }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <sc-for list="{{ stats }}" as="t" hint-placeholder-count="8">
+                  <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;padding:9px 11px">
+                    <div style="font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:#8b8a82;font-weight:600">{{ t.label }}</div>
+                    <div style="{{ t.valueStyle }}">{{ t.value }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="background:#1c1b19;border-radius:6px;padding:11px 12px;overflow:auto;max-height:330px">
+                <div style="font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:#8b8a82;font-weight:600;margin-bottom:8px">Execution log</div>
+                <sc-for list="{{ logLines }}" as="l" hint-placeholder-count="10">
+                  <div style="{{ l.style }}">{{ l.text }}</div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ atTimeline }}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid;grid-template-columns:268px 1fr;gap:16px;max-width:1240px;align-items:start">
+            <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;overflow:hidden">
+              <div style="padding:9px 12px;border-bottom:1px solid #e2e1dd;font-size:12px;font-weight:600">Transactions</div>
+              <sc-for list="{{ transactions }}" as="t" hint-placeholder-count="4">
+                <div onClick="{{ t.select }}" style="{{ t.rowStyle }}" style-hover="background:#faf9f7">
+                  <div style="display:flex;align-items:center;gap:7px">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:500">{{ t.id }}</span>
+                    <span style="{{ t.badgeStyle }}">{{ t.status }}</span>
+                  </div>
+                  <div style="font-size:11px;color:#6b6a65;margin-top:3px">{{ t.summary }}</div>
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#9a998f;margin-top:3px">{{ t.when }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;padding:13px 14px">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                  <div style="font-size:15px;font-weight:600;font-family:'IBM Plex Mono',monospace">{{ tx.id }}</div>
+                  <span style="{{ tx.badgeStyle }}">{{ tx.status }}</span>
+                  <div style="flex:1"></div>
+                  <button onClick="{{ goProvenance }}" style="height:26px;padding:0 10px;font-size:11.5px;font-family:inherit;background:#fff;border:1px solid #dedcd7;border-radius:4px;cursor:pointer;color:#1c1b19" style-hover="background:#f3f2ef">Provenance</button>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px">
+                  <sc-for list="{{ tx.meta }}" as="m" hint-placeholder-count="4">
+                    <div>
+                      <div style="font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:#8b8a82;font-weight:600">{{ m.k }}</div>
+                      <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;margin-top:2px">{{ m.v }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;overflow:hidden">
+                <div style="padding:9px 12px;border-bottom:1px solid #e2e1dd;font-size:12px;font-weight:600">Events in commit order</div>
+                <sc-for list="{{ tx.events }}" as="ev" hint-placeholder-count="3">
+                  <div style="padding:11px 13px;border-bottom:1px solid #f0efec">
+                    <div style="display:flex;align-items:center;gap:9px">
+                      <span style="{{ ev.opStyle }}">{{ ev.op }}</span>
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:12px">{{ ev.table }}</span>
+                      <span style="font-size:11px;color:#6b6a65">key {{ ev.key }}</span>
+                      <div style="flex:1"></div>
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#9a998f">{{ ev.pos }}</span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:150px 1fr 1fr;gap:1px;margin-top:9px;background:#e7e6e1;border:1px solid #e7e6e1;border-radius:4px;overflow:hidden">
+                      <div style="background:#faf9f7;padding:5px 9px;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:#8b8a82;font-weight:600">Column</div>
+                      <div style="background:#faf9f7;padding:5px 9px;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:#8b8a82;font-weight:600">Before</div>
+                      <div style="background:#faf9f7;padding:5px 9px;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:#8b8a82;font-weight:600">After</div>
+                      <sc-for list="{{ ev.rows }}" as="r" hint-placeholder-count="3">
+                        <div style="background:#fff;padding:5px 9px;font-family:'IBM Plex Mono',monospace;font-size:11.5px">
+                          <span style="color:#9a998f">{{ r.pos }}</span> {{ r.col }}
+                        </div>
+                        <div style="background:#fff;padding:5px 9px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#6b6a65">{{ r.before }}</div>
+                        <div style="{{ r.afterStyle }}">{{ r.after }}</div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-for>
+                <div style="padding:9px 13px;display:flex;align-items:center;gap:8px;font-size:11.5px;color:#6b6a65">
+                  <span style="width:6px;height:6px;border-radius:50%;background:oklch(0.6 0.13 150)"></span>
+                  XID 8821 · COMMIT recorded at binlog.000020 pos 4412
+                </div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ atRecord }}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid;grid-template-columns:250px 1fr;gap:16px;max-width:1180px;align-items:start">
+            <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;overflow:hidden">
+              <div style="padding:9px 12px;border-bottom:1px solid #e2e1dd;font-size:12px;font-weight:600">Correlated records</div>
+              <sc-for list="{{ records }}" as="r" hint-placeholder-count="3">
+                <div onClick="{{ r.select }}" style="{{ r.rowStyle }}" style-hover="background:#faf9f7">
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:12px">{{ r.table }}</div>
+                  <div style="font-size:11px;color:#6b6a65;margin-top:2px">{{ r.key }} · {{ r.events }} events</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;padding:13px 14px">
+                <div style="display:flex;align-items:baseline;gap:10px">
+                  <div style="font-size:15px;font-weight:600;font-family:'IBM Plex Mono',monospace">{{ rec.title }}</div>
+                  <div style="font-size:11.5px;color:#6b6a65">identity linked by {{ rec.method }}</div>
+                </div>
+              </div>
+              <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;padding:4px 14px 14px">
+                <sc-for list="{{ rec.steps }}" as="s" hint-placeholder-count="3">
+                  <div style="display:grid;grid-template-columns:16px 1fr;gap:12px;padding:12px 0 2px">
+                    <div style="display:flex;flex-direction:column;align-items:center;padding-top:4px">
+                      <span style="{{ s.dotStyle }}"></span>
+                      <span style="{{ s.lineStyle }}"></span>
+                    </div>
+                    <div>
+                      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                        <span style="font-size:12.5px;font-weight:600">{{ s.title }}</span>
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#9a998f">{{ s.source }}</span>
+                      </div>
+                      <div style="font-size:11.5px;color:#6b6a65;margin-top:2px">{{ s.note }}</div>
+                      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+                        <sc-for list="{{ s.fields }}" as="f" hint-placeholder-count="3">
+                          <div style="{{ f.chipStyle }}">
+                            <span style="color:#8b8a82">{{ f.col }}</span>
+                            <span>{{ f.val }}</span>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ atRecon }}" hint-placeholder-val="{{ false }}">
+          <div style="max-width:1180px;display:flex;flex-direction:column;gap:12px">
+            <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px">
+              <sc-for list="{{ reconSummary }}" as="s" hint-placeholder-count="6">
+                <div style="{{ s.cardStyle }}">
+                  <div style="font-size:19px;font-weight:600;font-family:'IBM Plex Mono',monospace">{{ s.n }}</div>
+                  <div style="font-size:11px;color:#6b6a65;margin-top:1px">{{ s.label }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;overflow:hidden">
+              <div style="display:grid;grid-template-columns:200px 130px 1fr 1fr 118px;padding:7px 12px;background:#faf9f7;border-bottom:1px solid #e2e1dd;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:#8b8a82;font-weight:600">
+                <div>Record</div><div>Field</div><div>Log-derived</div><div>Physical (.ibd)</div><div>Result</div>
+              </div>
+              <sc-for list="{{ recon }}" as="r" hint-placeholder-count="5">
+                <div style="display:grid;grid-template-columns:200px 130px 1fr 1fr 118px;padding:8px 12px;border-bottom:1px solid #f0efec;font-size:12px;align-items:center">
+                  <div style="font-family:'IBM Plex Mono',monospace">{{ r.record }}</div>
+                  <div style="color:#6b6a65">{{ r.field }}</div>
+                  <div style="font-family:'IBM Plex Mono',monospace">{{ r.log }}</div>
+                  <div style="font-family:'IBM Plex Mono',monospace">{{ r.phys }}</div>
+                  <div><span style="{{ r.badgeStyle }}">{{ r.result }}</span></div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:9px;align-items:flex-start;padding:11px 13px;background:#fff;border:1px solid #e2e1dd;border-radius:6px">
+              <span style="width:6px;height:6px;border-radius:50%;background:#9a998f;margin-top:6px;flex:none"></span>
+              <div style="font-size:11.5px;color:#4a4945;max-width:820px">
+                Classification is rule-based and describes agreement between available evidence only. FactumDB does not attribute a change to a person and does not determine intent.
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ atGaps }}" hint-placeholder-val="{{ false }}">
+          <div style="max-width:900px;display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ gaps }}" as="g" hint-placeholder-count="4">
+              <div style="{{ g.cardStyle }}">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <span style="{{ g.badgeStyle }}">{{ g.severity }}</span>
+                  <span style="font-size:12.5px;font-weight:600">{{ g.title }}</span>
+                  <div style="flex:1"></div>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#9a998f">{{ g.code }}</span>
+                </div>
+                <div style="font-size:12px;color:#4a4945;margin-top:6px">{{ g.detail }}</div>
+                <div style="display:flex;gap:18px;margin-top:9px;padding-top:9px;border-top:1px solid #eeece8">
+                  <div>
+                    <div style="font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:#8b8a82;font-weight:600">Impact</div>
+                    <div style="font-size:11.5px;margin-top:2px">{{ g.impact }}</div>
+                  </div>
+                  <div>
+                    <div style="font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:#8b8a82;font-weight:600">Affects</div>
+                    <div style="font-size:11.5px;margin-top:2px;font-family:'IBM Plex Mono',monospace">{{ g.affects }}</div>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ atProv }}" hint-placeholder-val="{{ false }}">
+          <div style="max-width:900px;display:flex;flex-direction:column;gap:12px">
+            <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;padding:13px 14px">
+              <div style="font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:#8b8a82;font-weight:600">Finding</div>
+              <div style="font-size:13px;margin-top:4px">Account 101 balance changed from 5000.00 to 4000.00 within committed transaction TX-1452.</div>
+            </div>
+            <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;overflow:hidden">
+              <div style="padding:9px 12px;border-bottom:1px solid #e2e1dd;font-size:12px;font-weight:600">Evidence chain</div>
+              <sc-for list="{{ provChain }}" as="p" hint-placeholder-count="6">
+                <div style="display:grid;grid-template-columns:150px 1fr;gap:12px;padding:9px 13px;border-bottom:1px solid #f0efec;align-items:start">
+                  <div style="font-size:11px;color:#8b8a82;font-weight:500;padding-top:1px">{{ p.k }}</div>
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;word-break:break-all">{{ p.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="background:#1c1b19;border-radius:6px;padding:11px 12px;overflow:auto">
+              <div style="font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:#8b8a82;font-weight:600;margin-bottom:8px">Raw utility output (preserved)</div>
+              <sc-for list="{{ rawLines }}" as="l" hint-placeholder-count="8">
+                <div style="{{ l.style }}">{{ l.text }}</div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ atReport }}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid;grid-template-columns:330px 1fr;gap:16px;max-width:1120px;align-items:start">
+            <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;padding:13px 14px">
+              <div style="font-size:12px;font-weight:600;margin-bottom:10px">Format</div>
+              <div style="display:flex;gap:0;border:1px solid #dedcd7;border-radius:4px;overflow:hidden;margin-bottom:14px">
+                <sc-for list="{{ formats }}" as="f" hint-placeholder-count="4">
+                  <button onClick="{{ f.select }}" style="{{ f.style }}">{{ f.label }}</button>
+                </sc-for>
+              </div>
+              <div style="font-size:12px;font-weight:600;margin-bottom:8px">Sections</div>
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <sc-for list="{{ sections }}" as="s" hint-placeholder-count="12">
+                  <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#4a4945;cursor:pointer">
+                    <input type="checkbox" checked="{{ s.on }}" style="accent-color:oklch(0.52 0.14 255);width:13px;height:13px">
+                    {{ s.label }}
+                  </label>
+                </sc-for>
+              </div>
+              <button style="margin-top:14px;width:100%;height:30px;font-size:12px;font-weight:500;font-family:inherit;color:#fff;background:oklch(0.52 0.14 255);border:none;border-radius:4px;cursor:pointer">Generate {{ format }} report</button>
+            </div>
+            <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;padding:26px 30px;box-shadow:0 1px 3px rgba(0,0,0,.05)">
+              <div style="font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#8b8a82;font-weight:600">Forensic examination report</div>
+              <div style="font-size:19px;font-weight:600;margin-top:5px">Finance Balance Investigation</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#6b6a65;margin-top:3px">FDB-2026-014 · Analyst 01 · generated 2026-03-14 11:42 UTC</div>
+              <div style="height:1px;background:#e7e6e1;margin:16px 0"></div>
+              <sc-for list="{{ reportPreview }}" as="p" hint-placeholder-count="4">
+                <div style="margin-bottom:14px">
+                  <div style="font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:#8b8a82;font-weight:600;margin-bottom:5px">{{ p.h }}</div>
+                  <div style="font-size:12px;color:#2c2b28;white-space:pre-line;font-family:'IBM Plex Mono',monospace;line-height:1.6">{{ p.body }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ atSettings }}" hint-placeholder-val="{{ false }}">
+          <div style="max-width:860px;display:flex;flex-direction:column;gap:12px">
+            <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;overflow:hidden">
+              <div style="padding:9px 12px;border-bottom:1px solid #e2e1dd;font-size:12px;font-weight:600">External utilities</div>
+              <sc-for list="{{ tools }}" as="t" hint-placeholder-count="4">
+                <div style="display:grid;grid-template-columns:130px 1fr 130px 92px;gap:10px;padding:9px 12px;border-bottom:1px solid #f0efec;align-items:center">
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:12px">{{ t.name }}</div>
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#6b6a65">{{ t.path }}</div>
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#6b6a65">{{ t.version }}</div>
+                  <div><span style="{{ t.badgeStyle }}">{{ t.state }}</span></div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="background:#fff;border:1px solid #e2e1dd;border-radius:6px;padding:13px 14px;display:flex;flex-direction:column;gap:11px">
+              <div style="font-size:12px;font-weight:600">Workspace</div>
+              <sc-for list="{{ settings }}" as="s" hint-placeholder-count="3">
+                <div style="display:grid;grid-template-columns:180px 1fr;gap:12px;align-items:center">
+                  <div style="font-size:11.5px;color:#6b6a65">{{ s.k }}</div>
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">{{ s.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+      </div>
+
+      <div style="flex:none;display:flex;align-items:center;gap:14px;height:24px;padding:0 14px;background:#efeeea;border-top:1px solid #e2e1dd;font-size:10.5px;color:#8b8a82;font-family:'IBM Plex Mono',monospace">
+        <span>SQLite: cases.db</span><span>·</span><span>MySQL 8.4.x profile</span><span>·</span><span>hash SHA-256</span>
+        <div style="flex:1"></div>
+        <span>1 coverage gap</span>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;shell&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;sidebar&quot;,&quot;rail&quot;,&quot;topbar&quot;],&quot;default&quot;:&quot;sidebar&quot;,&quot;tsType&quot;:&quot;'sidebar'|'rail'|'topbar'&quot;,&quot;section&quot;:&quot;Shell&quot;}}">
+const A = 'oklch(0.52 0.14 255)';
+const GRN = 'oklch(0.55 0.11 150)', AMB = 'oklch(0.62 0.13 75)', RED = 'oklch(0.55 0.16 25)', GRY = '#9a998f';
+const badge = (color, bg, bd) => `display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:3px;font-size:10.5px;font-weight:600;letter-spacing:.03em;color:${color};background:${bg};border:1px solid ${bd}`;
+const B = {
+  ok: badge('oklch(0.42 0.09 150)', 'oklch(0.96 0.03 150)', 'oklch(0.88 0.05 150)'),
+  warn: badge('oklch(0.45 0.09 70)', 'oklch(0.97 0.03 85)', 'oklch(0.89 0.06 85)'),
+  bad: badge('oklch(0.45 0.13 25)', 'oklch(0.96 0.03 25)', 'oklch(0.89 0.06 25)'),
+  neutral: badge('#5c5b55', '#f2f1ee', '#e2e1dd'),
+  info: badge('oklch(0.42 0.11 255)', 'oklch(0.96 0.03 255)', 'oklch(0.88 0.05 255)')
+};
+const dot = c => `width:7px;height:7px;border-radius:50%;flex:none;background:${c}`;
+
+class Component extends DCLogic {
+  state = { screen: 'cases', tx: 'TX-1452', rec: 'accounts:101', format: 'PDF', shell: null };
+
+  get shell() { return this.state.shell || this.props.shell || 'sidebar'; }
+  go(s) { return () => this.setState({ screen: s }); }
+
+  renderVals() {
+    const s = this.state.screen, shell = this.shell;
+    const meta = {
+      cases: ['Cases', 'Open an existing case or create a new one'],
+      intake: ['Evidence intake', 'Register files, hash originals, verify working copies'],
+      pipeline: ['Pipeline', 'Stage-by-stage processing under the orchestrator'],
+      timeline: ['Transaction timeline', 'Row events grouped into committed transactions'],
+      record: ['Record history', 'Chronological reconstruction from correlated events'],
+      recon: ['Reconciliation', 'Log-derived state compared with physical .ibd state'],
+      gaps: ['Evidence gaps', 'Limitations that constrain the conclusions'],
+      prov: ['Provenance', 'Trace a finding back to its source artefact'],
+      report: ['Report export', 'Reproducible output for examiner review'],
+      settings: ['Settings', 'Utility paths, versions and workspace']
+    };
+
+    const navDef = [
+      ['Case', [['cases', 'Cases', 'CS', '5'], ['intake', 'Evidence', 'EV', '5']]],
+      ['Analysis', [['pipeline', 'Pipeline', 'PL', '13'], ['timeline', 'Transactions', 'TX', '4'], ['record', 'Record history', 'RH', '3'], ['recon', 'Reconciliation', 'RC', '5'], ['gaps', 'Gaps & warnings', 'GP', '2'], ['prov', 'Provenance', 'PV', '']]],
+      ['Output', [['report', 'Report', 'RP', ''], ['settings', 'Settings', 'ST', '']]]
+    ];
+    const mk = ([id, label, code, count]) => {
+      const on = s === id;
+      return {
+        id, label, code, count, short: label.split(' ')[0].replace('&', ''),
+        go: this.go(id),
+        itemStyle: `display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:none;border-radius:4px;cursor:pointer;font-family:inherit;font-size:12px;text-align:left;color:${on ? '#1c1b19' : '#4a4945'};background:${on ? '#f0efec' : 'transparent'};font-weight:${on ? 600 : 400}`,
+        dotStyle: dot(on ? A : '#dcdad4'),
+        countStyle: `font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#a3a29a`,
+        tabStyle: `height:34px;padding:0 11px;font-family:inherit;font-size:12px;cursor:pointer;background:transparent;border:none;border-bottom:2px solid ${on ? A : 'transparent'};color:${on ? '#1c1b19' : '#6b6a65'};font-weight:${on ? 600 : 400};white-space:nowrap`,
+        railStyle: `display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 2px;border:none;border-radius:5px;cursor:pointer;background:${on ? '#f0efec' : 'transparent'};color:${on ? A : '#4a4945'}`
+      };
+    };
+    const navGroups = navDef.map(([title, items]) => ({ title, items: items.map(mk) }));
+    const nav = navGroups.flatMap(g => g.items);
+
+    const cases = [
+      ['FDB-2026-014', 'Finance Balance Investigation', 'Analyst 01', 5, 'Analysed', B.ok, '2026-03-14 09:20'],
+      ['FDB-2026-011', 'HR Payroll Row Deletions', 'Analyst 01', 3, 'Processing', B.info, '2026-03-09 14:02'],
+      ['FDB-2026-008', 'Vendor Ledger Review', 'Analyst 04', 7, 'Gaps found', B.warn, '2026-02-27 10:44'],
+      ['FDB-2026-005', 'Order Table Consistency', 'Analyst 02', 2, 'Analysed', B.ok, '2026-02-18 16:10'],
+      ['FDB-2025-097', 'Retail Refund Audit', 'Analyst 04', 4, 'Archived', B.neutral, '2025-12-02 08:35']
+    ].map(([id, name, examiner, files, status, badgeStyle, opened]) => ({
+      id, name, examiner, files, status, badgeStyle, opened,
+      rowStyle: 'display:grid;grid-template-columns:130px 1fr 110px 92px 108px 140px;padding:8px 12px;border-bottom:1px solid #f0efec;font-size:12px;align-items:center;cursor:pointer'
+    }));
+
+    const evidence = [
+      ['accounts.ibd', 'InnoDB tablespace', '112 KB', '9c7f2b41a0e8…e214', 'Verified', B.ok],
+      ['transfers.ibd', 'InnoDB tablespace', '96 KB', '51ab7cd93f10…a82c', 'Verified', B.ok],
+      ['binlog.000018', 'Row binary log', '4.1 MB', '0d2e9911cc47…7b03', 'Verified', B.ok],
+      ['binlog.000020', 'Row binary log', '3.7 MB', '81f42ae0b6d5…35da', 'Verified', B.ok],
+      ['schema_notes.txt', 'Examiner note', '2 KB', 'a71c04ffe8b2…19c6', 'Verified', B.ok]
+    ].map(([name, type, size, hash, state, badgeStyle]) => ({ name, type, size, hash, state, badgeStyle }));
+
+    const stageDef = [
+      ['Evidence registration', '5 files', '0.4 s', 'ok'], ['SHA-256 hashing', '5 hashes', '2.1 s', 'ok'],
+      ['Verified working copies', '5 / 5 match', '3.8 s', 'ok'], ['InnoDB page validation', '248 pages, 0 damaged', '1.6 s', 'ok'],
+      ['Schema extraction', '2 tables, 8 columns', '0.9 s', 'ok'], ['Physical-row extraction', '3 rows', '1.2 s', 'ok'],
+      ['Binary-log decoding', '2 logs, 1 missing', '11.4 s', 'warn'], ['Normalization', '412 objects', '0.7 s', 'ok'],
+      ['Transaction grouping', '4 transactions', '0.5 s', 'ok'], ['Record correlation', '3 records linked', '0.6 s', 'ok'],
+      ['State reconstruction', '3 histories', '0.4 s', 'ok'], ['Reconciliation', '5 comparisons', '0.3 s', 'ok'],
+      ['Result persistence & report', 'cases.db written', '0.8 s', 'ok']
+    ];
+    const stages = stageDef.map(([name, detail, time, k], i) => ({
+      n: String(i + 1).padStart(2, '0'), name, detail, time,
+      dotStyle: dot(k === 'warn' ? AMB : GRN)
+    }));
+
+    const stats = [
+      ['Evidence files', '5', '#1c1b19'], ['Verified', '5', GRN], ['Tables parsed', '2', '#1c1b19'],
+      ['Transactions', '4', '#1c1b19'], ['Records correlated', '3', '#1c1b19'], ['Exact matches', '5', GRN],
+      ['Unresolved', '0', '#1c1b19'], ['Coverage gaps', '1', AMB]
+    ].map(([label, value, c]) => ({ label, value, valueStyle: `font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:600;margin-top:2px;color:${c}` }));
+
+    const line = (t, c) => ({ text: t, style: `font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.65;color:${c};white-space:pre-wrap` });
+    const logLines = [
+      line('$ innochecksum --version', '#8b8a82'),
+      line('innochecksum Ver 8.4.0', '#c9c7c0'),
+      line('$ innochecksum work/accounts.ibd', '#8b8a82'),
+      line('  pages checked: 126   damaged: 0   exit 0', '#c9c7c0'),
+      line('$ ibd2sdi work/accounts.ibd', '#8b8a82'),
+      line('  finance.accounts  @1 account_id  @2 customer_name  @3 balance', '#c9c7c0'),
+      line('$ ibd2sql work/accounts.ibd', '#8b8a82'),
+      line('  2 rows extracted', '#c9c7c0'),
+      line('$ mysqlbinlog --base64-output=DECODE-ROWS -v work/binlog.000020', '#8b8a82'),
+      line('  1 812 events decoded, 3 retained after table filter', '#c9c7c0'),
+      line('! sequence gap: binlog.000019 not present in evidence set', AMB.replace('0.62', '0.72')),
+      line('  grouping → TX-1452 committed (XID 8821)', '#c9c7c0'),
+      line('  reconciliation → 5 comparisons, 5 exact', GRN.replace('0.55', '0.7'))
+    ];
+
+    const txDef = {
+      'TX-1452': {
+        id: 'TX-1452', status: 'Committed', badgeStyle: B.ok,
+        meta: [{ k: 'GTID', v: '4f8a:1452' }, { k: 'XID', v: '8821' }, { k: 'Source', v: 'binlog.000020' }, { k: 'Committed', v: '2026-02-11 03:14:07' }],
+        events: [
+          { op: 'UPDATE', table: 'finance.accounts', key: 'account_id=101', pos: 'pos 3980–4102', rows: [['@1', 'account_id', '101', '101', false], ['@2', 'customer_name', 'A. Perera', 'A. Perera', false], ['@3', 'balance', '5000.00', '4000.00', true]] },
+          { op: 'UPDATE', table: 'finance.accounts', key: 'account_id=205', pos: 'pos 4102–4224', rows: [['@1', 'account_id', '205', '205', false], ['@2', 'customer_name', 'B. Silva', 'B. Silva', false], ['@3', 'balance', '7500.00', '8500.00', true]] },
+          { op: 'INSERT', table: 'finance.transfers', key: 'transfer_id=9001', pos: 'pos 4224–4412', rows: [['@1', 'transfer_id', '—', '9001', true], ['@2', 'source_account', '—', '101', true], ['@4', 'amount', '—', '1000.00', true], ['@5', 'status', '—', 'COMPLETED', true]] }
+        ]
+      }
+    };
+    const opStyle = op => badge(op === 'INSERT' ? 'oklch(0.42 0.09 150)' : 'oklch(0.42 0.11 255)', op === 'INSERT' ? 'oklch(0.96 0.03 150)' : 'oklch(0.96 0.03 255)', op === 'INSERT' ? 'oklch(0.88 0.05 150)' : 'oklch(0.88 0.05 255)');
+    const cur = txDef[this.state.tx] || txDef['TX-1452'];
+    const tx = {
+      ...cur,
+      events: cur.events.map(e => ({
+        ...e, opStyle: opStyle(e.op),
+        rows: e.rows.map(([pos, col, before, after, ch]) => ({
+          pos, col, before, after,
+          afterStyle: `padding:5px 9px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;background:${ch ? 'oklch(0.97 0.02 255)' : '#fff'};color:${ch ? 'oklch(0.4 0.12 255)' : '#6b6a65'};font-weight:${ch ? 500 : 400}`
+        }))
+      }))
+    };
+
+    const transactions = [
+      ['TX-1452', 'Committed', B.ok, '2 balance updates, 1 insert', 'binlog.000020 · 03:14:07'],
+      ['TX-1451', 'Committed', B.ok, '1 status update on transfers', 'binlog.000020 · 03:11:52'],
+      ['TX-1449', 'Rolled back', B.neutral, '1 update, no commit marker', 'binlog.000018 · 02:58:31'],
+      ['TX-1448', 'Incomplete', B.warn, 'BEGIN without terminator in range', 'binlog.000018 · 02:41:09']
+    ].map(([id, status, badgeStyle, summary, when]) => ({
+      id, status, badgeStyle, summary, when,
+      select: () => this.setState({ tx: id }),
+      rowStyle: `padding:9px 12px;border-bottom:1px solid #f0efec;cursor:pointer;border-left:2px solid ${this.state.tx === id ? A : 'transparent'};background:${this.state.tx === id ? '#faf9f7' : '#fff'}`
+    }));
+
+    const chip = (t) => `display:flex;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 8px;border-radius:3px;background:${t ? 'oklch(0.97 0.02 255)' : '#f7f7f5'};border:1px solid ${t ? 'oklch(0.9 0.04 255)' : '#e7e6e1'}`;
+    const recDef = {
+      'accounts:101': {
+        title: 'finance.accounts · account_id = 101', method: 'primary-key exact match',
+        steps: [
+          { title: 'Earliest observed state', source: 'binlog.000018 pos 2210', note: 'First row image available in the imported log set.', c: GRY, fields: [['balance', '5000.00', false], ['customer_name', 'A. Perera', false]] },
+          { title: 'TX-1452 · UPDATE', source: 'binlog.000020 pos 3980', note: 'Committed with XID 8821 alongside two further events.', c: A, fields: [['balance', '5000.00 → 4000.00', true], ['customer_name', 'unchanged', false]] },
+          { title: 'Physical state in .ibd', source: 'accounts.ibd via ibd2sql', note: 'Reconstructed final state agrees with the extracted physical row.', c: GRN, fields: [['balance', '4000.00', false], ['result', 'Exact', false]] }
+        ]
+      },
+      'accounts:205': {
+        title: 'finance.accounts · account_id = 205', method: 'primary-key exact match',
+        steps: [
+          { title: 'Earliest observed state', source: 'binlog.000018 pos 2402', note: 'First row image available in the imported log set.', c: GRY, fields: [['balance', '7500.00', false]] },
+          { title: 'TX-1452 · UPDATE', source: 'binlog.000020 pos 4102', note: 'Credit recorded in the same committed transaction.', c: A, fields: [['balance', '7500.00 → 8500.00', true]] },
+          { title: 'Physical state in .ibd', source: 'accounts.ibd via ibd2sql', note: 'Values agree.', c: GRN, fields: [['balance', '8500.00', false], ['result', 'Exact', false]] }
+        ]
+      },
+      'transfers:9001': {
+        title: 'finance.transfers · transfer_id = 9001', method: 'primary-key exact match',
+        steps: [
+          { title: 'Record absent', source: 'no prior event', note: 'No event referencing this key appears before TX-1452.', c: GRY, fields: [['state', 'absent', false]] },
+          { title: 'TX-1452 · INSERT', source: 'binlog.000020 pos 4224', note: 'Inserted after both balance updates, within the same commit.', c: A, fields: [['amount', '1000.00', true], ['status', 'COMPLETED', true]] },
+          { title: 'Physical state in .ibd', source: 'transfers.ibd via ibd2sql', note: 'Record present with matching values.', c: GRN, fields: [['result', 'Exact', false]] }
+        ]
+      }
+    };
+    const rd = recDef[this.state.rec];
+    const rec = {
+      ...rd,
+      steps: rd.steps.map((st, i) => ({
+        ...st,
+        dotStyle: `width:9px;height:9px;border-radius:50%;flex:none;background:${st.c}`,
+        lineStyle: `flex:1;width:1px;background:${i === rd.steps.length - 1 ? 'transparent' : '#e2e1dd'};margin-top:4px;min-height:34px`,
+        fields: st.fields.map(([col, val, hl]) => ({ col, val, chipStyle: chip(hl) }))
+      }))
+    };
+    const records = [
+      ['accounts:101', 'finance.accounts', 'account_id = 101', 2],
+      ['accounts:205', 'finance.accounts', 'account_id = 205', 2],
+      ['transfers:9001', 'finance.transfers', 'transfer_id = 9001', 1]
+    ].map(([id, table, key, events]) => ({
+      table, key, events,
+      select: () => this.setState({ rec: id }),
+      rowStyle: `padding:9px 12px;border-bottom:1px solid #f0efec;cursor:pointer;border-left:2px solid ${this.state.rec === id ? A : 'transparent'};background:${this.state.rec === id ? '#faf9f7' : '#fff'}`
+    }));
+
+    const reconSummary = [['5', 'Exact', GRN], ['0', 'Strong', null], ['0', 'Partial', null], ['0', 'Conflicting', null], ['0', 'Unresolved', null], ['0', 'Unsupported', null]]
+      .map(([n, label, c]) => ({ n, label, cardStyle: `background:#fff;border:1px solid ${c ? 'oklch(0.88 0.05 150)' : '#e2e1dd'};border-radius:6px;padding:10px 12px;color:${c || '#1c1b19'}` }));
+
+    const recon = [
+      ['finance.accounts · 101', 'balance', '4000.00', '4000.00', 'Exact', B.ok],
+      ['finance.accounts · 101', 'customer_name', 'A. Perera', 'A. Perera', 'Exact', B.ok],
+      ['finance.accounts · 205', 'balance', '8500.00', '8500.00', 'Exact', B.ok],
+      ['finance.transfers · 9001', 'record presence', 'present', 'present', 'Exact', B.ok],
+      ['finance.transfers · 9001', 'amount', '1000.00', '1000.00', 'Exact', B.ok]
+    ].map(([record, field, log, phys, result, badgeStyle]) => ({ record, field, log, phys, result, badgeStyle }));
+
+    const gaps = [
+      ['Warning', B.warn, 'Binary-log coverage gap', 'GAP-001', 'binlog.000019 is absent from the evidence set. Events between binlog.000018 pos 8814 and binlog.000020 pos 12 cannot be observed.', 'Timeline may be incomplete', 'finance.accounts, finance.transfers'],
+      ['Notice', B.neutral, 'Physical snapshot timing unknown', 'GAP-002', 'The acquisition time of the .ibd files relative to the last log event is not recorded in the evidence metadata.', 'Comparison window uncertain', 'all tables'],
+      ['Notice', B.neutral, 'Deleted-row remnants not recovered', 'GAP-003', 'Row remnants in free pages are outside the validated scope of this version.', 'Deletion analysis limited', 'finance.transfers'],
+      ['Info', B.info, 'Data types within validated subset', 'GAP-004', 'All observed columns use INT, VARCHAR and DECIMAL, which are inside the supported subset.', 'No interpretation limit', '8 columns']
+    ].map(([severity, badgeStyle, title, code, detail, impact, affects]) => ({
+      severity, badgeStyle, title, code, detail, impact, affects,
+      cardStyle: `background:#fff;border:1px solid ${severity === 'Warning' ? 'oklch(0.89 0.06 85)' : '#e2e1dd'};border-radius:6px;padding:12px 13px`
+    }));
+
+    const provChain = [
+      ['Evidence file', 'accounts.ibd'], ['Original SHA-256', '9c7f2b41a0e8f31d77a5c0b9e6421ba3d8f0c15e9a24bb7c0f31e2a6d94ae214'],
+      ['Working copy', '~/factumdb/cases/FDB-2026-014/work/accounts.ibd (hash match)'],
+      ['Utility', 'mysqlbinlog Ver 8.4.0 · /usr/bin/mysqlbinlog'],
+      ['Command', 'mysqlbinlog --base64-output=DECODE-ROWS -v work/binlog.000020'],
+      ['Event position', 'binlog.000020 · pos 3980–4102 · GTID 4f8a:1452 · XID 8821'],
+      ['Schema source', 'ibd2sdi → finance.accounts (@3 → balance)'],
+      ['Correlation rule', 'primary-key exact match (account_id)'],
+      ['Reconciliation rule', 'R-EXACT-01 · all comparable fields equal']
+    ].map(([k, v]) => ({ k, v }));
+
+    const rawLines = [
+      line('### UPDATE `finance`.`accounts`', '#8b8a82'),
+      line('### WHERE', '#c9c7c0'),
+      line("###   @1=101 /* INT meta=0 nullable=0 is_null=0 */", '#c9c7c0'),
+      line("###   @2='A. Perera' /* VARSTRING(100) */", '#c9c7c0'),
+      line('###   @3=5000.00 /* DECIMAL(12,2) */', '#c9c7c0'),
+      line('### SET', '#c9c7c0'),
+      line('###   @1=101', '#c9c7c0'),
+      line("###   @2='A. Perera'", '#c9c7c0'),
+      line('###   @3=4000.00', GRN.replace('0.55', '0.7'))
+    ];
+
+    const formats = ['PDF', 'HTML', 'JSON', 'CSV'].map(label => ({
+      label, select: () => this.setState({ format: label }),
+      style: `flex:1;height:28px;font-family:inherit;font-size:11.5px;cursor:pointer;border:none;border-right:1px solid #dedcd7;background:${this.state.format === label ? '#1c1b19' : '#fff'};color:${this.state.format === label ? '#fff' : '#4a4945'};font-weight:${this.state.format === label ? 600 : 400}`
+    }));
+    const sections = ['Case details', 'Evidence inventory', 'SHA-256 hashes', 'Utility versions and commands', 'Page-integrity results', 'Schema mappings', 'Transaction timeline', 'Record histories', 'Reconciliation results', 'Evidence gaps and limitations', 'Provenance references', 'Examiner notes'].map(label => ({ label, on: true }));
+    const reportPreview = [
+      { h: '2. Evidence inventory', body: 'accounts.ibd      112 KB   9c7f…e214   verified\ntransfers.ibd      96 KB   51ab…a82c   verified\nbinlog.000018     4.1 MB   0d2e…7b03   verified\nbinlog.000020     3.7 MB   81f4…35da   verified' },
+      { h: '7. Transaction timeline', body: 'TX-1452  committed  GTID 4f8a:1452  XID 8821\n  UPDATE finance.accounts  101  balance 5000.00 → 4000.00\n  UPDATE finance.accounts  205  balance 7500.00 → 8500.00\n  INSERT finance.transfers 9001 amount 1000.00' },
+      { h: '9. Reconciliation results', body: '5 comparisons · 5 exact · 0 conflicting · 0 unresolved' },
+      { h: '10. Evidence gaps and limitations', body: 'GAP-001  binlog.000019 absent; timeline may be incomplete.\nFactumDB does not attribute changes to a person or determine intent.' }
+    ];
+
+    const tools = [
+      ['ibd2sdi', '/usr/bin/ibd2sdi', '8.4.0', 'Detected', B.ok],
+      ['innochecksum', '/usr/bin/innochecksum', '8.4.0', 'Detected', B.ok],
+      ['ibd2sql', '/opt/ibd2sql/main.py', '1.5', 'Detected', B.ok],
+      ['mysqlbinlog', '/usr/bin/mysqlbinlog', '8.4.0', 'Detected', B.ok]
+    ].map(([name, path, version, state, badgeStyle]) => ({ name, path, version, state, badgeStyle }));
+    const settings = [
+      ['Case root', '~/factumdb/cases'], ['Hash algorithm', 'SHA-256 (fixed)'],
+      ['Evidence handling', 'read-only, working copies verified'], ['MySQL profile', '8.4.x · InnoDB · file-per-table · row logging']
+    ].map(([k, v]) => ({ k, v }));
+
+    return {
+      title: meta[s][0], subtitle: meta[s][1],
+      nav, navGroups,
+      isSide: shell === 'sidebar', isRail: shell === 'rail', isTop: shell === 'topbar',
+      shellLabel: shell === 'sidebar' ? 'Sidebar' : shell === 'rail' ? 'Rail' : 'Top tabs',
+      cycleShell: () => this.setState({ shell: shell === 'sidebar' ? 'rail' : shell === 'rail' ? 'topbar' : 'sidebar' }),
+      atCases: s === 'cases', atIntake: s === 'intake', atPipeline: s === 'pipeline', atTimeline: s === 'timeline',
+      atRecord: s === 'record', atRecon: s === 'recon', atGaps: s === 'gaps', atProv: s === 'prov',
+      atReport: s === 'report', atSettings: s === 'settings',
+      goIntake: this.go('intake'), goPipeline: this.go('pipeline'), goTimeline: this.go('timeline'),
+      goProvenance: this.go('prov'), goReport: this.go('report'),
+      cases, evidence, stages, stats, logLines, transactions, tx, records, rec,
+      reconSummary, recon, gaps, provChain, rawLines,
+      formats, format: this.state.format, sections, reportPreview, tools, settings
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "factumdb-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "frontend:dev"],
+      "port": 1420
+    }
+  ]
+}
