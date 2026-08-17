@@ -261,9 +261,3 @@ One thing I noticed in my own evidence: the index file stores **absolute paths**
 **7. We model the binlog file list from `mysql-bin.index`.** Agreed with the team. It is the only way to tell that a log file is missing, and that difference decides whether a mismatch is reported as an evidence gap or wrongly reported as tampering.
 
 ---
-
-## Open questions for the team
-
-Nothing open right now - the three questions from the first draft were answered and are recorded as decisions 5, 6 and 7 above.
-
-TODO: check decision 6's JSON shape with Nisal before I start on the SQLite side.
