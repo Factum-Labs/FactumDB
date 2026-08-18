@@ -1,0 +1,23 @@
+[package]
+name = "factumdb"
+version = "0.1.0"
+description = "FactumDB — MySQL/InnoDB forensic examination workbench"
+authors = ["Yasiru"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "factumdb_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# This feature is used for production builds where `devUrl` points to the filesystem.
+custom-protocol = ["tauri/custom-protocol"]

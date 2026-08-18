@@ -33,5 +33,8 @@ src-tauri/target/
 .DS_Store
 *.swp
 
+# Claude Code local permission grants (machine-specific; launch.json is shared)
+.claude/settings.local.json
+
 # Local tool paths and secrets (e.g. FACTUMDB_IBD2SQL_PATH)
 .env
