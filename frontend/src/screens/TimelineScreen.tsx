@@ -2,12 +2,12 @@ import { Fragment } from 'react'
 import { Badge } from '../components/Badge'
 import { transactions, txDetail } from '../data/caseData'
 import { TX_TONE } from '../data/types'
-import { A, GRN } from '../lib/tokens'
+import { A, A_SOFT, GRN, MUTED, PANEL } from '../lib/tokens'
 import { useApp } from '../store'
 
 const OP_STYLE: Record<string, { color: string; bg: string; border: string }> = {
-  INSERT: { color: 'oklch(0.42 0.09 150)', bg: 'oklch(0.96 0.03 150)', border: 'oklch(0.88 0.05 150)' },
-  UPDATE: { color: 'oklch(0.42 0.11 255)', bg: 'oklch(0.96 0.03 255)', border: 'oklch(0.88 0.05 255)' },
+  INSERT: { color: '#256e5c', bg: '#e8f4f0', border: '#bfded4' },
+  UPDATE: { color: '#15696f', bg: '#e2efee', border: '#b4d9d5' },
   DELETE: { color: 'oklch(0.45 0.13 25)', bg: 'oklch(0.96 0.03 25)', border: 'oklch(0.89 0.06 25)' },
 }
 
@@ -32,7 +32,7 @@ export function TimelineScreen() {
               className="cursor-pointer border-b border-line-soft px-3 py-[9px] hover:bg-thead"
               style={{
                 borderLeft: `2px solid ${on ? A : 'transparent'}`,
-                background: on ? '#faf9f7' : '#fff',
+                background: on ? A_SOFT : PANEL,
               }}
             >
               <div className="flex items-center gap-[7px]">
@@ -54,7 +54,7 @@ export function TimelineScreen() {
             <div className="flex-1" />
             <button
               onClick={() => go('prov')}
-              className="h-[26px] rounded border border-line-input bg-panel px-2.5 text-[11.5px] text-ink hover:bg-[#f3f2ef]"
+              className="h-[26px] rounded border border-line-input bg-panel px-2.5 text-[11.5px] text-ink hover:bg-page"
             >
               Provenance
             </button>
@@ -114,8 +114,8 @@ export function TimelineScreen() {
                       <div
                         className="px-[9px] py-[5px] font-mono text-[11.5px]"
                         style={{
-                          background: r.changed ? 'oklch(0.97 0.02 255)' : '#fff',
-                          color: r.changed ? 'oklch(0.4 0.12 255)' : '#6b6a65',
+                          background: r.changed ? A_SOFT : PANEL,
+                          color: r.changed ? A : MUTED,
                           fontWeight: r.changed ? 500 : 400,
                         }}
                       >

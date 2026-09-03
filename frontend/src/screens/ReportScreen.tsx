@@ -1,4 +1,5 @@
 import { CASE, reportPreview, reportSections } from '../data/caseData'
+import { A, A_DARK, PANEL } from '../lib/tokens'
 import { useApp } from '../store'
 
 const FORMATS = ['PDF', 'HTML', 'JSON', 'CSV']
@@ -20,8 +21,8 @@ export function ReportScreen() {
                 onClick={() => setFormat(f)}
                 className="h-[28px] flex-1 border-r border-line-input text-[11.5px] last:border-r-0"
                 style={{
-                  background: on ? '#1c1b19' : '#fff',
-                  color: on ? '#fff' : '#4a4945',
+                  background: on ? A : PANEL,
+                  color: on ? '#fff' : '#4e4e4e',
                   fontWeight: on ? 600 : 400,
                 }}
               >
@@ -39,7 +40,7 @@ export function ReportScreen() {
                 type="checkbox"
                 defaultChecked
                 className="h-[13px] w-[13px]"
-                style={{ accentColor: 'oklch(0.52 0.14 255)' }}
+                style={{ accentColor: A }}
               />
               {s}
             </label>
@@ -47,8 +48,8 @@ export function ReportScreen() {
         </div>
 
         <button
-          className="mt-3.5 h-[30px] w-full rounded text-[12px] font-medium text-white"
-          style={{ background: 'oklch(0.52 0.14 255)' }}
+          className="mt-3.5 h-[30px] w-full rounded text-[12px] font-medium text-white hover:brightness-110"
+          style={{ background: A, border: `1px solid ${A_DARK}` }}
         >
           Generate {format} report
         </button>

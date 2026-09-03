@@ -8,7 +8,7 @@ body,
   margin: 0;
   padding: 0;
   height: 100%;
-  background: #f7f7f5;
+  background: #eef2f0;
 }
 
 * {
@@ -16,7 +16,7 @@ body,
 }
 
 body {
-  color: #1c1b19;
+  color: #282828;
   font-family: 'IBM Plex Sans', system-ui, sans-serif;
   font-size: 13px;
   line-height: 1.45;
@@ -24,11 +24,11 @@ body {
 }
 
 a {
-  color: oklch(0.52 0.14 255);
+  color: #15696f;
   text-decoration: none;
 }
 a:hover {
-  color: oklch(0.44 0.14 255);
+  color: #0f4f54;
   text-decoration: underline;
 }
 
@@ -36,14 +36,40 @@ a:hover {
   width: 10px;
   height: 10px;
 }
+/* The border is inset padding, not an outline — it has to be painted in the
+   colour of the surface being scrolled, or it shows up as a ring around the
+   thumb. Any dark panel therefore needs `.scroll-dark` below. */
 ::-webkit-scrollbar-thumb {
-  background: #d8d7d2;
-  border: 3px solid #f7f7f5;
+  background: #c3d0cd;
+  border: 3px solid #eef2f0;
   border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a8bab6;
+}
+
+/* Scrollbar for panels sitting on the dark ink ground (the execution log). */
+.scroll-dark {
+  scrollbar-color: #5b615f #282828;
+}
+.scroll-dark::-webkit-scrollbar-thumb {
+  background: #4e5453;
+  border-color: #282828;
+}
+.scroll-dark::-webkit-scrollbar-thumb:hover {
+  background: #656b6a;
 }
 
 input,
 textarea,
 button {
   font-family: inherit;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid #63bdb5;
+  outline-offset: 1px;
 }

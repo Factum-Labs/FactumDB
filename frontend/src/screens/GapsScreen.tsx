@@ -1,20 +1,12 @@
 import { Badge } from '../components/Badge'
 import { gaps } from '../data/caseData'
-import { TONES } from '../lib/tokens'
 
 export function GapsScreen() {
   return (
     <div className="flex max-w-[900px] flex-col gap-2.5">
+      {/* Uniform card chrome — severity is carried by the Badge alone. */}
       {gaps.map((g) => (
-        <div
-          key={g.code}
-          className="rounded-md bg-panel px-[13px] py-3"
-          style={{
-            border: `1px solid ${
-              g.severity === 'Warning' ? TONES[g.tone].border : '#e2e1dd'
-            }`,
-          }}
-        >
+        <div key={g.code} className="rounded-md border border-line bg-panel px-[13px] py-3">
           <div className="flex items-center gap-[9px]">
             <Badge tone={g.tone}>{g.severity}</Badge>
             <span className="text-[12.5px] font-semibold">{g.title}</span>
@@ -22,7 +14,7 @@ export function GapsScreen() {
             <span className="font-mono text-[10.5px] text-dimmer">{g.code}</span>
           </div>
           <div className="mt-1.5 text-[12px] text-ink-3">{g.detail}</div>
-          <div className="mt-[9px] flex gap-[18px] border-t border-[#eeece8] pt-[9px]">
+          <div className="mt-[9px] flex gap-[18px] border-t border-line-soft pt-[9px]">
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-[.07em] text-dim">
                 Impact

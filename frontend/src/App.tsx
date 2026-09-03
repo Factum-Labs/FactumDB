@@ -1,8 +1,9 @@
 import type { FC } from 'react'
 import { useApp } from './store'
 import type { Screen } from './data/types'
-import { A, GRN } from './lib/tokens'
+import { A, A_DARK, A_SOFT, GRN } from './lib/tokens'
 import { CASE } from './data/caseData'
+import { Logo } from './components/Logo'
 
 import { CasesScreen } from './screens/CasesScreen'
 import { IntakeScreen } from './screens/IntakeScreen'
@@ -33,7 +34,7 @@ const NAV_GROUPS: { title: string; items: { id: Screen; label: string; code: str
     title: 'Case',
     items: [
       { id: 'cases', label: 'Cases', code: 'CS', count: '5' },
-      { id: 'intake', label: 'Evidence', code: 'EV', count: '5' },
+      { id: 'intake', label: 'Evidence', code: 'EV', count: '6' },
     ],
   },
   {
@@ -73,25 +74,18 @@ const SCREENS: Record<Screen, FC> = {
 
 export default function App() {
   const screen = useApp((s) => s.screen)
-  const shell = useApp((s) => s.shell)
   const go = useApp((s) => s.go)
-  const cycleShell = useApp((s) => s.cycleShell)
+  const pipelineComplete = useApp((s) => s.pipelineComplete)
 
   const [title, subtitle] = META[screen]
   const Screen = SCREENS[screen]
-  const shellLabel = shell === 'sidebar' ? 'Sidebar' : shell === 'rail' ? 'Rail' : 'Top tabs'
 
   return (
     <div className="flex h-screen flex-col bg-page text-ink">
       {/* Title bar */}
       <div className="flex h-[34px] flex-none items-center gap-3 border-b border-line bg-chrome px-3">
-        <div className="flex items-center gap-1.5">
-          <span className="h-[11px] w-[11px] rounded-full bg-[#d9d8d3]" />
-          <span className="h-[11px] w-[11px] rounded-full bg-[#d9d8d3]" />
-          <span className="h-[11px] w-[11px] rounded-full bg-[#d9d8d3]" />
-        </div>
-        <div className="text-[12.5px] font-semibold tracking-[.02em]">FactumDB</div>
-        <div className="h-[14px] w-px bg-[#dedcd7]" />
+        <Logo size={26} />
+        <div className="h-[14px] w-px bg-line" />
         <div className="flex items-center gap-[7px] text-[11.5px] text-muted">
           <span className="font-mono text-ink">{CASE.id}</span>
           <span>{CASE.name}</span>
@@ -101,104 +95,33 @@ export default function App() {
           <span className="h-1.5 w-1.5 rounded-full" style={{ background: GRN }} />
           Read-only evidence mode
         </div>
-        <div className="h-[14px] w-px bg-[#dedcd7]" />
+        <div className="h-[14px] w-px bg-line" />
         <div className="text-[11.5px] text-muted">Examiner: {CASE.examiner}</div>
       </div>
 
-      {/* Top tabs shell */}
-      {shell === 'topbar' && (
-        <div className="flex flex-none items-center gap-0.5 overflow-x-auto border-b border-line bg-panel px-2.5">
-          {NAV_FLAT.map((n) => {
-            const on = screen === n.id
-            return (
-              <button
-                key={n.id}
-                onClick={() => go(n.id)}
-                className="h-[34px] whitespace-nowrap border-b-2 px-[11px] text-[12px] hover:bg-[#f3f2ef]"
-                style={{
-                  borderBottomColor: on ? A : 'transparent',
-                  color: on ? '#1c1b19' : '#6b6a65',
-                  fontWeight: on ? 600 : 400,
-                }}
-              >
-                {n.label}
-              </button>
-            )
-          })}
-        </div>
-      )}
+      {/* Top tabs nav */}
+      <div className="flex flex-none items-center gap-0.5 overflow-x-auto border-b border-line bg-panel px-2.5">
+        {NAV_FLAT.map((n) => {
+          const on = screen === n.id
+          return (
+            <button
+              key={n.id}
+              onClick={() => go(n.id)}
+              className="h-[34px] whitespace-nowrap border-b-2 px-[11px] text-[12px] hover:bg-accent-soft"
+              style={{
+                borderBottomColor: on ? A : 'transparent',
+                background: on ? A_SOFT : undefined,
+                color: on ? A : '#6e6e6e',
+                fontWeight: on ? 600 : 400,
+              }}
+            >
+              {n.label}
+            </button>
+          )
+        })}
+      </div>
 
       <div className="flex min-h-0 flex-1">
-        {/* Sidebar shell */}
-        {shell === 'sidebar' && (
-          <aside className="w-[206px] flex-none overflow-y-auto border-r border-line bg-panel px-2 py-2.5">
-            {NAV_GROUPS.map((g) => (
-              <div key={g.title} className="mb-3.5">
-                <div className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-[.09em] text-dimmer">
-                  {g.title}
-                </div>
-                {g.items.map((n) => {
-                  const on = screen === n.id
-                  return (
-                    <button
-                      key={n.id}
-                      onClick={() => go(n.id)}
-                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12px] hover:bg-[#f3f2ef]"
-                      style={{
-                        color: on ? '#1c1b19' : '#4a4945',
-                        background: on ? '#f0efec' : 'transparent',
-                        fontWeight: on ? 600 : 400,
-                      }}
-                    >
-                      <span
-                        className="h-[7px] w-[7px] flex-none rounded-full"
-                        style={{ background: on ? A : '#dcdad4' }}
-                      />
-                      <span className="flex-1 text-left">{n.label}</span>
-                      <span className="font-mono text-[10.5px] text-faint">{n.count}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            ))}
-            <div className="mx-2 mb-1 mt-[18px] rounded-[5px] border border-line-mid bg-page px-2.5 py-[9px]">
-              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[.08em] text-dimmer">
-                Pipeline
-              </div>
-              <div className="flex items-center gap-[7px] text-[11.5px]">
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: GRN }} />
-                <span>Complete · 13 / 13</span>
-              </div>
-              <div className="mt-2 h-[3px] overflow-hidden rounded-sm bg-line">
-                <div className="h-full w-full" style={{ background: GRN }} />
-              </div>
-            </div>
-          </aside>
-        )}
-
-        {/* Rail shell */}
-        {shell === 'rail' && (
-          <aside className="flex w-[62px] flex-none flex-col gap-[3px] overflow-y-auto border-r border-line bg-panel px-1.5 py-2.5">
-            {NAV_FLAT.map((n) => {
-              const on = screen === n.id
-              return (
-                <button
-                  key={n.id}
-                  onClick={() => go(n.id)}
-                  title={n.label}
-                  className="flex flex-col items-center gap-0.5 rounded-[5px] px-0.5 py-[7px] hover:bg-[#f3f2ef]"
-                  style={{ background: on ? '#f0efec' : 'transparent', color: on ? A : '#4a4945' }}
-                >
-                  <span className="font-mono text-[12px] font-medium">{n.code}</span>
-                  <span className="text-center text-[8.5px] leading-[1.1] tracking-[.04em] text-dimmer">
-                    {n.label.split(' ')[0].replace('&', '')}
-                  </span>
-                </button>
-              )
-            })}
-          </aside>
-        )}
-
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* Page header */}
           <div className="flex flex-none items-end gap-3.5 border-b border-line bg-panel px-[18px] pb-[11px] pt-3">
@@ -207,21 +130,18 @@ export default function App() {
               <div className="mt-0.5 text-[11.5px] text-muted">{subtitle}</div>
             </div>
             <div className="flex-1" />
-            <div className="flex items-center gap-[7px]">
-              <button
-                onClick={cycleShell}
-                className="h-[27px] rounded border border-line-input bg-panel px-2.5 text-[11.5px] text-muted hover:bg-[#f3f2ef]"
-              >
-                Shell: {shellLabel}
-              </button>
-              <button
-                onClick={() => go('report')}
-                className="h-[27px] rounded px-[11px] text-[11.5px] font-medium text-white"
-                style={{ background: A, border: '1px solid oklch(0.47 0.14 255)' }}
-              >
-                Export report
-              </button>
-            </div>
+            {/* Export is only offered once the pipeline has produced results. */}
+            {pipelineComplete && (
+              <div className="flex items-center gap-[7px]">
+                <button
+                  onClick={() => go('report')}
+                  className="h-[27px] rounded px-[11px] text-[11.5px] font-medium text-white hover:brightness-110"
+                  style={{ background: A, border: `1px solid ${A_DARK}` }}
+                >
+                  Export report
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="flex-1 overflow-auto px-[18px] pb-10 pt-4">

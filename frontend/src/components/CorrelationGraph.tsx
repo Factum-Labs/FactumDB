@@ -73,7 +73,7 @@ export function CorrelationGraph({
               markerHeight="7"
               orient="auto-start-reverse"
             >
-              <path d="M 0 1 L 7 4 L 0 7 z" fill="#a8a69e" />
+              <path d="M 0 1 L 7 4 L 0 7 z" fill="#9aa8a5" />
             </marker>
           </defs>
 
@@ -100,7 +100,7 @@ export function CorrelationGraph({
               <path
                 d={e.path}
                 fill="none"
-                stroke="#c2c0b8"
+                stroke="#b3c2bf"
                 strokeWidth={1.4}
                 strokeDasharray={dashFor(e.eventType)}
                 markerEnd="url(#fdb-arrow)"
@@ -112,7 +112,7 @@ export function CorrelationGraph({
                 height={13}
                 rx={2}
                 fill="#ffffff"
-                stroke="#eceae5"
+                stroke="#dde5e3"
               />
               <text
                 x={e.labelX}
@@ -157,7 +157,7 @@ export function CorrelationGraph({
                   x={n.x + 26}
                   y={n.y + 20}
                   style={{ fontSize: 12, fontWeight: 500, fontFamily: "'IBM Plex Mono', monospace" }}
-                  fill="#1c1b19"
+                  fill="#282828"
                 >
                   {t.id}
                 </text>
@@ -169,7 +169,7 @@ export function CorrelationGraph({
                   y={n.y + 34}
                   textAnchor="end"
                   style={{ fontSize: 9.5, fontFamily: "'IBM Plex Mono', monospace" }}
-                  fill="#9a998f"
+                  fill="#858585"
                 >
                   {`${t.binlogFile.replace('binlog.', '')} · ${t.binlogPos}`}
                 </text>
@@ -223,7 +223,7 @@ export function CorrelationGraph({
                 >
                   {truncate(subtitleFor(r), 30)}
                 </text>
-                <text x={n.x + 11} y={n.y + 49} style={{ fontSize: 9.5 }} fill="#9a998f">
+                <text x={n.x + 11} y={n.y + 49} style={{ fontSize: 9.5 }} fill={c.key}>
                   {truncate(r.record.key, 34)}
                 </text>
               </g>
@@ -237,43 +237,51 @@ export function CorrelationGraph({
 
 // ── Presentation helpers ─────────────────────────────────────────────────────
 
+// Transaction nodes stay on a plain white ground; status is carried by the bar,
+// the dot and the status label only.
 const TX_COLOR: Record<TxStatus, { bar: string; border: string; text: string }> = {
-  Committed: { bar: GRN, border: 'oklch(0.88 0.05 150)', text: 'oklch(0.42 0.09 150)' },
-  'Rolled back': { bar: GRY, border: '#e2e1dd', text: '#5c5b55' },
+  Committed: { bar: GRN, border: '#bfded4', text: '#256e5c' },
+  'Rolled back': { bar: GRY, border: '#d5dedb', text: '#5c5c5c' },
   Incomplete: { bar: AMB, border: 'oklch(0.89 0.06 85)', text: 'oklch(0.45 0.09 70)' },
 }
 
 const REC_COLOR: Record<
   RecordNodeKind,
-  { bg: string; border: string; bar: string; title: string; sub: string }
+  { bg: string; border: string; bar: string; title: string; sub: string; key: string }
 > = {
   conflicting: {
     bg: 'oklch(0.97 0.02 25)',
     border: 'oklch(0.86 0.07 25)',
     bar: RED,
-    title: '#1c1b19',
+    title: '#282828',
     sub: 'oklch(0.45 0.13 25)',
+    key: '#a1837f',
   },
   unresolved: {
     bg: 'oklch(0.97 0.025 60)',
     border: 'oklch(0.86 0.08 55)',
     bar: ORG,
-    title: '#1c1b19',
+    title: '#282828',
     sub: 'oklch(0.45 0.12 50)',
+    key: '#9c8763',
   },
+  // An agreeing record is a compared record like any other flagged one, so it
+  // carries a tint and an ink title; only `context` is deliberately muted.
   agreeing: {
-    bg: '#ffffff',
-    border: 'oklch(0.9 0.03 150)',
-    bar: 'oklch(0.78 0.06 160)',
-    title: '#6b6a65',
-    sub: 'oklch(0.5 0.06 155)',
+    bg: '#e9f4f1',
+    border: '#bfded4',
+    bar: '#4fae99',
+    title: '#282828',
+    sub: '#2f7a68',
+    key: '#7d938d',
   },
   context: {
-    bg: '#faf9f7',
-    border: '#e2e1dd',
-    bar: '#d8d7d2',
-    title: '#8b8a82',
-    sub: '#9a998f',
+    bg: '#f4f7f6',
+    border: '#d5dedb',
+    bar: '#c3d0cd',
+    title: '#6e6e6e',
+    sub: '#8a8a8a',
+    key: '#a0aeab',
   },
 }
 
@@ -295,10 +303,11 @@ function truncate(s: string, max: number) {
 function Legend() {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted">
-      <LegendSwatch color={RED} label="Conflicting" />
-      <LegendSwatch color={ORG} label="Unresolved" />
-      <LegendSwatch color="oklch(0.78 0.06 160)" label="Agrees" />
-      <LegendSwatch color="#d8d7d2" label="Context" />
+      {/* Read off REC_COLOR so a retint of the nodes cannot leave the key behind. */}
+      <LegendSwatch kind="conflicting" label="Conflicting" />
+      <LegendSwatch kind="unresolved" label="Unresolved" />
+      <LegendSwatch kind="agreeing" label="Agrees" />
+      <LegendSwatch kind="context" label="Context" />
       <span className="h-3 w-px bg-line" />
       <LegendLine dash={undefined} label="UPDATE" />
       <LegendLine dash="4 2" label="INSERT" />
@@ -307,10 +316,14 @@ function Legend() {
   )
 }
 
-function LegendSwatch({ color, label }: { color: string; label: string }) {
+function LegendSwatch({ kind, label }: { kind: RecordNodeKind; label: string }) {
+  const c = REC_COLOR[kind]
   return (
     <span className="inline-flex items-center gap-1">
-      <span className="h-2 w-2 rounded-[2px]" style={{ background: color }} />
+      <span
+        className="h-2 w-2 rounded-[2px]"
+        style={{ background: c.bar, border: `1px solid ${c.border}` }}
+      />
       {label}
     </span>
   )
@@ -320,7 +333,7 @@ function LegendLine({ dash, label }: { dash?: string; label: string }) {
   return (
     <span className="inline-flex items-center gap-1">
       <svg width="14" height="6" aria-hidden="true">
-        <line x1="0" y1="3" x2="14" y2="3" stroke="#a8a69e" strokeWidth="1.4" strokeDasharray={dash} />
+        <line x1="0" y1="3" x2="14" y2="3" stroke="#9aa8a5" strokeWidth="1.4" strokeDasharray={dash} />
       </svg>
       {label}
     </span>
