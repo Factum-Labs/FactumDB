@@ -91,6 +91,7 @@ class TransactionGroupingService:
 
         transactions.sort(key=lambda t: (sequence.sort_key(t.source_file), t.start_position, t.id))
         transactions = self._resolve_ids(transactions, sequence, findings)
+        self._note_session_separation(transactions, findings)
 
         return GroupingResult(
             transactions=tuple(transactions),
@@ -375,6 +376,34 @@ class TransactionGroupingService:
             for name in coverage.inventory.missing_files
             if sequence.index(basename(name)) > here
         )
+
+    def _note_session_separation(
+        self, transactions: Sequence[TransactionGroup], findings: list[Finding]
+    ) -> None:
+        """Record that events were assigned by session, where that mattered.
+
+        Only emitted when the case actually contains more than one session. With
+        a single session there is nothing to separate, and citing the rule
+        anyway would turn a meaningful claim into boilerplate that a reader
+        learns to skip.
+        """
+        sessions = {t.session_key for t in transactions if not t.synthesised}
+        if len(sessions) < 2:
+            return
+        for transaction in transactions:
+            if transaction.synthesised:
+                continue
+            findings.append(
+                self._finding(
+                    "R-GRP-007",
+                    SubjectRef(SubjectKind.TRANSACTION, transaction.id),
+                    {
+                        "transaction": transaction.id,
+                        "session_key": transaction.session_key,
+                    },
+                    transaction.provenance,
+                )
+            )
 
     @staticmethod
     def _session_key(marker: TransactionMarker) -> str:

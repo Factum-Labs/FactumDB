@@ -163,22 +163,25 @@ class StateReconstructionService:
             status = transaction.status if transaction else None
             durable = transaction.durable if transaction else False
 
-            kind, rule_id = self._classify(transaction, status)
-            step_findings: list[Finding] = []
+            kind, rule_id = self._classify(transaction, status, event.event_type)
 
-            if kind is not StepKind.EVENT:
-                step_findings.append(
-                    self._finding(
-                        rule_id,
-                        subject,
-                        {
-                            "record": correlation.record.id,
-                            "source_file": event.source_file,
-                            "log_position": str(event.log_position),
-                        },
-                        (event.provenance,),
-                    )
+            # Every step cites its rule, including the ordinary ones. A history
+            # where only the exceptions are explained leaves an examiner unable
+            # to check the reasoning behind the steps that shaped the state.
+            step_findings: list[Finding] = [
+                self._finding(
+                    rule_id,
+                    subject,
+                    {
+                        "record": correlation.record.id,
+                        "source_file": event.source_file,
+                        "log_position": str(event.log_position),
+                        "column_count": str(len(event.after or {})),
+                        "count": "1",
+                    },
+                    (event.provenance,),
                 )
+            ]
 
             if durable and self._before_image_disagrees(event, durable_state, schema):
                 mismatch = True
@@ -259,14 +262,24 @@ class StateReconstructionService:
 
     @staticmethod
     def _classify(
-        transaction: object | None, status: TransactionStatus | None
+        transaction: object | None,
+        status: TransactionStatus | None,
+        event_type: str,
     ) -> tuple[StepKind, str]:
+        """What this step is, and the rule that says how it is treated.
+
+        Durability is asked first: an event that never took effect is described
+        by *why* it did not, not by what it would have done. Only for a durable
+        event does the kind of change matter.
+        """
         if transaction is None:
             return StepKind.UNCOMMITTED_EVENT, "R-HIST-006"
         if status is TransactionStatus.ROLLED_BACK:
             return StepKind.ROLLED_BACK_EVENT, "R-HIST-005"
         if status is TransactionStatus.INCOMPLETE:
             return StepKind.UNCOMMITTED_EVENT, "R-HIST-006"
+        if event_type == "DELETE":
+            return StepKind.EVENT, "R-HIST-004"
         return StepKind.EVENT, "R-HIST-003"
 
     def _apply(

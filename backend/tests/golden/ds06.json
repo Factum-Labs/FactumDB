@@ -1,0 +1,800 @@
+{
+  "coverage": {
+    "findings": [],
+    "gaps": [],
+    "inventory": {
+      "index_file": "mysql-bin.index",
+      "listed_files": [
+        "/var/log/mysql/binlog.000018"
+      ],
+      "missing_files": [],
+      "present_files": [
+        "/var/log/mysql/binlog.000018"
+      ]
+    },
+    "observed_files": [
+      "binlog.000018"
+    ]
+  },
+  "edges": [
+    {
+      "event_refs": [
+        [
+          "binlog.000018",
+          100
+        ]
+      ],
+      "event_type": "UPDATE",
+      "record_id": "order_lines:5001|2",
+      "tx_id": "TX-1"
+    }
+  ],
+  "histories": [
+    {
+      "before_image_mismatch": false,
+      "coverage_gaps_touching": [],
+      "earliest_state": {
+        "derived_from": {
+          "line_no": [
+            "binlog.000018",
+            100
+          ],
+          "order_id": [
+            "binlog.000018",
+            100
+          ],
+          "qty": [
+            "binlog.000018",
+            100
+          ]
+        },
+        "last_ref": [
+          "binlog.000018",
+          100
+        ],
+        "presence": "present",
+        "values": {
+          "line_no": 2,
+          "order_id": 5001,
+          "qty": 1
+        }
+      },
+      "final_log_state": {
+        "derived_from": {
+          "line_no": [
+            "binlog.000018",
+            100
+          ],
+          "order_id": [
+            "binlog.000018",
+            100
+          ],
+          "qty": [
+            "binlog.000018",
+            100
+          ]
+        },
+        "last_ref": [
+          "binlog.000018",
+          100
+        ],
+        "presence": "present",
+        "values": {
+          "line_no": 2,
+          "order_id": 5001,
+          "qty": 3
+        }
+      },
+      "findings": [
+        {
+          "context": {
+            "log_position": "100",
+            "record": "order_lines:5001|2",
+            "source_file": "binlog.000018"
+          },
+          "provenance": [
+            {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": 100,
+              "source_file": "binlog.000018",
+              "tool_name": "mysqlbinlog",
+              "tool_run_id": "run_3f21c8de"
+            }
+          ],
+          "rule_id": "R-HIST-002",
+          "severity": "info",
+          "subject": {
+            "id": "order_lines:5001|2",
+            "kind": "record"
+          }
+        },
+        {
+          "context": {
+            "column_count": "3",
+            "count": "1",
+            "log_position": "100",
+            "record": "order_lines:5001|2",
+            "source_file": "binlog.000018"
+          },
+          "provenance": [
+            {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": 100,
+              "source_file": "binlog.000018",
+              "tool_name": "mysqlbinlog",
+              "tool_run_id": "run_3f21c8de"
+            }
+          ],
+          "rule_id": "R-HIST-003",
+          "severity": "info",
+          "subject": {
+            "id": "order_lines:5001|2",
+            "kind": "record"
+          }
+        },
+        {
+          "context": {
+            "page_no": "4",
+            "page_offset": "170",
+            "record": "order_lines:5001|2"
+          },
+          "provenance": [
+            {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "order_lines.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            }
+          ],
+          "rule_id": "R-HIST-012",
+          "severity": "info",
+          "subject": {
+            "id": "order_lines:5001|2",
+            "kind": "record"
+          }
+        }
+      ],
+      "method": "composite_primary_key_exact",
+      "observed_values": {
+        "line_no": [
+          2
+        ],
+        "order_id": [
+          5001
+        ],
+        "qty": [
+          3
+        ]
+      },
+      "partial_image_columns": [],
+      "record": {
+        "database": "finance",
+        "id": "order_lines:5001|2",
+        "key": "order_id = 5001, line_no = 2",
+        "key_columns": [
+          "order_id",
+          "line_no"
+        ],
+        "key_values": [
+          "5001",
+          "2"
+        ],
+        "label": "finance.order_lines · 5001|2",
+        "pk": "5001|2",
+        "table": "finance.order_lines"
+      },
+      "speculative_state": {
+        "derived_from": {
+          "line_no": [
+            "binlog.000018",
+            100
+          ],
+          "order_id": [
+            "binlog.000018",
+            100
+          ],
+          "qty": [
+            "binlog.000018",
+            100
+          ]
+        },
+        "last_ref": [
+          "binlog.000018",
+          100
+        ],
+        "presence": "present",
+        "values": {
+          "line_no": 2,
+          "order_id": 5001,
+          "qty": 3
+        }
+      },
+      "steps": [
+        {
+          "changes": [],
+          "durable": true,
+          "findings": [
+            {
+              "context": {
+                "log_position": "100",
+                "record": "order_lines:5001|2",
+                "source_file": "binlog.000018"
+              },
+              "provenance": [
+                {
+                  "evidence_id": "ev_b7785a0c",
+                  "log_position": 100,
+                  "source_file": "binlog.000018",
+                  "tool_name": "mysqlbinlog",
+                  "tool_run_id": "run_3f21c8de"
+                }
+              ],
+              "rule_id": "R-HIST-002",
+              "severity": "info",
+              "subject": {
+                "id": "order_lines:5001|2",
+                "kind": "record"
+              }
+            }
+          ],
+          "index": 0,
+          "kind": "earliest_observed_state",
+          "presence_after": "present",
+          "presence_before": "unknown",
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": 100,
+            "source_file": "binlog.000018",
+            "tool_name": "mysqlbinlog",
+            "tool_run_id": "run_3f21c8de"
+          },
+          "ref": [
+            "binlog.000018",
+            100
+          ],
+          "rule_id": "R-HIST-002",
+          "timestamp": "2026-08-15T19:06:25Z",
+          "transaction_id": null,
+          "transaction_status": null
+        },
+        {
+          "changes": [
+            {
+              "after": 3,
+              "before": 1,
+              "changed": true,
+              "column": "qty"
+            }
+          ],
+          "durable": true,
+          "findings": [
+            {
+              "context": {
+                "column_count": "3",
+                "count": "1",
+                "log_position": "100",
+                "record": "order_lines:5001|2",
+                "source_file": "binlog.000018"
+              },
+              "provenance": [
+                {
+                  "evidence_id": "ev_b7785a0c",
+                  "log_position": 100,
+                  "source_file": "binlog.000018",
+                  "tool_name": "mysqlbinlog",
+                  "tool_run_id": "run_3f21c8de"
+                }
+              ],
+              "rule_id": "R-HIST-003",
+              "severity": "info",
+              "subject": {
+                "id": "order_lines:5001|2",
+                "kind": "record"
+              }
+            }
+          ],
+          "index": 1,
+          "kind": "event",
+          "presence_after": "present",
+          "presence_before": "present",
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": 100,
+            "source_file": "binlog.000018",
+            "tool_name": "mysqlbinlog",
+            "tool_run_id": "run_3f21c8de"
+          },
+          "ref": [
+            "binlog.000018",
+            100
+          ],
+          "rule_id": "R-HIST-003",
+          "timestamp": "2026-08-15T19:06:25Z",
+          "transaction_id": "TX-1",
+          "transaction_status": "committed"
+        },
+        {
+          "changes": [
+            {
+              "after": 2,
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "line_no"
+            },
+            {
+              "after": 5001,
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "order_id"
+            },
+            {
+              "after": 3,
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "qty"
+            }
+          ],
+          "durable": false,
+          "findings": [
+            {
+              "context": {
+                "page_no": "4",
+                "page_offset": "170",
+                "record": "order_lines:5001|2"
+              },
+              "provenance": [
+                {
+                  "evidence_id": "ev_b7785a0c",
+                  "log_position": null,
+                  "source_file": "order_lines.ibd",
+                  "tool_name": "ibd2sql",
+                  "tool_run_id": "run_3f21c8de"
+                }
+              ],
+              "rule_id": "R-HIST-012",
+              "severity": "info",
+              "subject": {
+                "id": "order_lines:5001|2",
+                "kind": "record"
+              }
+            }
+          ],
+          "index": 2,
+          "kind": "physical_state",
+          "presence_after": "present",
+          "presence_before": "unknown",
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": null,
+            "source_file": "order_lines.ibd",
+            "tool_name": "ibd2sql",
+            "tool_run_id": "run_3f21c8de"
+          },
+          "ref": null,
+          "rule_id": "R-HIST-012",
+          "timestamp": null,
+          "transaction_id": null,
+          "transaction_status": null
+        }
+      ]
+    }
+  ],
+  "id": "ds06",
+  "reconciliation": [
+    {
+      "fields": [
+        {
+          "comparable": true,
+          "field": "record presence",
+          "findings": [
+            {
+              "context": {
+                "log_presence": "present",
+                "page_no": "4",
+                "phys_presence": "present",
+                "presence": "present",
+                "record": "order_lines:5001|2"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-020",
+              "severity": "info",
+              "subject": {
+                "id": "order_lines:5001|2.presence",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": "present",
+          "log_display": "present",
+          "phys": "present",
+          "phys_display": "present",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 100,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "order_lines.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1"
+          },
+          "record_id": "order_lines:5001|2",
+          "result": "Exact",
+          "rule_id": "R-RECON-020"
+        },
+        {
+          "comparable": true,
+          "field": "order_id",
+          "findings": [
+            {
+              "context": {
+                "data_type": "int",
+                "field": "order_id",
+                "log": "5001",
+                "phys": "5001",
+                "record": "order_lines:5001|2"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-001",
+              "severity": "info",
+              "subject": {
+                "id": "order_lines:5001|2.order_id",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": 5001,
+          "log_display": "5001",
+          "phys": 5001,
+          "phys_display": "5001",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 100,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "order_lines.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1"
+          },
+          "record_id": "order_lines:5001|2",
+          "result": "Exact",
+          "rule_id": "R-RECON-001"
+        },
+        {
+          "comparable": true,
+          "field": "line_no",
+          "findings": [
+            {
+              "context": {
+                "data_type": "int",
+                "field": "line_no",
+                "log": "2",
+                "phys": "2",
+                "record": "order_lines:5001|2"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-001",
+              "severity": "info",
+              "subject": {
+                "id": "order_lines:5001|2.line_no",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": 2,
+          "log_display": "2",
+          "phys": 2,
+          "phys_display": "2",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 100,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "order_lines.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1"
+          },
+          "record_id": "order_lines:5001|2",
+          "result": "Exact",
+          "rule_id": "R-RECON-001"
+        },
+        {
+          "comparable": true,
+          "field": "qty",
+          "findings": [
+            {
+              "context": {
+                "data_type": "int",
+                "field": "qty",
+                "log": "3",
+                "phys": "3",
+                "record": "order_lines:5001|2"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-001",
+              "severity": "info",
+              "subject": {
+                "id": "order_lines:5001|2.qty",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": 3,
+          "log_display": "3",
+          "phys": 3,
+          "phys_display": "3",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 100,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "order_lines.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1"
+          },
+          "record_id": "order_lines:5001|2",
+          "result": "Exact",
+          "rule_id": "R-RECON-001"
+        }
+      ],
+      "findings": [
+        {
+          "context": {
+            "count": "4",
+            "label": "4 fields: Exact",
+            "record": "order_lines:5001|2",
+            "result": "Exact",
+            "total": "4"
+          },
+          "provenance": [],
+          "rule_id": "R-ROLL-002",
+          "severity": "info",
+          "subject": {
+            "id": "order_lines:5001|2",
+            "kind": "record"
+          }
+        }
+      ],
+      "record": {
+        "database": "finance",
+        "id": "order_lines:5001|2",
+        "key": "order_id = 5001, line_no = 2",
+        "key_columns": [
+          "order_id",
+          "line_no"
+        ],
+        "key_values": [
+          "5001",
+          "2"
+        ],
+        "label": "finance.order_lines · 5001|2",
+        "pk": "5001|2",
+        "table": "finance.order_lines"
+      },
+      "rollup": "Exact",
+      "rollup_label": "4 fields: Exact",
+      "rollup_rule_id": "R-ROLL-002",
+      "triggers": []
+    }
+  ],
+  "records": [
+    {
+      "findings": [],
+      "identity_aliases": [],
+      "log_event_refs": [
+        [
+          "binlog.000018",
+          100
+        ]
+      ],
+      "method": "composite_primary_key_exact",
+      "physical": {
+        "database": "finance",
+        "is_deleted": false,
+        "page_no": 4,
+        "page_offset": 170,
+        "provenance": {
+          "evidence_id": "ev_b7785a0c",
+          "log_position": null,
+          "source_file": "order_lines.ibd",
+          "tool_name": "ibd2sql",
+          "tool_run_id": "run_3f21c8de"
+        },
+        "table": "order_lines"
+      },
+      "physical_candidates": [
+        {
+          "database": "finance",
+          "is_deleted": false,
+          "page_no": 4,
+          "page_offset": 170,
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": null,
+            "source_file": "order_lines.ibd",
+            "tool_name": "ibd2sql",
+            "tool_run_id": "run_3f21c8de"
+          },
+          "table": "order_lines"
+        }
+      ],
+      "provenance": [
+        {
+          "evidence_id": "ev_b7785a0c",
+          "log_position": 100,
+          "source_file": "binlog.000018",
+          "tool_name": "mysqlbinlog",
+          "tool_run_id": "run_3f21c8de"
+        }
+      ],
+      "record": {
+        "database": "finance",
+        "id": "order_lines:5001|2",
+        "key": "order_id = 5001, line_no = 2",
+        "key_columns": [
+          "order_id",
+          "line_no"
+        ],
+        "key_values": [
+          "5001",
+          "2"
+        ],
+        "label": "finance.order_lines · 5001|2",
+        "pk": "5001|2",
+        "table": "finance.order_lines"
+      },
+      "transaction_ids": [
+        "TX-1"
+      ]
+    }
+  ],
+  "rules_cited": [
+    "R-CORR-002",
+    "R-GRP-001",
+    "R-HIST-002",
+    "R-HIST-003",
+    "R-HIST-012",
+    "R-RECON-001",
+    "R-RECON-020",
+    "R-ROLL-002"
+  ],
+  "title": "Composite primary key",
+  "transactions": [
+    {
+      "commit_position": 9999,
+      "commit_timestamp": "2026-08-15T19:06:25Z",
+      "end_position": 9999,
+      "events": [
+        {
+          "event": {
+            "after": {
+              "line_no": 2,
+              "order_id": 5001,
+              "qty": 3
+            },
+            "before": {
+              "line_no": 2,
+              "order_id": 5001,
+              "qty": 1
+            },
+            "database": "finance",
+            "event_type": "UPDATE",
+            "gtid": null,
+            "log_position": 100,
+            "provenance": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": 100,
+              "source_file": "binlog.000018",
+              "tool_name": "mysqlbinlog",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "raw_timestamp": "260816  0:36:25",
+            "source_file": "binlog.000018",
+            "table": "order_lines",
+            "thread_id": 13,
+            "timestamp": "2026-08-15T19:06:25Z"
+          },
+          "order": 0,
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": 100,
+            "source_file": "binlog.000018",
+            "tool_name": "mysqlbinlog",
+            "tool_run_id": "run_3f21c8de"
+          }
+        }
+      ],
+      "findings": [
+        {
+          "context": {
+            "gtid": "cb4d5c8e-9325-11f1-9975-00155dc1157f:1",
+            "transaction": "TX-1",
+            "xid": ""
+          },
+          "provenance": [
+            {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": 90,
+              "source_file": "binlog.000018",
+              "tool_name": "mysqlbinlog",
+              "tool_run_id": "run_3f21c8de"
+            }
+          ],
+          "rule_id": "R-GRP-001",
+          "severity": "info",
+          "subject": {
+            "id": "TX-1",
+            "kind": "transaction"
+          }
+        }
+      ],
+      "gtid": "cb4d5c8e-9325-11f1-9975-00155dc1157f:1",
+      "id": "TX-1",
+      "incompleteness_reason": null,
+      "provenance": [
+        {
+          "evidence_id": "ev_b7785a0c",
+          "log_position": 90,
+          "source_file": "binlog.000018",
+          "tool_name": "mysqlbinlog",
+          "tool_run_id": "run_3f21c8de"
+        }
+      ],
+      "session_key": "cb4d5c8e-9325-11f1-9975-00155dc1157f:1",
+      "source_file": "binlog.000018",
+      "start_position": 90,
+      "status": "committed",
+      "synthesised": false,
+      "thread_id": 13,
+      "xid": null
+    }
+  ],
+  "ungrouped_events": [],
+  "unsupported_tables": []
+}

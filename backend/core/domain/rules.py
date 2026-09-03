@@ -891,11 +891,13 @@ _DEFINITIONS: tuple[RuleDefinition, ...] = (
     _r(
         "R-ROLL-003",
         "reconciliation",
-        "All comparable fields agree",
-        "Every field that could be compared agreed, and at least one field could "
-        "not be compared. This is the record-level reading of Strong: the key and "
-        "all available comparable fields agree, but some values are unavailable.",
-        "{record}: {count} comparable field(s) agree, {incomparable} unavailable",
+        "Every field agrees, under limited coverage",
+        "Every field of the record was comparable and every one agreed, but at "
+        "least one of those agreements rests on limited coverage or a partial row "
+        "image, so the agreement cannot be asserted as complete. Nothing about "
+        "this record was left uncompared - that is what separates it from "
+        "R-ROLL-004.",
+        "{record}: all {count} field(s) agree, under limited coverage",
         Severity.NOTICE,
         ReconResult.STRONG,
     ),
@@ -903,8 +905,10 @@ _DEFINITIONS: tuple[RuleDefinition, ...] = (
         "R-ROLL-004",
         "reconciliation",
         "Only part of the record could be compared",
-        "Some fields were compared and others could not be, with no conflict "
-        "among those that were.",
+        "The fields that could be compared agreed and none conflicted, but at "
+        "least one field lay outside the validated scope and so was never "
+        "examined. The record is reported as partly compared rather than as "
+        "agreeing, because a field nobody looked at cannot support agreement.",
         "{record}: {count} of {total} field(s) compared",
         Severity.NOTICE,
         ReconResult.PARTIAL,
@@ -912,10 +916,11 @@ _DEFINITIONS: tuple[RuleDefinition, ...] = (
     _r(
         "R-ROLL-005",
         "reconciliation",
-        "No field could be compared",
-        "Nothing about this record could be compared, so no conclusion is drawn "
-        "about it either way.",
-        "{record}: no field could be compared",
+        "Evidence is insufficient for a conclusion",
+        "Either no field of this record could be compared at all, or at least one "
+        "field's evidence was too incomplete to reach a conclusion. In both cases "
+        "no verdict is drawn about the record either way.",
+        "{record}: evidence is insufficient for a conclusion",
         Severity.WARNING,
         ReconResult.UNRESOLVED,
     ),
