@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "factumdb-backend"
+version = "0.1.0"
+description = "FactumDB backend: forensic correlation engine for MySQL InnoDB evidence"
+
+# 3.11 is the floor because it is what the team's Windows dev machines have and
+# nothing in the domain needs anything newer. The Tauri sidecar ships on Ubuntu
+# with a later interpreter, so the range has to cover both.
+requires-python = ">=3.11"
+
+# The domain layer is deliberately dependency-free. Anything listed here would
+# be reachable from core/domain, and the whole point of the layer is that its
+# conclusions can be reasoned about and diffed as pure logic.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["core"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["core"]
+strict = true
