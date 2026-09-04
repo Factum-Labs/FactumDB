@@ -70,16 +70,22 @@ class InnochecksumAdapter:
         # tool. If the two ever disagreed that would itself be worth looking at.
         total_pages = sum(page_counts.values())
 
-        if summary_result.returncode != 0 or not page_counts:
-            # We could not read the file well enough to say anything about it.
-            status = "unknown"
-            damaged_pages = 0
-        elif check_result.returncode == 0:
-            status = "valid"
-            damaged_pages = 0
-        else:
+        # Order matters here. A failed validation run is positive evidence that
+        # the file is damaged, and that beats not being able to read the page
+        # summary. Checking the summary first would report "unknown" for a file
+        # innochecksum had already called invalid, which understates a finding.
+        # A damaged file also makes -S fail, so total_pages is 0 in that case -
+        # we know the file is bad but could not count its pages.
+        if check_result.returncode != 0:
             status = "damaged"
             damaged_pages = InnochecksumAdapter._count_failures(check_text)
+        elif summary_result.returncode != 0 or not page_counts:
+            # Nothing failed outright, but we could not read enough to judge.
+            status = "unknown"
+            damaged_pages = 0
+        else:
+            status = "valid"
+            damaged_pages = 0
 
         return IntegrityResult(
             total_pages=total_pages,
