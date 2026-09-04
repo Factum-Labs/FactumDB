@@ -115,31 +115,40 @@ class Ibd2SqlAdapter:
         example an owner name like 'Perera, A.'. This walks the text instead and
         only treats a comma as a separator when it is outside a quoted string.
 
+        Strings can be quoted with either character. ibd2sql normally uses
+        single quotes, but switches to double quotes when the value itself
+        contains an apostrophe, so a real row comes out as:
+
+            (104,"Perera, A. O'Brien",9000,'active')
+
+        Only the quote that opened the string closes it, otherwise the
+        apostrophe inside that name would end the value early.
+
         Both ways of escaping a quote inside a string are handled: a doubled
         quote ('') and a backslash quote (\\').
         """
         values = []
         current = ""
-        in_string = False
+        quote_char = ""
         i = 0
 
         while i < len(text):
             char = text[i]
 
-            if in_string:
+            if quote_char:
                 if char == "\\" and i + 1 < len(text):
                     current += char + text[i + 1]
                     i += 2
                     continue
-                if char == "'":
-                    if i + 1 < len(text) and text[i + 1] == "'":
-                        current += "''"
+                if char == quote_char:
+                    if i + 1 < len(text) and text[i + 1] == quote_char:
+                        current += char + char
                         i += 2
                         continue
-                    in_string = False
+                    quote_char = ""
                 current += char
-            elif char == "'":
-                in_string = True
+            elif char in ("'", '"'):
+                quote_char = char
                 current += char
             elif char == ",":
                 values.append(current.strip())
@@ -158,8 +167,9 @@ class Ibd2SqlAdapter:
         if raw.upper() == "NULL":
             return None
 
-        if len(raw) >= 2 and raw.startswith("'") and raw.endswith("'"):
-            return Ibd2SqlAdapter._unescape(raw[1:-1])
+        for quote in ("'", '"'):
+            if len(raw) >= 2 and raw.startswith(quote) and raw.endswith(quote):
+                return Ibd2SqlAdapter._unescape(raw[1:-1], quote)
 
         try:
             return int(raw)
@@ -176,8 +186,12 @@ class Ibd2SqlAdapter:
         return raw
 
     @staticmethod
-    def _unescape(text):
-        """Undo the escaping inside a quoted SQL string."""
+    def _unescape(text, quote="'"):
+        """Undo the escaping inside a quoted SQL string.
+
+        `quote` is whichever character opened the string, since a doubled
+        quote only means an escaped quote for that same character.
+        """
         out = ""
         i = 0
         while i < len(text):
@@ -187,8 +201,8 @@ class Ibd2SqlAdapter:
                 out += {"n": "\n", "t": "\t", "r": "\r", "0": "\0"}.get(nxt, nxt)
                 i += 2
                 continue
-            if char == "'" and i + 1 < len(text) and text[i + 1] == "'":
-                out += "'"
+            if char == quote and i + 1 < len(text) and text[i + 1] == quote:
+                out += quote
                 i += 2
                 continue
             out += char
