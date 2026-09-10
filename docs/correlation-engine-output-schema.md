@@ -133,17 +133,22 @@ CREATE TABLE record_physical_matches (
 ) STRICT;
 
 CREATE INDEX idx_record_physical_primary ON record_physical_matches(record_id, is_primary);
+
+CREATE UNIQUE INDEX idx_physical_match_primary_owner
+    ON record_physical_matches(physical_record_id)
+    WHERE is_primary = 1;
 ```
 
 Backs `RecordCorrelation.physical` and `.physical_candidates` together - `physical` is just whichever candidate has `is_primary = 1`, so there is no reason to store it twice. This is also why `PhysicalRecordRef` gets no table of its own: every field it carries (`database`, `table`, `is_deleted`, `page_no`, `page_offset`, `provenance`) already exists on `physical_records`, so a `PhysicalRecordRef` is nothing but a pointer to a `physical_records` row plus the fact that the correlator considered it a candidate. Turning it into its own table would mean keeping two copies of the same page location in sync.
 
-This does need one addition to `physical_records` (in `docs/sqlite-schema.md`):
+The partial unique index is what enforces "a physical row can only ever belong to one record's key" - at most one `is_primary = 1` row per `physical_record_id` across the whole table, checked by SQLite itself rather than by convention. I originally carried this as a plain column on `physical_records`, but that meant the same fact lived in two places with nothing keeping them in sync, and it collided with `physical_records.record_id` (`docs/sqlite-schema.md` §6), which is the physical row's own primary key, not a pointer to anything in this schema. This table is the single source of truth for the relationship instead - `physical_records` gets no amendment at all.
+
+`MatchMethod.PHYSICAL_ONLY` (a physical row with no log-derived identity) is simply a `physical_records` row with no matching entry here, so the "unmatched" case needs no null to represent it. The reverse lookup - "which record does this physical row belong to" - is a join instead of a column read:
 
 ```sql
-ALTER TABLE physical_records ADD COLUMN record_id TEXT REFERENCES records(record_id);
+SELECT record_id FROM record_physical_matches
+WHERE physical_record_id = ? AND is_primary = 1;
 ```
-
-Nullable, because most physical rows are never correlated to a log-derived identity at all (that is exactly what `MatchMethod.PHYSICAL_ONLY` reports), and a physical row can only ever belong to one record's key, so this direction is a plain column rather than another link table.
 
 ### 8. event_correlations
 
