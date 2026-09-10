@@ -1,0 +1,2352 @@
+{
+  "coverage": {
+    "findings": [],
+    "gaps": [],
+    "inventory": {
+      "index_file": "mysql-bin.index",
+      "listed_files": [
+        "/var/log/mysql/binlog.000018"
+      ],
+      "missing_files": [],
+      "present_files": [
+        "/var/log/mysql/binlog.000018"
+      ]
+    },
+    "observed_files": [
+      "binlog.000018"
+    ]
+  },
+  "edges": [
+    {
+      "event_refs": [
+        [
+          "binlog.000018",
+          100
+        ]
+      ],
+      "event_type": "UPDATE",
+      "record_id": "accounts:101",
+      "tx_id": "TX-1452"
+    },
+    {
+      "event_refs": [
+        [
+          "binlog.000018",
+          110
+        ]
+      ],
+      "event_type": "UPDATE",
+      "record_id": "accounts:205",
+      "tx_id": "TX-1452"
+    },
+    {
+      "event_refs": [
+        [
+          "binlog.000018",
+          120
+        ]
+      ],
+      "event_type": "INSERT",
+      "record_id": "transfers:9001",
+      "tx_id": "TX-1452"
+    }
+  ],
+  "histories": [
+    {
+      "before_image_mismatch": false,
+      "coverage_gaps_touching": [],
+      "earliest_state": {
+        "derived_from": {
+          "account_id": [
+            "binlog.000018",
+            100
+          ],
+          "balance": [
+            "binlog.000018",
+            100
+          ],
+          "owner": [
+            "binlog.000018",
+            100
+          ],
+          "status": [
+            "binlog.000018",
+            100
+          ]
+        },
+        "last_ref": [
+          "binlog.000018",
+          100
+        ],
+        "presence": "present",
+        "values": {
+          "account_id": 101,
+          "balance": "5000.00",
+          "owner": "Nimal",
+          "status": "active"
+        }
+      },
+      "final_log_state": {
+        "derived_from": {
+          "account_id": [
+            "binlog.000018",
+            100
+          ],
+          "balance": [
+            "binlog.000018",
+            100
+          ],
+          "owner": [
+            "binlog.000018",
+            100
+          ],
+          "status": [
+            "binlog.000018",
+            100
+          ]
+        },
+        "last_ref": [
+          "binlog.000018",
+          100
+        ],
+        "presence": "present",
+        "values": {
+          "account_id": 101,
+          "balance": "4000.00",
+          "owner": "Nimal",
+          "status": "active"
+        }
+      },
+      "findings": [
+        {
+          "context": {
+            "log_position": "100",
+            "record": "accounts:101",
+            "source_file": "binlog.000018"
+          },
+          "provenance": [
+            {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": 100,
+              "source_file": "binlog.000018",
+              "tool_name": "mysqlbinlog",
+              "tool_run_id": "run_3f21c8de"
+            }
+          ],
+          "rule_id": "R-HIST-002",
+          "severity": "info",
+          "subject": {
+            "id": "accounts:101",
+            "kind": "record"
+          }
+        },
+        {
+          "context": {
+            "column_count": "4",
+            "count": "1",
+            "log_position": "100",
+            "record": "accounts:101",
+            "source_file": "binlog.000018"
+          },
+          "provenance": [
+            {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": 100,
+              "source_file": "binlog.000018",
+              "tool_name": "mysqlbinlog",
+              "tool_run_id": "run_3f21c8de"
+            }
+          ],
+          "rule_id": "R-HIST-003",
+          "severity": "info",
+          "subject": {
+            "id": "accounts:101",
+            "kind": "record"
+          }
+        },
+        {
+          "context": {
+            "page_no": "4",
+            "page_offset": "170",
+            "record": "accounts:101"
+          },
+          "provenance": [
+            {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "accounts.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            }
+          ],
+          "rule_id": "R-HIST-012",
+          "severity": "info",
+          "subject": {
+            "id": "accounts:101",
+            "kind": "record"
+          }
+        }
+      ],
+      "method": "primary_key_exact",
+      "observed_values": {
+        "account_id": [
+          101
+        ],
+        "balance": [
+          "4000.00"
+        ],
+        "owner": [
+          "Nimal"
+        ],
+        "status": [
+          "active"
+        ]
+      },
+      "partial_image_columns": [],
+      "record": {
+        "database": "finance",
+        "id": "accounts:101",
+        "key": "account_id = 101",
+        "key_columns": [
+          "account_id"
+        ],
+        "key_values": [
+          "101"
+        ],
+        "label": "finance.accounts · 101",
+        "pk": "101",
+        "table": "finance.accounts"
+      },
+      "speculative_state": {
+        "derived_from": {
+          "account_id": [
+            "binlog.000018",
+            100
+          ],
+          "balance": [
+            "binlog.000018",
+            100
+          ],
+          "owner": [
+            "binlog.000018",
+            100
+          ],
+          "status": [
+            "binlog.000018",
+            100
+          ]
+        },
+        "last_ref": [
+          "binlog.000018",
+          100
+        ],
+        "presence": "present",
+        "values": {
+          "account_id": 101,
+          "balance": "4000.00",
+          "owner": "Nimal",
+          "status": "active"
+        }
+      },
+      "steps": [
+        {
+          "changes": [],
+          "durable": true,
+          "findings": [
+            {
+              "context": {
+                "log_position": "100",
+                "record": "accounts:101",
+                "source_file": "binlog.000018"
+              },
+              "provenance": [
+                {
+                  "evidence_id": "ev_b7785a0c",
+                  "log_position": 100,
+                  "source_file": "binlog.000018",
+                  "tool_name": "mysqlbinlog",
+                  "tool_run_id": "run_3f21c8de"
+                }
+              ],
+              "rule_id": "R-HIST-002",
+              "severity": "info",
+              "subject": {
+                "id": "accounts:101",
+                "kind": "record"
+              }
+            }
+          ],
+          "index": 0,
+          "kind": "earliest_observed_state",
+          "presence_after": "present",
+          "presence_before": "unknown",
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": 100,
+            "source_file": "binlog.000018",
+            "tool_name": "mysqlbinlog",
+            "tool_run_id": "run_3f21c8de"
+          },
+          "ref": [
+            "binlog.000018",
+            100
+          ],
+          "rule_id": "R-HIST-002",
+          "timestamp": "2026-08-15T19:06:25Z",
+          "transaction_id": null,
+          "transaction_status": null
+        },
+        {
+          "changes": [
+            {
+              "after": "4000.00",
+              "before": "5000.00",
+              "changed": true,
+              "column": "balance"
+            }
+          ],
+          "durable": true,
+          "findings": [
+            {
+              "context": {
+                "column_count": "4",
+                "count": "1",
+                "log_position": "100",
+                "record": "accounts:101",
+                "source_file": "binlog.000018"
+              },
+              "provenance": [
+                {
+                  "evidence_id": "ev_b7785a0c",
+                  "log_position": 100,
+                  "source_file": "binlog.000018",
+                  "tool_name": "mysqlbinlog",
+                  "tool_run_id": "run_3f21c8de"
+                }
+              ],
+              "rule_id": "R-HIST-003",
+              "severity": "info",
+              "subject": {
+                "id": "accounts:101",
+                "kind": "record"
+              }
+            }
+          ],
+          "index": 1,
+          "kind": "event",
+          "presence_after": "present",
+          "presence_before": "present",
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": 100,
+            "source_file": "binlog.000018",
+            "tool_name": "mysqlbinlog",
+            "tool_run_id": "run_3f21c8de"
+          },
+          "ref": [
+            "binlog.000018",
+            100
+          ],
+          "rule_id": "R-HIST-003",
+          "timestamp": "2026-08-15T19:06:25Z",
+          "transaction_id": "TX-1452",
+          "transaction_status": "committed"
+        },
+        {
+          "changes": [
+            {
+              "after": 101,
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "account_id"
+            },
+            {
+              "after": "4000.00",
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "balance"
+            },
+            {
+              "after": "Nimal",
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "owner"
+            },
+            {
+              "after": "active",
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "status"
+            }
+          ],
+          "durable": false,
+          "findings": [
+            {
+              "context": {
+                "page_no": "4",
+                "page_offset": "170",
+                "record": "accounts:101"
+              },
+              "provenance": [
+                {
+                  "evidence_id": "ev_b7785a0c",
+                  "log_position": null,
+                  "source_file": "accounts.ibd",
+                  "tool_name": "ibd2sql",
+                  "tool_run_id": "run_3f21c8de"
+                }
+              ],
+              "rule_id": "R-HIST-012",
+              "severity": "info",
+              "subject": {
+                "id": "accounts:101",
+                "kind": "record"
+              }
+            }
+          ],
+          "index": 2,
+          "kind": "physical_state",
+          "presence_after": "present",
+          "presence_before": "unknown",
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": null,
+            "source_file": "accounts.ibd",
+            "tool_name": "ibd2sql",
+            "tool_run_id": "run_3f21c8de"
+          },
+          "ref": null,
+          "rule_id": "R-HIST-012",
+          "timestamp": null,
+          "transaction_id": null,
+          "transaction_status": null
+        }
+      ]
+    },
+    {
+      "before_image_mismatch": false,
+      "coverage_gaps_touching": [],
+      "earliest_state": {
+        "derived_from": {
+          "account_id": [
+            "binlog.000018",
+            110
+          ],
+          "balance": [
+            "binlog.000018",
+            110
+          ],
+          "owner": [
+            "binlog.000018",
+            110
+          ],
+          "status": [
+            "binlog.000018",
+            110
+          ]
+        },
+        "last_ref": [
+          "binlog.000018",
+          110
+        ],
+        "presence": "present",
+        "values": {
+          "account_id": 205,
+          "balance": "1000.00",
+          "owner": "Nimal",
+          "status": "active"
+        }
+      },
+      "final_log_state": {
+        "derived_from": {
+          "account_id": [
+            "binlog.000018",
+            110
+          ],
+          "balance": [
+            "binlog.000018",
+            110
+          ],
+          "owner": [
+            "binlog.000018",
+            110
+          ],
+          "status": [
+            "binlog.000018",
+            110
+          ]
+        },
+        "last_ref": [
+          "binlog.000018",
+          110
+        ],
+        "presence": "present",
+        "values": {
+          "account_id": 205,
+          "balance": "2000.00",
+          "owner": "Nimal",
+          "status": "active"
+        }
+      },
+      "findings": [
+        {
+          "context": {
+            "log_position": "110",
+            "record": "accounts:205",
+            "source_file": "binlog.000018"
+          },
+          "provenance": [
+            {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": 110,
+              "source_file": "binlog.000018",
+              "tool_name": "mysqlbinlog",
+              "tool_run_id": "run_3f21c8de"
+            }
+          ],
+          "rule_id": "R-HIST-002",
+          "severity": "info",
+          "subject": {
+            "id": "accounts:205",
+            "kind": "record"
+          }
+        },
+        {
+          "context": {
+            "column_count": "4",
+            "count": "1",
+            "log_position": "110",
+            "record": "accounts:205",
+            "source_file": "binlog.000018"
+          },
+          "provenance": [
+            {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": 110,
+              "source_file": "binlog.000018",
+              "tool_name": "mysqlbinlog",
+              "tool_run_id": "run_3f21c8de"
+            }
+          ],
+          "rule_id": "R-HIST-003",
+          "severity": "info",
+          "subject": {
+            "id": "accounts:205",
+            "kind": "record"
+          }
+        },
+        {
+          "context": {
+            "page_no": "4",
+            "page_offset": "170",
+            "record": "accounts:205"
+          },
+          "provenance": [
+            {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "accounts.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            }
+          ],
+          "rule_id": "R-HIST-012",
+          "severity": "info",
+          "subject": {
+            "id": "accounts:205",
+            "kind": "record"
+          }
+        }
+      ],
+      "method": "primary_key_exact",
+      "observed_values": {
+        "account_id": [
+          205
+        ],
+        "balance": [
+          "2000.00"
+        ],
+        "owner": [
+          "Nimal"
+        ],
+        "status": [
+          "active"
+        ]
+      },
+      "partial_image_columns": [],
+      "record": {
+        "database": "finance",
+        "id": "accounts:205",
+        "key": "account_id = 205",
+        "key_columns": [
+          "account_id"
+        ],
+        "key_values": [
+          "205"
+        ],
+        "label": "finance.accounts · 205",
+        "pk": "205",
+        "table": "finance.accounts"
+      },
+      "speculative_state": {
+        "derived_from": {
+          "account_id": [
+            "binlog.000018",
+            110
+          ],
+          "balance": [
+            "binlog.000018",
+            110
+          ],
+          "owner": [
+            "binlog.000018",
+            110
+          ],
+          "status": [
+            "binlog.000018",
+            110
+          ]
+        },
+        "last_ref": [
+          "binlog.000018",
+          110
+        ],
+        "presence": "present",
+        "values": {
+          "account_id": 205,
+          "balance": "2000.00",
+          "owner": "Nimal",
+          "status": "active"
+        }
+      },
+      "steps": [
+        {
+          "changes": [],
+          "durable": true,
+          "findings": [
+            {
+              "context": {
+                "log_position": "110",
+                "record": "accounts:205",
+                "source_file": "binlog.000018"
+              },
+              "provenance": [
+                {
+                  "evidence_id": "ev_b7785a0c",
+                  "log_position": 110,
+                  "source_file": "binlog.000018",
+                  "tool_name": "mysqlbinlog",
+                  "tool_run_id": "run_3f21c8de"
+                }
+              ],
+              "rule_id": "R-HIST-002",
+              "severity": "info",
+              "subject": {
+                "id": "accounts:205",
+                "kind": "record"
+              }
+            }
+          ],
+          "index": 0,
+          "kind": "earliest_observed_state",
+          "presence_after": "present",
+          "presence_before": "unknown",
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": 110,
+            "source_file": "binlog.000018",
+            "tool_name": "mysqlbinlog",
+            "tool_run_id": "run_3f21c8de"
+          },
+          "ref": [
+            "binlog.000018",
+            110
+          ],
+          "rule_id": "R-HIST-002",
+          "timestamp": "2026-08-15T19:06:25Z",
+          "transaction_id": null,
+          "transaction_status": null
+        },
+        {
+          "changes": [
+            {
+              "after": "2000.00",
+              "before": "1000.00",
+              "changed": true,
+              "column": "balance"
+            }
+          ],
+          "durable": true,
+          "findings": [
+            {
+              "context": {
+                "column_count": "4",
+                "count": "1",
+                "log_position": "110",
+                "record": "accounts:205",
+                "source_file": "binlog.000018"
+              },
+              "provenance": [
+                {
+                  "evidence_id": "ev_b7785a0c",
+                  "log_position": 110,
+                  "source_file": "binlog.000018",
+                  "tool_name": "mysqlbinlog",
+                  "tool_run_id": "run_3f21c8de"
+                }
+              ],
+              "rule_id": "R-HIST-003",
+              "severity": "info",
+              "subject": {
+                "id": "accounts:205",
+                "kind": "record"
+              }
+            }
+          ],
+          "index": 1,
+          "kind": "event",
+          "presence_after": "present",
+          "presence_before": "present",
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": 110,
+            "source_file": "binlog.000018",
+            "tool_name": "mysqlbinlog",
+            "tool_run_id": "run_3f21c8de"
+          },
+          "ref": [
+            "binlog.000018",
+            110
+          ],
+          "rule_id": "R-HIST-003",
+          "timestamp": "2026-08-15T19:06:25Z",
+          "transaction_id": "TX-1452",
+          "transaction_status": "committed"
+        },
+        {
+          "changes": [
+            {
+              "after": 205,
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "account_id"
+            },
+            {
+              "after": "2000.00",
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "balance"
+            },
+            {
+              "after": "Nimal",
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "owner"
+            },
+            {
+              "after": "active",
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "status"
+            }
+          ],
+          "durable": false,
+          "findings": [
+            {
+              "context": {
+                "page_no": "4",
+                "page_offset": "170",
+                "record": "accounts:205"
+              },
+              "provenance": [
+                {
+                  "evidence_id": "ev_b7785a0c",
+                  "log_position": null,
+                  "source_file": "accounts.ibd",
+                  "tool_name": "ibd2sql",
+                  "tool_run_id": "run_3f21c8de"
+                }
+              ],
+              "rule_id": "R-HIST-012",
+              "severity": "info",
+              "subject": {
+                "id": "accounts:205",
+                "kind": "record"
+              }
+            }
+          ],
+          "index": 2,
+          "kind": "physical_state",
+          "presence_after": "present",
+          "presence_before": "unknown",
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": null,
+            "source_file": "accounts.ibd",
+            "tool_name": "ibd2sql",
+            "tool_run_id": "run_3f21c8de"
+          },
+          "ref": null,
+          "rule_id": "R-HIST-012",
+          "timestamp": null,
+          "transaction_id": null,
+          "transaction_status": null
+        }
+      ]
+    },
+    {
+      "before_image_mismatch": false,
+      "coverage_gaps_touching": [],
+      "earliest_state": {
+        "derived_from": {},
+        "last_ref": null,
+        "presence": "absent",
+        "values": {
+          "amount": {
+            "__unobserved__": true
+          },
+          "status": {
+            "__unobserved__": true
+          },
+          "transfer_id": {
+            "__unobserved__": true
+          }
+        }
+      },
+      "final_log_state": {
+        "derived_from": {
+          "amount": [
+            "binlog.000018",
+            120
+          ],
+          "status": [
+            "binlog.000018",
+            120
+          ],
+          "transfer_id": [
+            "binlog.000018",
+            120
+          ]
+        },
+        "last_ref": [
+          "binlog.000018",
+          120
+        ],
+        "presence": "present",
+        "values": {
+          "amount": "1000.00",
+          "status": "done",
+          "transfer_id": 9001
+        }
+      },
+      "findings": [
+        {
+          "context": {
+            "log_position": "120",
+            "record": "transfers:9001",
+            "source_file": "binlog.000018"
+          },
+          "provenance": [
+            {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": 120,
+              "source_file": "binlog.000018",
+              "tool_name": "mysqlbinlog",
+              "tool_run_id": "run_3f21c8de"
+            }
+          ],
+          "rule_id": "R-HIST-002",
+          "severity": "info",
+          "subject": {
+            "id": "transfers:9001",
+            "kind": "record"
+          }
+        },
+        {
+          "context": {
+            "column_count": "3",
+            "count": "1",
+            "log_position": "120",
+            "record": "transfers:9001",
+            "source_file": "binlog.000018"
+          },
+          "provenance": [
+            {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": 120,
+              "source_file": "binlog.000018",
+              "tool_name": "mysqlbinlog",
+              "tool_run_id": "run_3f21c8de"
+            }
+          ],
+          "rule_id": "R-HIST-003",
+          "severity": "info",
+          "subject": {
+            "id": "transfers:9001",
+            "kind": "record"
+          }
+        },
+        {
+          "context": {
+            "page_no": "4",
+            "page_offset": "170",
+            "record": "transfers:9001"
+          },
+          "provenance": [
+            {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "transfers.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            }
+          ],
+          "rule_id": "R-HIST-012",
+          "severity": "info",
+          "subject": {
+            "id": "transfers:9001",
+            "kind": "record"
+          }
+        }
+      ],
+      "method": "primary_key_exact",
+      "observed_values": {
+        "amount": [
+          "1000.00"
+        ],
+        "status": [
+          "done"
+        ],
+        "transfer_id": [
+          9001
+        ]
+      },
+      "partial_image_columns": [],
+      "record": {
+        "database": "finance",
+        "id": "transfers:9001",
+        "key": "transfer_id = 9001",
+        "key_columns": [
+          "transfer_id"
+        ],
+        "key_values": [
+          "9001"
+        ],
+        "label": "finance.transfers · 9001",
+        "pk": "9001",
+        "table": "finance.transfers"
+      },
+      "speculative_state": {
+        "derived_from": {
+          "amount": [
+            "binlog.000018",
+            120
+          ],
+          "status": [
+            "binlog.000018",
+            120
+          ],
+          "transfer_id": [
+            "binlog.000018",
+            120
+          ]
+        },
+        "last_ref": [
+          "binlog.000018",
+          120
+        ],
+        "presence": "present",
+        "values": {
+          "amount": "1000.00",
+          "status": "done",
+          "transfer_id": 9001
+        }
+      },
+      "steps": [
+        {
+          "changes": [],
+          "durable": true,
+          "findings": [
+            {
+              "context": {
+                "log_position": "120",
+                "record": "transfers:9001",
+                "source_file": "binlog.000018"
+              },
+              "provenance": [
+                {
+                  "evidence_id": "ev_b7785a0c",
+                  "log_position": 120,
+                  "source_file": "binlog.000018",
+                  "tool_name": "mysqlbinlog",
+                  "tool_run_id": "run_3f21c8de"
+                }
+              ],
+              "rule_id": "R-HIST-002",
+              "severity": "info",
+              "subject": {
+                "id": "transfers:9001",
+                "kind": "record"
+              }
+            }
+          ],
+          "index": 0,
+          "kind": "earliest_observed_state",
+          "presence_after": "absent",
+          "presence_before": "unknown",
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": 120,
+            "source_file": "binlog.000018",
+            "tool_name": "mysqlbinlog",
+            "tool_run_id": "run_3f21c8de"
+          },
+          "ref": [
+            "binlog.000018",
+            120
+          ],
+          "rule_id": "R-HIST-002",
+          "timestamp": "2026-08-15T19:06:25Z",
+          "transaction_id": null,
+          "transaction_status": null
+        },
+        {
+          "changes": [
+            {
+              "after": 9001,
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "transfer_id"
+            },
+            {
+              "after": "1000.00",
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "amount"
+            },
+            {
+              "after": "done",
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "status"
+            }
+          ],
+          "durable": true,
+          "findings": [
+            {
+              "context": {
+                "column_count": "3",
+                "count": "1",
+                "log_position": "120",
+                "record": "transfers:9001",
+                "source_file": "binlog.000018"
+              },
+              "provenance": [
+                {
+                  "evidence_id": "ev_b7785a0c",
+                  "log_position": 120,
+                  "source_file": "binlog.000018",
+                  "tool_name": "mysqlbinlog",
+                  "tool_run_id": "run_3f21c8de"
+                }
+              ],
+              "rule_id": "R-HIST-003",
+              "severity": "info",
+              "subject": {
+                "id": "transfers:9001",
+                "kind": "record"
+              }
+            }
+          ],
+          "index": 1,
+          "kind": "event",
+          "presence_after": "present",
+          "presence_before": "absent",
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": 120,
+            "source_file": "binlog.000018",
+            "tool_name": "mysqlbinlog",
+            "tool_run_id": "run_3f21c8de"
+          },
+          "ref": [
+            "binlog.000018",
+            120
+          ],
+          "rule_id": "R-HIST-003",
+          "timestamp": "2026-08-15T19:06:25Z",
+          "transaction_id": "TX-1452",
+          "transaction_status": "committed"
+        },
+        {
+          "changes": [
+            {
+              "after": "1000.00",
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "amount"
+            },
+            {
+              "after": "done",
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "status"
+            },
+            {
+              "after": 9001,
+              "before": {
+                "__unobserved__": true
+              },
+              "changed": null,
+              "column": "transfer_id"
+            }
+          ],
+          "durable": false,
+          "findings": [
+            {
+              "context": {
+                "page_no": "4",
+                "page_offset": "170",
+                "record": "transfers:9001"
+              },
+              "provenance": [
+                {
+                  "evidence_id": "ev_b7785a0c",
+                  "log_position": null,
+                  "source_file": "transfers.ibd",
+                  "tool_name": "ibd2sql",
+                  "tool_run_id": "run_3f21c8de"
+                }
+              ],
+              "rule_id": "R-HIST-012",
+              "severity": "info",
+              "subject": {
+                "id": "transfers:9001",
+                "kind": "record"
+              }
+            }
+          ],
+          "index": 2,
+          "kind": "physical_state",
+          "presence_after": "present",
+          "presence_before": "unknown",
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": null,
+            "source_file": "transfers.ibd",
+            "tool_name": "ibd2sql",
+            "tool_run_id": "run_3f21c8de"
+          },
+          "ref": null,
+          "rule_id": "R-HIST-012",
+          "timestamp": null,
+          "transaction_id": null,
+          "transaction_status": null
+        }
+      ]
+    }
+  ],
+  "id": "ds02",
+  "reconciliation": [
+    {
+      "fields": [
+        {
+          "comparable": true,
+          "field": "record presence",
+          "findings": [
+            {
+              "context": {
+                "log_presence": "present",
+                "page_no": "4",
+                "phys_presence": "present",
+                "presence": "present",
+                "record": "accounts:101"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-020",
+              "severity": "info",
+              "subject": {
+                "id": "accounts:101.presence",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": "present",
+          "log_display": "present",
+          "phys": "present",
+          "phys_display": "present",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 100,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "accounts.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1452"
+          },
+          "record_id": "accounts:101",
+          "result": "Exact",
+          "rule_id": "R-RECON-020"
+        },
+        {
+          "comparable": true,
+          "field": "account_id",
+          "findings": [
+            {
+              "context": {
+                "data_type": "int",
+                "field": "account_id",
+                "log": "101",
+                "phys": "101",
+                "record": "accounts:101"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-001",
+              "severity": "info",
+              "subject": {
+                "id": "accounts:101.account_id",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": 101,
+          "log_display": "101",
+          "phys": 101,
+          "phys_display": "101",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 100,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "accounts.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1452"
+          },
+          "record_id": "accounts:101",
+          "result": "Exact",
+          "rule_id": "R-RECON-001"
+        },
+        {
+          "comparable": true,
+          "field": "owner",
+          "findings": [
+            {
+              "context": {
+                "data_type": "varchar",
+                "field": "owner",
+                "log": "Nimal",
+                "phys": "Nimal",
+                "record": "accounts:101"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-001",
+              "severity": "info",
+              "subject": {
+                "id": "accounts:101.owner",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": "Nimal",
+          "log_display": "Nimal",
+          "phys": "Nimal",
+          "phys_display": "Nimal",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 100,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "accounts.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1452"
+          },
+          "record_id": "accounts:101",
+          "result": "Exact",
+          "rule_id": "R-RECON-001"
+        },
+        {
+          "comparable": true,
+          "field": "balance",
+          "findings": [
+            {
+              "context": {
+                "data_type": "decimal",
+                "field": "balance",
+                "log": "4000.00",
+                "phys": "4000.00",
+                "record": "accounts:101"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-001",
+              "severity": "info",
+              "subject": {
+                "id": "accounts:101.balance",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": "4000.00",
+          "log_display": "4000.00",
+          "phys": "4000.00",
+          "phys_display": "4000.00",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 100,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "accounts.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1452"
+          },
+          "record_id": "accounts:101",
+          "result": "Exact",
+          "rule_id": "R-RECON-001"
+        },
+        {
+          "comparable": true,
+          "field": "status",
+          "findings": [
+            {
+              "context": {
+                "data_type": "varchar",
+                "field": "status",
+                "log": "active",
+                "phys": "active",
+                "record": "accounts:101"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-001",
+              "severity": "info",
+              "subject": {
+                "id": "accounts:101.status",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": "active",
+          "log_display": "active",
+          "phys": "active",
+          "phys_display": "active",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 100,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "accounts.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1452"
+          },
+          "record_id": "accounts:101",
+          "result": "Exact",
+          "rule_id": "R-RECON-001"
+        }
+      ],
+      "findings": [
+        {
+          "context": {
+            "count": "5",
+            "label": "5 fields: Exact",
+            "record": "accounts:101",
+            "result": "Exact",
+            "total": "5"
+          },
+          "provenance": [],
+          "rule_id": "R-ROLL-002",
+          "severity": "info",
+          "subject": {
+            "id": "accounts:101",
+            "kind": "record"
+          }
+        }
+      ],
+      "record": {
+        "database": "finance",
+        "id": "accounts:101",
+        "key": "account_id = 101",
+        "key_columns": [
+          "account_id"
+        ],
+        "key_values": [
+          "101"
+        ],
+        "label": "finance.accounts · 101",
+        "pk": "101",
+        "table": "finance.accounts"
+      },
+      "rollup": "Exact",
+      "rollup_label": "5 fields: Exact",
+      "rollup_rule_id": "R-ROLL-002",
+      "triggers": []
+    },
+    {
+      "fields": [
+        {
+          "comparable": true,
+          "field": "record presence",
+          "findings": [
+            {
+              "context": {
+                "log_presence": "present",
+                "page_no": "4",
+                "phys_presence": "present",
+                "presence": "present",
+                "record": "accounts:205"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-020",
+              "severity": "info",
+              "subject": {
+                "id": "accounts:205.presence",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": "present",
+          "log_display": "present",
+          "phys": "present",
+          "phys_display": "present",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 110,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "accounts.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1452"
+          },
+          "record_id": "accounts:205",
+          "result": "Exact",
+          "rule_id": "R-RECON-020"
+        },
+        {
+          "comparable": true,
+          "field": "account_id",
+          "findings": [
+            {
+              "context": {
+                "data_type": "int",
+                "field": "account_id",
+                "log": "205",
+                "phys": "205",
+                "record": "accounts:205"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-001",
+              "severity": "info",
+              "subject": {
+                "id": "accounts:205.account_id",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": 205,
+          "log_display": "205",
+          "phys": 205,
+          "phys_display": "205",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 110,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "accounts.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1452"
+          },
+          "record_id": "accounts:205",
+          "result": "Exact",
+          "rule_id": "R-RECON-001"
+        },
+        {
+          "comparable": true,
+          "field": "owner",
+          "findings": [
+            {
+              "context": {
+                "data_type": "varchar",
+                "field": "owner",
+                "log": "Nimal",
+                "phys": "Nimal",
+                "record": "accounts:205"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-001",
+              "severity": "info",
+              "subject": {
+                "id": "accounts:205.owner",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": "Nimal",
+          "log_display": "Nimal",
+          "phys": "Nimal",
+          "phys_display": "Nimal",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 110,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "accounts.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1452"
+          },
+          "record_id": "accounts:205",
+          "result": "Exact",
+          "rule_id": "R-RECON-001"
+        },
+        {
+          "comparable": true,
+          "field": "balance",
+          "findings": [
+            {
+              "context": {
+                "data_type": "decimal",
+                "field": "balance",
+                "log": "2000.00",
+                "phys": "2000.00",
+                "record": "accounts:205"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-001",
+              "severity": "info",
+              "subject": {
+                "id": "accounts:205.balance",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": "2000.00",
+          "log_display": "2000.00",
+          "phys": "2000.00",
+          "phys_display": "2000.00",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 110,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "accounts.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1452"
+          },
+          "record_id": "accounts:205",
+          "result": "Exact",
+          "rule_id": "R-RECON-001"
+        },
+        {
+          "comparable": true,
+          "field": "status",
+          "findings": [
+            {
+              "context": {
+                "data_type": "varchar",
+                "field": "status",
+                "log": "active",
+                "phys": "active",
+                "record": "accounts:205"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-001",
+              "severity": "info",
+              "subject": {
+                "id": "accounts:205.status",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": "active",
+          "log_display": "active",
+          "phys": "active",
+          "phys_display": "active",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 110,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "accounts.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1452"
+          },
+          "record_id": "accounts:205",
+          "result": "Exact",
+          "rule_id": "R-RECON-001"
+        }
+      ],
+      "findings": [
+        {
+          "context": {
+            "count": "5",
+            "label": "5 fields: Exact",
+            "record": "accounts:205",
+            "result": "Exact",
+            "total": "5"
+          },
+          "provenance": [],
+          "rule_id": "R-ROLL-002",
+          "severity": "info",
+          "subject": {
+            "id": "accounts:205",
+            "kind": "record"
+          }
+        }
+      ],
+      "record": {
+        "database": "finance",
+        "id": "accounts:205",
+        "key": "account_id = 205",
+        "key_columns": [
+          "account_id"
+        ],
+        "key_values": [
+          "205"
+        ],
+        "label": "finance.accounts · 205",
+        "pk": "205",
+        "table": "finance.accounts"
+      },
+      "rollup": "Exact",
+      "rollup_label": "5 fields: Exact",
+      "rollup_rule_id": "R-ROLL-002",
+      "triggers": []
+    },
+    {
+      "fields": [
+        {
+          "comparable": true,
+          "field": "record presence",
+          "findings": [
+            {
+              "context": {
+                "log_presence": "present",
+                "page_no": "4",
+                "phys_presence": "present",
+                "presence": "present",
+                "record": "transfers:9001"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-020",
+              "severity": "info",
+              "subject": {
+                "id": "transfers:9001.presence",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": "present",
+          "log_display": "present",
+          "phys": "present",
+          "phys_display": "present",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 120,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "transfers.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1452"
+          },
+          "record_id": "transfers:9001",
+          "result": "Exact",
+          "rule_id": "R-RECON-020"
+        },
+        {
+          "comparable": true,
+          "field": "transfer_id",
+          "findings": [
+            {
+              "context": {
+                "data_type": "int",
+                "field": "transfer_id",
+                "log": "9001",
+                "phys": "9001",
+                "record": "transfers:9001"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-001",
+              "severity": "info",
+              "subject": {
+                "id": "transfers:9001.transfer_id",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": 9001,
+          "log_display": "9001",
+          "phys": 9001,
+          "phys_display": "9001",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 120,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "transfers.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1452"
+          },
+          "record_id": "transfers:9001",
+          "result": "Exact",
+          "rule_id": "R-RECON-001"
+        },
+        {
+          "comparable": true,
+          "field": "amount",
+          "findings": [
+            {
+              "context": {
+                "data_type": "decimal",
+                "field": "amount",
+                "log": "1000.00",
+                "phys": "1000.00",
+                "record": "transfers:9001"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-001",
+              "severity": "info",
+              "subject": {
+                "id": "transfers:9001.amount",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": "1000.00",
+          "log_display": "1000.00",
+          "phys": "1000.00",
+          "phys_display": "1000.00",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 120,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "transfers.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1452"
+          },
+          "record_id": "transfers:9001",
+          "result": "Exact",
+          "rule_id": "R-RECON-001"
+        },
+        {
+          "comparable": true,
+          "field": "status",
+          "findings": [
+            {
+              "context": {
+                "data_type": "varchar",
+                "field": "status",
+                "log": "done",
+                "phys": "done",
+                "record": "transfers:9001"
+              },
+              "provenance": [],
+              "rule_id": "R-RECON-001",
+              "severity": "info",
+              "subject": {
+                "id": "transfers:9001.status",
+                "kind": "field"
+              }
+            }
+          ],
+          "log": "done",
+          "log_display": "done",
+          "phys": "done",
+          "phys_display": "done",
+          "provenance": {
+            "log": [
+              {
+                "evidence_id": "ev_b7785a0c",
+                "log_position": 120,
+                "source_file": "binlog.000018",
+                "tool_name": "mysqlbinlog",
+                "tool_run_id": "run_3f21c8de"
+              }
+            ],
+            "physical": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": null,
+              "source_file": "transfers.ibd",
+              "tool_name": "ibd2sql",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "transaction_id": "TX-1452"
+          },
+          "record_id": "transfers:9001",
+          "result": "Exact",
+          "rule_id": "R-RECON-001"
+        }
+      ],
+      "findings": [
+        {
+          "context": {
+            "count": "4",
+            "label": "4 fields: Exact",
+            "record": "transfers:9001",
+            "result": "Exact",
+            "total": "4"
+          },
+          "provenance": [],
+          "rule_id": "R-ROLL-002",
+          "severity": "info",
+          "subject": {
+            "id": "transfers:9001",
+            "kind": "record"
+          }
+        }
+      ],
+      "record": {
+        "database": "finance",
+        "id": "transfers:9001",
+        "key": "transfer_id = 9001",
+        "key_columns": [
+          "transfer_id"
+        ],
+        "key_values": [
+          "9001"
+        ],
+        "label": "finance.transfers · 9001",
+        "pk": "9001",
+        "table": "finance.transfers"
+      },
+      "rollup": "Exact",
+      "rollup_label": "4 fields: Exact",
+      "rollup_rule_id": "R-ROLL-002",
+      "triggers": []
+    }
+  ],
+  "records": [
+    {
+      "findings": [],
+      "identity_aliases": [],
+      "log_event_refs": [
+        [
+          "binlog.000018",
+          100
+        ]
+      ],
+      "method": "primary_key_exact",
+      "physical": {
+        "database": "finance",
+        "is_deleted": false,
+        "page_no": 4,
+        "page_offset": 170,
+        "provenance": {
+          "evidence_id": "ev_b7785a0c",
+          "log_position": null,
+          "source_file": "accounts.ibd",
+          "tool_name": "ibd2sql",
+          "tool_run_id": "run_3f21c8de"
+        },
+        "table": "accounts"
+      },
+      "physical_candidates": [
+        {
+          "database": "finance",
+          "is_deleted": false,
+          "page_no": 4,
+          "page_offset": 170,
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": null,
+            "source_file": "accounts.ibd",
+            "tool_name": "ibd2sql",
+            "tool_run_id": "run_3f21c8de"
+          },
+          "table": "accounts"
+        }
+      ],
+      "provenance": [
+        {
+          "evidence_id": "ev_b7785a0c",
+          "log_position": 100,
+          "source_file": "binlog.000018",
+          "tool_name": "mysqlbinlog",
+          "tool_run_id": "run_3f21c8de"
+        }
+      ],
+      "record": {
+        "database": "finance",
+        "id": "accounts:101",
+        "key": "account_id = 101",
+        "key_columns": [
+          "account_id"
+        ],
+        "key_values": [
+          "101"
+        ],
+        "label": "finance.accounts · 101",
+        "pk": "101",
+        "table": "finance.accounts"
+      },
+      "transaction_ids": [
+        "TX-1452"
+      ]
+    },
+    {
+      "findings": [],
+      "identity_aliases": [],
+      "log_event_refs": [
+        [
+          "binlog.000018",
+          110
+        ]
+      ],
+      "method": "primary_key_exact",
+      "physical": {
+        "database": "finance",
+        "is_deleted": false,
+        "page_no": 4,
+        "page_offset": 170,
+        "provenance": {
+          "evidence_id": "ev_b7785a0c",
+          "log_position": null,
+          "source_file": "accounts.ibd",
+          "tool_name": "ibd2sql",
+          "tool_run_id": "run_3f21c8de"
+        },
+        "table": "accounts"
+      },
+      "physical_candidates": [
+        {
+          "database": "finance",
+          "is_deleted": false,
+          "page_no": 4,
+          "page_offset": 170,
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": null,
+            "source_file": "accounts.ibd",
+            "tool_name": "ibd2sql",
+            "tool_run_id": "run_3f21c8de"
+          },
+          "table": "accounts"
+        }
+      ],
+      "provenance": [
+        {
+          "evidence_id": "ev_b7785a0c",
+          "log_position": 110,
+          "source_file": "binlog.000018",
+          "tool_name": "mysqlbinlog",
+          "tool_run_id": "run_3f21c8de"
+        }
+      ],
+      "record": {
+        "database": "finance",
+        "id": "accounts:205",
+        "key": "account_id = 205",
+        "key_columns": [
+          "account_id"
+        ],
+        "key_values": [
+          "205"
+        ],
+        "label": "finance.accounts · 205",
+        "pk": "205",
+        "table": "finance.accounts"
+      },
+      "transaction_ids": [
+        "TX-1452"
+      ]
+    },
+    {
+      "findings": [],
+      "identity_aliases": [],
+      "log_event_refs": [
+        [
+          "binlog.000018",
+          120
+        ]
+      ],
+      "method": "primary_key_exact",
+      "physical": {
+        "database": "finance",
+        "is_deleted": false,
+        "page_no": 4,
+        "page_offset": 170,
+        "provenance": {
+          "evidence_id": "ev_b7785a0c",
+          "log_position": null,
+          "source_file": "transfers.ibd",
+          "tool_name": "ibd2sql",
+          "tool_run_id": "run_3f21c8de"
+        },
+        "table": "transfers"
+      },
+      "physical_candidates": [
+        {
+          "database": "finance",
+          "is_deleted": false,
+          "page_no": 4,
+          "page_offset": 170,
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": null,
+            "source_file": "transfers.ibd",
+            "tool_name": "ibd2sql",
+            "tool_run_id": "run_3f21c8de"
+          },
+          "table": "transfers"
+        }
+      ],
+      "provenance": [
+        {
+          "evidence_id": "ev_b7785a0c",
+          "log_position": 120,
+          "source_file": "binlog.000018",
+          "tool_name": "mysqlbinlog",
+          "tool_run_id": "run_3f21c8de"
+        }
+      ],
+      "record": {
+        "database": "finance",
+        "id": "transfers:9001",
+        "key": "transfer_id = 9001",
+        "key_columns": [
+          "transfer_id"
+        ],
+        "key_values": [
+          "9001"
+        ],
+        "label": "finance.transfers · 9001",
+        "pk": "9001",
+        "table": "finance.transfers"
+      },
+      "transaction_ids": [
+        "TX-1452"
+      ]
+    }
+  ],
+  "rules_cited": [
+    "R-CORR-001",
+    "R-GRP-001",
+    "R-HIST-002",
+    "R-HIST-003",
+    "R-HIST-012",
+    "R-RECON-001",
+    "R-RECON-020",
+    "R-ROLL-002"
+  ],
+  "title": "Multi-table committed transaction, all values agreeing",
+  "transactions": [
+    {
+      "commit_position": 9999,
+      "commit_timestamp": "2026-08-15T19:06:25Z",
+      "end_position": 9999,
+      "events": [
+        {
+          "event": {
+            "after": {
+              "account_id": 101,
+              "balance": "4000.00",
+              "owner": "Nimal",
+              "status": "active"
+            },
+            "before": {
+              "account_id": 101,
+              "balance": "5000.00",
+              "owner": "Nimal",
+              "status": "active"
+            },
+            "database": "finance",
+            "event_type": "UPDATE",
+            "gtid": null,
+            "log_position": 100,
+            "provenance": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": 100,
+              "source_file": "binlog.000018",
+              "tool_name": "mysqlbinlog",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "raw_timestamp": "260816  0:36:25",
+            "source_file": "binlog.000018",
+            "table": "accounts",
+            "thread_id": 13,
+            "timestamp": "2026-08-15T19:06:25Z"
+          },
+          "order": 0,
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": 100,
+            "source_file": "binlog.000018",
+            "tool_name": "mysqlbinlog",
+            "tool_run_id": "run_3f21c8de"
+          }
+        },
+        {
+          "event": {
+            "after": {
+              "account_id": 205,
+              "balance": "2000.00",
+              "owner": "Nimal",
+              "status": "active"
+            },
+            "before": {
+              "account_id": 205,
+              "balance": "1000.00",
+              "owner": "Nimal",
+              "status": "active"
+            },
+            "database": "finance",
+            "event_type": "UPDATE",
+            "gtid": null,
+            "log_position": 110,
+            "provenance": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": 110,
+              "source_file": "binlog.000018",
+              "tool_name": "mysqlbinlog",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "raw_timestamp": "260816  0:36:25",
+            "source_file": "binlog.000018",
+            "table": "accounts",
+            "thread_id": 13,
+            "timestamp": "2026-08-15T19:06:25Z"
+          },
+          "order": 1,
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": 110,
+            "source_file": "binlog.000018",
+            "tool_name": "mysqlbinlog",
+            "tool_run_id": "run_3f21c8de"
+          }
+        },
+        {
+          "event": {
+            "after": {
+              "amount": "1000.00",
+              "status": "done",
+              "transfer_id": 9001
+            },
+            "before": null,
+            "database": "finance",
+            "event_type": "INSERT",
+            "gtid": null,
+            "log_position": 120,
+            "provenance": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": 120,
+              "source_file": "binlog.000018",
+              "tool_name": "mysqlbinlog",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "raw_timestamp": "260816  0:36:25",
+            "source_file": "binlog.000018",
+            "table": "transfers",
+            "thread_id": 13,
+            "timestamp": "2026-08-15T19:06:25Z"
+          },
+          "order": 2,
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": 120,
+            "source_file": "binlog.000018",
+            "tool_name": "mysqlbinlog",
+            "tool_run_id": "run_3f21c8de"
+          }
+        }
+      ],
+      "findings": [
+        {
+          "context": {
+            "gtid": "cb4d5c8e-9325-11f1-9975-00155dc1157f:1452",
+            "transaction": "TX-1452",
+            "xid": ""
+          },
+          "provenance": [
+            {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": 90,
+              "source_file": "binlog.000018",
+              "tool_name": "mysqlbinlog",
+              "tool_run_id": "run_3f21c8de"
+            }
+          ],
+          "rule_id": "R-GRP-001",
+          "severity": "info",
+          "subject": {
+            "id": "TX-1452",
+            "kind": "transaction"
+          }
+        }
+      ],
+      "gtid": "cb4d5c8e-9325-11f1-9975-00155dc1157f:1452",
+      "id": "TX-1452",
+      "incompleteness_reason": null,
+      "provenance": [
+        {
+          "evidence_id": "ev_b7785a0c",
+          "log_position": 90,
+          "source_file": "binlog.000018",
+          "tool_name": "mysqlbinlog",
+          "tool_run_id": "run_3f21c8de"
+        }
+      ],
+      "session_key": "cb4d5c8e-9325-11f1-9975-00155dc1157f:1452",
+      "source_file": "binlog.000018",
+      "start_position": 90,
+      "status": "committed",
+      "synthesised": false,
+      "thread_id": 13,
+      "xid": null
+    }
+  ],
+  "ungrouped_events": [],
+  "unsupported_tables": []
+}

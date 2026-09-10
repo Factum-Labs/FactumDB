@@ -3,7 +3,6 @@ import { Badge } from '../components/Badge'
 import { CorrelationGraph } from '../components/CorrelationGraph'
 import { correlationEdges, reconRows, records, transactions } from '../data/caseData'
 import { RESULT_TONE, type ReconResult } from '../data/types'
-import { TONES } from '../lib/tokens'
 import { buildFlaggedGroups, decorateRows } from '../lib/correlation'
 import { useApp } from '../store'
 
@@ -40,19 +39,15 @@ export function ReconciliationScreen() {
     <div className="flex max-w-[1180px] flex-col gap-3">
       {/* Summary cards */}
       <div className="grid grid-cols-6 gap-2">
+        {/* Uniform chrome: the result's own colour is carried by the Badge in the
+            table below, so tinting the counts here only adds a second, competing
+            legend. A zero count is dimmed instead. */}
         {SUMMARY_ORDER.map((result) => {
           const n = counts.get(result) ?? 0
-          const tone = TONES[RESULT_TONE[result]]
-          const active = n > 0
           return (
-            <div
-              key={result}
-              className="rounded-md bg-panel px-3 py-2.5"
-              style={{ border: `1px solid ${active ? tone.border : '#e2e1dd'}` }}
-            >
+            <div key={result} className="rounded-md border border-line bg-panel px-3 py-2.5">
               <div
-                className="font-mono text-[19px] font-semibold"
-                style={{ color: active ? tone.color : '#1c1b19' }}
+                className={`font-mono text-[19px] font-semibold ${n > 0 ? 'text-ink' : 'text-dimmer'}`}
               >
                 {n}
               </div>
@@ -99,7 +94,7 @@ export function ReconciliationScreen() {
                     <button
                       onClick={() => toggleGroup(anchorOf.id)}
                       aria-expanded={isOpen}
-                      className="inline-flex h-[22px] items-center gap-1.5 rounded border border-line-input bg-panel px-2 text-[11px] text-ink-3 hover:bg-[#f3f2ef]"
+                      className="inline-flex h-[22px] items-center gap-1.5 rounded border border-line-input bg-panel px-2 text-[11px] text-ink-3 hover:bg-page"
                     >
                       <span
                         className="inline-block text-[9px] text-dimmer transition-transform"

@@ -11,7 +11,7 @@ export function CasesScreen() {
       <div className="mb-3.5 flex gap-2.5">
         <button
           onClick={() => go('intake')}
-          className="h-[29px] rounded bg-ink px-3 text-[12px] font-medium text-white"
+          className="h-[29px] rounded bg-accent px-3 text-[12px] font-medium text-white hover:bg-accent-dark"
         >
           New case
         </button>

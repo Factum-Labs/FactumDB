@@ -12,8 +12,6 @@ export type Screen =
   | 'report'
   | 'settings'
 
-export type ShellMode = 'sidebar' | 'rail' | 'topbar'
-
 export type TxStatus = 'Committed' | 'Rolled back' | 'Incomplete'
 export type EventType = 'INSERT' | 'UPDATE' | 'DELETE'
 

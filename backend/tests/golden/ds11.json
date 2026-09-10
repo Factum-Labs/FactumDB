@@ -1,0 +1,194 @@
+{
+  "coverage": {
+    "findings": [],
+    "gaps": [],
+    "inventory": {
+      "index_file": "mysql-bin.index",
+      "listed_files": [
+        "/var/log/mysql/binlog.000018"
+      ],
+      "missing_files": [],
+      "present_files": [
+        "/var/log/mysql/binlog.000018"
+      ]
+    },
+    "observed_files": [
+      "binlog.000018"
+    ]
+  },
+  "edges": [],
+  "histories": [],
+  "id": "ds11",
+  "reconciliation": [
+    {
+      "fields": [
+        {
+          "comparable": false,
+          "field": "record presence",
+          "findings": [
+            {
+              "context": {
+                "record": "finance.audit_log",
+                "table": "finance.audit_log"
+              },
+              "provenance": [],
+              "rule_id": "R-CORR-020",
+              "severity": "warning",
+              "subject": {
+                "id": "finance.audit_log",
+                "kind": "table"
+              }
+            }
+          ],
+          "log": {
+            "__unobserved__": true
+          },
+          "log_display": "not observed",
+          "phys": {
+            "__unobserved__": true
+          },
+          "phys_display": "not observed",
+          "provenance": {
+            "log": [],
+            "physical": null,
+            "transaction_id": null
+          },
+          "record_id": "audit_log:*",
+          "result": "Unsupported",
+          "rule_id": "R-CORR-020"
+        }
+      ],
+      "findings": [
+        {
+          "context": {
+            "count": "1",
+            "label": "record presence: Unsupported",
+            "record": "audit_log:*",
+            "result": "Unsupported",
+            "total": "1"
+          },
+          "provenance": [],
+          "rule_id": "R-ROLL-006",
+          "severity": "notice",
+          "subject": {
+            "id": "audit_log:*",
+            "kind": "record"
+          }
+        }
+      ],
+      "record": {
+        "database": "finance",
+        "id": "audit_log:*",
+        "key": "(no correlatable identity)",
+        "key_columns": [],
+        "key_values": [],
+        "label": "finance.audit_log · whole table",
+        "pk": "*",
+        "table": "finance.audit_log"
+      },
+      "rollup": "Unsupported",
+      "rollup_label": "record presence: Unsupported",
+      "rollup_rule_id": "R-ROLL-006",
+      "triggers": []
+    }
+  ],
+  "records": [],
+  "rules_cited": [
+    "R-CORR-020",
+    "R-GRP-001",
+    "R-ROLL-006"
+  ],
+  "title": "Table with no primary key",
+  "transactions": [
+    {
+      "commit_position": 9999,
+      "commit_timestamp": "2026-08-15T19:06:25Z",
+      "end_position": 9999,
+      "events": [
+        {
+          "event": {
+            "after": {
+              "message": "x"
+            },
+            "before": null,
+            "database": "finance",
+            "event_type": "INSERT",
+            "gtid": null,
+            "log_position": 100,
+            "provenance": {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": 100,
+              "source_file": "binlog.000018",
+              "tool_name": "mysqlbinlog",
+              "tool_run_id": "run_3f21c8de"
+            },
+            "raw_timestamp": "260816  0:36:25",
+            "source_file": "binlog.000018",
+            "table": "audit_log",
+            "thread_id": 13,
+            "timestamp": "2026-08-15T19:06:25Z"
+          },
+          "order": 0,
+          "provenance": {
+            "evidence_id": "ev_b7785a0c",
+            "log_position": 100,
+            "source_file": "binlog.000018",
+            "tool_name": "mysqlbinlog",
+            "tool_run_id": "run_3f21c8de"
+          }
+        }
+      ],
+      "findings": [
+        {
+          "context": {
+            "gtid": "cb4d5c8e-9325-11f1-9975-00155dc1157f:1",
+            "transaction": "TX-1",
+            "xid": ""
+          },
+          "provenance": [
+            {
+              "evidence_id": "ev_b7785a0c",
+              "log_position": 90,
+              "source_file": "binlog.000018",
+              "tool_name": "mysqlbinlog",
+              "tool_run_id": "run_3f21c8de"
+            }
+          ],
+          "rule_id": "R-GRP-001",
+          "severity": "info",
+          "subject": {
+            "id": "TX-1",
+            "kind": "transaction"
+          }
+        }
+      ],
+      "gtid": "cb4d5c8e-9325-11f1-9975-00155dc1157f:1",
+      "id": "TX-1",
+      "incompleteness_reason": null,
+      "provenance": [
+        {
+          "evidence_id": "ev_b7785a0c",
+          "log_position": 90,
+          "source_file": "binlog.000018",
+          "tool_name": "mysqlbinlog",
+          "tool_run_id": "run_3f21c8de"
+        }
+      ],
+      "session_key": "cb4d5c8e-9325-11f1-9975-00155dc1157f:1",
+      "source_file": "binlog.000018",
+      "start_position": 90,
+      "status": "committed",
+      "synthesised": false,
+      "thread_id": 13,
+      "xid": null
+    }
+  ],
+  "ungrouped_events": [],
+  "unsupported_tables": [
+    {
+      "database": "finance",
+      "rule_id": "R-CORR-020",
+      "table": "audit_log"
+    }
+  ]
+}
