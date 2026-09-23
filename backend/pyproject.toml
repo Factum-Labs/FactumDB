@@ -26,7 +26,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["core", "sidecar"]
+packages = ["core", "sidecar", "adapters"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -2,13 +2,16 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from core.domain.models.canonical import BinlogEvent, PhysicalRecord, Schema, TransactionMarker
+from core.domain.models.canonical import (
+    AnalysisWarning, BinlogEvent, PhysicalRecord, Schema, TransactionMarker,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class DecodedBinlog:
     events: tuple[BinlogEvent, ...]
     markers: tuple[TransactionMarker, ...]
+    warnings: tuple[AnalysisWarning, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -34,8 +34,8 @@ React action
     -> response returned through Tauri to React
 ```
 
-The future pipeline orchestrator calls these use cases in stage order. It will own stage
-status, safe retry, cancellation between stages, and progress publication; those concerns are
+The pipeline orchestrator calls configured handlers for these use cases in stage order. It owns stage
+status, retry eligibility, cancellation between stages, and progress publication; those concerns are
 intentionally not duplicated inside the individual use cases.
 
 ## Integration rules
@@ -104,7 +104,68 @@ can be registered in its composition root after the SQLite repositories are supp
 
 ## Deferred work
 
-This layer does not yet provide concrete SQLite, external-tool, or Tauri adapters. The sidecar
-transport exists, but production application commands have not been registered yet.
-Concrete stage handlers still need to assemble the evidence-specific use cases once those
-adapters are available. Report generation is a separate increment.
+Concrete SQLite and Tauri integration remain outstanding. The sidecar transport exists,
+but production application commands have not been registered yet. The generic stage handlers
+and extraction bridges exist; production composition still needs to assemble the use cases
+with repositories and a case-scoped schema lookup. Report generation is a separate increment.
+
+## External-tool extraction integration
+
+`adapters.tools` exports the following implementations for injection into extraction use cases:
+
+| Application port | Implementation | Behavior |
+|---|---|---|
+| `PageValidator` | `InnochecksumAdapter` | Already matches `validate(path)`; no wrapper needed |
+| `SchemaExtractor` | `Ibd2SdiSchemaExtractor` | Wraps `extract_schema(path)` in a schema tuple |
+| `PhysicalRowExtractor` | `Ibd2SqlPhysicalRowExtractor` | Converts rows to a tuple; optionally appends deleted rows |
+| `BinlogDecoder` | `MysqlBinlogDecoder` | Binds schema lookup and returns events, markers and warnings |
+
+Example composition (the evidence/results repositories, schema repository and clock are
+supplied by the caller):
+
+```python
+from adapters.tools import (
+    Ibd2SdiAdapter, Ibd2SdiSchemaExtractor,
+    Ibd2SqlAdapter, Ibd2SqlPhysicalRowExtractor,
+    InnochecksumAdapter, MysqlBinlogAdapter, MysqlBinlogDecoder,
+)
+from core.application.use_cases.extraction import (
+    RunPageValidationUseCase, ExtractSchemaUseCase,
+    ExtractPhysicalRowsUseCase, DecodeBinaryLogsUseCase,
+)
+
+validate = RunPageValidationUseCase(evidence, InnochecksumAdapter(), results, clock)
+schema = ExtractSchemaUseCase(
+    evidence, Ibd2SdiSchemaExtractor(Ibd2SdiAdapter()), results, clock,
+)
+rows = ExtractPhysicalRowsUseCase(
+    evidence,
+    Ibd2SqlPhysicalRowExtractor(Ibd2SqlAdapter("/tools/ibd2sql/main.py")),
+    results, clock,
+)
+decode = DecodeBinaryLogsUseCase(
+    evidence,
+    MysqlBinlogDecoder(MysqlBinlogAdapter(), case_schemas.schema_for),
+    results, clock,
+)
+```
+
+The schema lookup must be bound to the same case as the use case invocation. Build a
+separate decoder for each case; neither the decoder port nor the utility receives a case ID.
+Populate schemas before decoding. A missing schema produces a retained `SCHEMA_NOT_FOUND`
+warning, not invented column names. `DecodedBinlog.warnings` defaults to an empty tuple for
+existing callers. `ExtractionRepository.save_decoded_binlog` must save warnings together
+with events and markers, including when decoding yields no events. Warning counts are not
+included in the operation receipt's event/marker count.
+
+Row extraction defaults to live rows. Set `include_deleted=True` to also run the utility
+with `--delete only` and retain `is_deleted` on those records. Failure of either invocation
+propagates before the use case saves any row bundle. Other tool exceptions also propagate;
+the existing innochecksum adapter's damaged/unknown classifications are preserved.
+
+Use cases enforce evidence type and verified working-copy prerequisites. Wrappers do not
+rehash evidence, implement normalization, or add raw-output/tool-run auditing to utility
+invocations. Those remain separate integration work. Tool parsing implementations are
+unchanged. Tests run the actual parsers with mocked subprocess results; real utility
+execution against evidence on Linux remains to be validated. The backend wheel now includes
+the `adapters` package so these implementations are included in installations.
