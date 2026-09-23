@@ -39,6 +39,7 @@ class StageAttempt:
     item_count: int = 0
     error_code: str | None = None
     error_message: str | None = None
+    skip_reason: str | None = None
 
     def __post_init__(self) -> None:
         if self.number < 1:
@@ -49,6 +50,13 @@ class StageAttempt:
             raise ValueError("finished_at must be timezone-aware")
         if self.item_count < 0:
             raise ValueError("item_count must not be negative")
+        if self.status is StageStatus.SKIPPED:
+            if not self.skip_reason or not self.skip_reason.strip():
+                raise ValueError("skipped attempts require a reason")
+            if self.item_count != 0:
+                raise ValueError("skipped attempts cannot contain processed items")
+        elif self.skip_reason is not None:
+            raise ValueError("only skipped attempts may contain a skip reason")
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,10 +119,16 @@ class PipelineProgress:
 class StageOutcome:
     item_count: int = 0
     message: str = ""
+    skip_reason: str | None = None
 
     def __post_init__(self) -> None:
         if self.item_count < 0:
             raise ValueError("item_count must not be negative")
+        if self.skip_reason is not None:
+            if not self.skip_reason.strip():
+                raise ValueError("skip reason must not be empty")
+            if self.item_count != 0:
+                raise ValueError("skipped outcomes cannot contain processed items")
 
 
 @dataclass(frozen=True, slots=True)

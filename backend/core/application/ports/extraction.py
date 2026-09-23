@@ -40,6 +40,13 @@ class ExtractionRepository(Protocol):
 
     def save_decoded_binlog(
         self, case_id: str, evidence_id: str, decoded: DecodedBinlog
-    ) -> None: ...
+    ) -> None:
+        """Persist events, markers AND warnings with the case/evidence association.
+
+        Warnings describe skipped or unsupported input and must not be discarded
+        when a decode produces no events. Concrete persistence is responsible for
+        saving the complete bundle atomically.
+        """
+        ...
 
     def save_normalized(self, case_id: str, normalized: NormalizedEvidence) -> None: ...
