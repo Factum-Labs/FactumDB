@@ -105,9 +105,77 @@ can be registered in its composition root after the SQLite repositories are supp
 ## Deferred work
 
 Concrete SQLite and Tauri integration remain outstanding. The sidecar transport exists,
-but production application commands have not been registered yet. The generic stage handlers
-and extraction bridges exist; production composition still needs to assemble the use cases
-with repositories and a case-scoped schema lookup. Report generation is a separate increment.
+but production application commands have not been registered yet. The composition factory
+assembles use cases and handlers; a production caller still needs to supply repositories,
+normalization and case-scoped schema access. Report generation is a separate increment.
+
+## Pipeline composition
+
+`sidecar.composition.build_analysis_pipeline` assembles all ten stages in the
+`ANALYSIS_STAGES` order. It lives outside the application core so infrastructure
+imports do not enter the domain or application layers. Construction does not execute
+tools, create working copies, query schemas, or start a pipeline.
+
+The required dependencies are explicit. No in-memory persistence or fake normalizer
+is selected automatically. Example wiring, with repository and normalization
+implementations supplied by the caller:
+
+```python
+from sidecar.composition import (
+    PipelineDependencies, build_analysis_pipeline, build_tool_adapters,
+)
+
+dependencies = PipelineDependencies(
+    cases=cases, evidence=evidence, copies=copies, hasher=hasher,
+    extraction=extraction_results, normalizer=normalizer, domain=domain_results,
+    pipelines=pipeline_runs, progress=progress_publisher, ids=ids, clock=clock,
+)
+adapters = build_tool_adapters(
+    schemas_for_case,  # case_id -> case-bound SchemaCatalog
+    ibd2sql_path="/tools/ibd2sql/main.py",
+    include_deleted=False,
+)
+pipeline = build_analysis_pipeline(dependencies, adapters)
+run = pipeline.start(case_id)  # Case creation and registration precede this call.
+result = pipeline.run_all(run.id)
+```
+
+`build_tool_adapters` accepts executable paths for all four tools and the Python
+interpreter used by ibd2sql. Tests or alternative implementations can instead pass
+an `ExtractionAdapters` bundle implementing the application ports.
+
+The stage wiring is:
+
+1. Verify every registered evidence file using the working-copy and hashing ports.
+2. Validate pages for `.ibd` files.
+3. Extract schemas for `.ibd` files.
+4. Extract physical rows for `.ibd` files.
+5. Resolve a decoder for the current case and decode only binlog files.
+6. Normalize and save the extracted bundle.
+7. Group transactions using current domain inputs.
+8. Correlate records with the persisted grouping result.
+9. Reconstruct histories using persisted grouping and correlation results.
+10. Reconcile records using persisted histories, correlations and coverage.
+
+The extraction store, normalizer and domain repository must share the same case
+data: normalized writes must be visible to `DomainRepository.inputs_for`. Schema
+lookup is a separate dependency because decoding happens before normalization;
+it must be able to read schemas immediately after extraction. Decoder creation
+is deferred until that case reaches decoding, preventing a catalog captured for
+another case from being reused. The factory callback remains responsible for
+returning a catalog restricted to its case ID.
+
+Progress counts reflect processed evidence, extracted items, transactions,
+correlated records, reconstructed histories and reconciliation rows. Existing
+stage failure, retry and cancellation behavior is retained. Applicability/skip
+policy, interrupted-run recovery, idempotency guarantees and tool-run audit wiring
+remain separate work. This composition does not register sidecar commands or
+create concrete SQLite repositories.
+
+Composition tests execute the full sequence with controlled extraction ports,
+in-memory persistence, and real domain services. Additional tests cover deferred
+case-specific schema lookup and stopping on verification, extraction or
+normalization failures. They do not certify real tool execution or SQLite behavior.
 
 ## External-tool extraction integration
 
