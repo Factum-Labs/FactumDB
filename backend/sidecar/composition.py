@@ -39,6 +39,10 @@ from core.domain.models.history import ReconstructionResult
 from core.domain.models.reconciliation import ReconciliationResult
 from core.domain.models.transactions import GroupingResult
 from core.domain.ports import SchemaCatalog
+from core.application.ports import CaseWorkspace, EvidenceInspector
+from core.application.use_cases.cases import CreateCaseUseCase
+from core.application.use_cases.evidence import RegisterEvidenceUseCase
+from sidecar.commands import ApplicationServices
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -63,6 +67,25 @@ class ExtractionAdapters:
     row_extractor: PhysicalRowExtractor
     # Resolve the decoder at execution time, after schema extraction has finished.
     decoder_for_case: Callable[[str], BinlogDecoder]
+
+
+def build_application_services(
+    dependencies: PipelineDependencies,
+    adapters: ExtractionAdapters,
+    *,
+    workspaces: CaseWorkspace,
+    inspector: EvidenceInspector,
+) -> ApplicationServices:
+    """Share the same repositories and integrity dependencies across commands."""
+    d = dependencies
+    return ApplicationServices(
+        create_case=CreateCaseUseCase(d.cases, workspaces, d.ids, d.clock),
+        register_evidence=RegisterEvidenceUseCase(
+            d.cases, d.evidence, inspector, d.hasher, d.ids, d.clock,
+        ),
+        verify_evidence=VerifyEvidenceUseCase(d.cases, d.evidence, d.copies, d.hasher),
+        pipeline=build_analysis_pipeline(d, adapters),
+    )
 
 
 def build_tool_adapters(

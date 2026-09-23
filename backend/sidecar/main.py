@@ -3,9 +3,10 @@ from __future__ import annotations
 import sys
 
 from sidecar.protocol import CommandRouter, serve
+from sidecar.commands import ApplicationServices, register_application_commands
 
 
-def build_router() -> CommandRouter:
+def build_router(services: ApplicationServices | None = None) -> CommandRouter:
     router = CommandRouter()
     router.register(
         "health",
@@ -13,15 +14,15 @@ def build_router() -> CommandRouter:
             "name": "FactumDB",
             "status": "ready",
             "protocol": 1,
+            "application_configured": services is not None,
         },
     )
-    # Production composition will register application use cases here after the
-    # SQLite repositories and external-tool adapters have landed.
+    register_application_commands(router, services)
     return router
 
 
-def main() -> None:
-    serve(sys.stdin, sys.stdout, build_router())
+def main(services: ApplicationServices | None = None) -> None:
+    serve(sys.stdin, sys.stdout, build_router(services))
 
 
 if __name__ == "__main__":
