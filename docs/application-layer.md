@@ -40,6 +40,41 @@ intentionally not duplicated inside the individual use cases.
 
 ## Integration rules
 
+### Shared packages and model contracts
+
+`core.application.ports` is a package; the former `ports.py` was removed. Its
+`common`, `filesystem`, `extraction`, `analysis`, and `workflow_repositories`
+modules hold the workflow contracts. The package re-exports those contracts and
+the existing granular `*RepositoryPort` interfaces. Existing package-level imports
+continue to work. Workflow protocols and granular storage interfaces still have
+different method signatures; a SQLite implementation needs explicit wiring to meet
+the workflow requirements, including case-scoped evidence access.
+
+`core.application.models` is also a package. Requests and responses live in
+`create_case_models`, `evidence_models`, `extraction_models`, and `audit_models`.
+`Case` lives only in `core.domain.models.case`; `EvidenceFile`, `ToolRun`, their
+status enums and `RawOutputReference` live only in `core.domain.models.evidence`.
+The application package re-exports these exact domain types, not copies.
+
+The consolidated domain models retain the application lifecycle: timezone-aware
+datetime values, required case workspace, initially unverified evidence, immutable
+verification transitions, executable hash, arguments, and separate stdout/stderr
+references. Evidence also retains `acquisition_method`. Storage-facing names such
+as `case_id`, `evidence_id`, `sha256_original`, and `tool_run_id` are read-only
+properties over the same data. `command` is a display string, not a shell command
+to execute; legacy raw-output properties refer to stdout.
+
+Constructor migration: instantiate domain models using the workflow fields (`id`,
+`name`, `source_path`, `kind`, etc.), and convert database timestamp strings to
+aware datetimes in persistence adapters. `Case.create` now requires a workspace
+path, case ID and timestamp supplied by the application, keeping the domain free
+of UUID generation and wall-clock reads. `CreateCaseRequest` accepts `case_name`
+and `examiner` (`name` is a read
+alias); `CreateCaseResponse` takes one canonical `Case` and exposes the flat
+case ID, name, examiner and ISO timestamp through properties. Dataclass serialization
+uses the stored fields, so transport adapters must explicitly select their wire
+format. No concrete SQLite implementation was changed by this consolidation.
+
 - Tauri and the sidecar import application use cases, not domain services directly.
 - SQLite implements the repository ports in `core.application.ports`.
 - Utility adapters implement `PageValidator`, `SchemaExtractor`, `PhysicalRowExtractor`, and
