@@ -51,7 +51,8 @@ CREATE TABLE evidence_files (
     sha256_original   TEXT NOT NULL,
     working_copy_path TEXT NOT NULL,
     sha256_working    TEXT NOT NULL,
-    registered_at     TEXT NOT NULL
+    registered_at     TEXT NOT NULL,
+    acquisition_method TEXT NOT NULL DEFAULT ''
 ) STRICT;
 
 CREATE INDEX idx_evidence_case ON evidence_files(case_id);
@@ -60,6 +61,8 @@ CREATE INDEX idx_evidence_case ON evidence_files(case_id);
 We store both hashes because the point of a working copy is that you prove it is identical to the original before you run anything on it. If the two hashes ever differ, that evidence is not usable and the tool has to say so.
 
 `binlog_index` is in the type list because of `mysql-bin.index`. It is not a log itself but it is evidence, since it is how we find out a log file is missing.
+
+`acquisition_method` records how the file was taken, for example "FLUSH TABLES FOR EXPORT + cp". That matters because it is what shows the page image is internally consistent rather than copied while the server was mid-write, so the method is part of the evidence rather than a footnote.
 
 ---
 

@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS evidence_files (
     sha256_original   TEXT NOT NULL,
     working_copy_path TEXT NOT NULL,
     sha256_working    TEXT NOT NULL,
-    registered_at     TEXT NOT NULL
+    registered_at     TEXT NOT NULL,
+    acquisition_method TEXT NOT NULL DEFAULT ''
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_evidence_case ON evidence_files(case_id);

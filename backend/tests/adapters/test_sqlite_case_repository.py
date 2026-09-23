@@ -193,6 +193,9 @@ def test_foreign_keys_are_enforced(connection: sqlite3.Connection) -> None:
         connection.execute(
             """
             INSERT INTO evidence_files
+                (evidence_id, case_id, evidence_type, file_name, original_path,
+                 size_bytes, sha256_original, working_copy_path, sha256_working,
+                 registered_at)
             VALUES ('ev-1', 'no-such-case', 'ibd', 'a.ibd', '/a.ibd',
                     1, 'hash', '/w/a.ibd', 'hash', '2026-09-23T00:00:00Z')
             """
