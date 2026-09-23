@@ -27,14 +27,17 @@ WAL mode just gives better behaviour when something reads while something else w
 
 ```sql
 CREATE TABLE cases (
-    case_id    TEXT PRIMARY KEY,
-    case_name  TEXT NOT NULL,
-    examiner   TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    case_id        TEXT PRIMARY KEY,
+    case_name      TEXT NOT NULL,
+    examiner       TEXT NOT NULL,
+    workspace_path TEXT NOT NULL,
+    created_at     TEXT NOT NULL
 ) STRICT;
 ```
 
-The fields match Nisal's `Case` model in `backend/core/domain/models/case.py` exactly, so the repository can map straight across without renaming anything.
+The fields follow Nisal's `Case` model in `backend/core/domain/models/case.py`. The column names stay `case_id` and `case_name` rather than the model's `id` and `name`, because a bare `id` is ambiguous once several tables are joined. The mapping happens in the repository, which is what that layer is for.
+
+`workspace_path` is the directory the case owns. Working copies and preserved raw output live under it, so the path belongs with the case rather than being recomputed.
 
 ---
 
@@ -42,23 +45,28 @@ The fields match Nisal's `Case` model in `backend/core/domain/models/case.py` ex
 
 ```sql
 CREATE TABLE evidence_files (
-    evidence_id       TEXT PRIMARY KEY,
-    case_id           TEXT NOT NULL REFERENCES cases(case_id),
-    evidence_type     TEXT NOT NULL CHECK (evidence_type IN ('ibd', 'binlog', 'binlog_index')),
-    file_name         TEXT NOT NULL,
-    original_path     TEXT NOT NULL,
-    size_bytes        INTEGER NOT NULL,
-    sha256_original   TEXT NOT NULL,
-    working_copy_path TEXT NOT NULL,
-    sha256_working    TEXT NOT NULL,
-    registered_at     TEXT NOT NULL,
-    acquisition_method TEXT NOT NULL DEFAULT ''
+    evidence_id         TEXT PRIMARY KEY,
+    case_id             TEXT NOT NULL REFERENCES cases(case_id),
+    kind                TEXT NOT NULL CHECK (kind IN ('ibd', 'binlog', 'binlog_index')),
+    filename            TEXT NOT NULL,
+    source_path         TEXT NOT NULL,
+    size_bytes          INTEGER NOT NULL,
+    source_sha256       TEXT NOT NULL,
+    verification_status TEXT NOT NULL CHECK (verification_status IN
+                            ('registered', 'verified', 'hash_mismatch')),
+    working_copy_path   TEXT,
+    working_copy_sha256 TEXT,
+    acquisition_method  TEXT NOT NULL DEFAULT '',
+    registered_at       TEXT NOT NULL
 ) STRICT;
 
 CREATE INDEX idx_evidence_case ON evidence_files(case_id);
+CREATE INDEX idx_evidence_source ON evidence_files(case_id, source_path);
 ```
 
-We store both hashes because the point of a working copy is that you prove it is identical to the original before you run anything on it. If the two hashes ever differ, that evidence is not usable and the tool has to say so.
+Both hashes are stored because the point of a working copy is proving it is identical to the original before anything is run against it. If `source_sha256` and `working_copy_sha256` ever differ, the copy is not a faithful reproduction and nothing extracted from it can be relied on.
+
+The working copy columns are nullable because of when the row is written. A file is registered and hashed first, and only then copied, so at registration there is no working copy to record. A null is the honest answer there, and `verification_status` says which stage the file has reached - `registered`, `verified`, or `hash_mismatch`.
 
 `binlog_index` is in the type list because of `mysql-bin.index`. It is not a log itself but it is evidence, since it is how we find out a log file is missing.
 
@@ -71,15 +79,24 @@ We store both hashes because the point of a working copy is that you prove it is
 ```sql
 CREATE TABLE tool_runs (
     tool_run_id       TEXT PRIMARY KEY,
+    case_id           TEXT NOT NULL REFERENCES cases(case_id),
     evidence_id       TEXT NOT NULL REFERENCES evidence_files(evidence_id),
-    tool_name         TEXT NOT NULL CHECK (tool_name IN ('ibd2sdi', 'innochecksum', 'ibd2sql', 'mysqlbinlog')),
-    tool_version      TEXT,
-    command           TEXT NOT NULL,
+    tool_name         TEXT NOT NULL CHECK (tool_name IN
+                          ('ibd2sdi', 'innochecksum', 'ibd2sql', 'mysqlbinlog')),
+    tool_version      TEXT NOT NULL,
+    executable_path   TEXT NOT NULL,
+    executable_sha256 TEXT NOT NULL,
+    arguments_json    TEXT NOT NULL CHECK (json_valid(arguments_json)),
+    status            TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'failed')),
     started_at        TEXT NOT NULL,
     finished_at       TEXT,
     exit_code         INTEGER,
-    raw_output_path   TEXT,
-    raw_output_sha256 TEXT
+    stdout_path       TEXT,
+    stdout_sha256     TEXT,
+    stdout_size_bytes INTEGER,
+    stderr_path       TEXT,
+    stderr_sha256     TEXT,
+    stderr_size_bytes INTEGER
 ) STRICT;
 
 CREATE INDEX idx_tool_runs_evidence ON tool_runs(evidence_id);
@@ -87,7 +104,13 @@ CREATE INDEX idx_tool_runs_evidence ON tool_runs(evidence_id);
 
 This is the most important table in the schema. Almost every other table has a `tool_run_id`, so any value we show in a report can be traced back to the exact command that produced it. That is the whole "how do you know that?" requirement.
 
-`tool_version` matters because these tools change their output format between versions. Three of them have a `--version` flag. `ibd2sql` does not have one at all, so for that one `git describe --tags` inside its clone is used, which gives something like `v2.3-3-g62b7db5`. That is actually better than a version number because it points at one exact commit.
+`tool_version` matters because these tools change their output format between versions. Three of them have a `--version` flag. `ibd2sql` does not have one at all, so for that one `git describe --tags` inside its clone is used, which gives something like `v2.3-3-g62b7db5`. That is better than a version number because it points at one exact commit.
+
+`executable_path` and `executable_sha256` identify the binary itself. A version string can be shared by several builds; a hash of the file cannot, so the claim is about one specific executable rather than a label.
+
+`arguments_json` holds the arguments as a JSON array instead of one command string. Re-joining arguments into a line loses the boundary between them as soon as a path contains a space, and then it is no longer possible to say exactly what was run.
+
+`stdout` and `stderr` are recorded separately, each with its own path, hash and size. Both are needed: `innochecksum` reports a damaged page on stderr, so keeping only stdout would record an empty success for a file the tool had just called invalid.
 
 The index is on `evidence_id` because "show me every tool run for this file" is the query the UI will use most.
 

@@ -1,105 +1,77 @@
-"""SQLite implementation of CaseRepositoryPort.
+"""SQLite implementation of the case repository.
 
-This is the adapter side of the port Nisal defined in
-core/application/ports/case_repository_port.py. The application layer only
-ever sees that port, so it never learns that cases are stored in SQLite - it
-could be swapped for PostgreSQL by writing a different class here and
-changing nothing else.
+Satisfies two contracts on purpose. CaseRepositoryPort (an ABC) is the one
+this class inherits from; CaseRepository in
+core/application/ports/workflow_repositories.py is a Protocol that the
+application's use cases depend on, and this class satisfies it structurally
+by having get() as well as find_by_id().
 
-Two things this class is responsible for:
+The two were written separately and have not been reconciled yet - see the
+note in docs/sqlite-schema.md. Implementing both keeps the use cases working
+while that is agreed.
 
-  Keeping SQL in here. Nothing outside this file writes a query, so the rest
-  of the system has no idea what the table is called or what columns it has.
-
-  Translating between the domain model and a database row. The Case model
-  has created_at as a real datetime, but SQLite has no date type at all, so
-  it is stored as ISO-8601 text and turned back into a datetime on the way
-  out. Callers never see the text form.
+Column names stay case_id and case_name rather than following the model's id
+and name, because a bare "id" is ambiguous once several tables are joined.
+The mapping happens here, which is what this layer is for.
 """
 
-from datetime import datetime, timezone
+from typing import Optional
 
+from adapters.persistence._timestamps import from_text, to_text
 from core.application.ports.case_repository_port import CaseRepositoryPort
 from core.domain.models.case import Case
+
+_COLUMNS = "case_id, case_name, examiner, workspace_path, created_at"
 
 
 class SqliteCaseRepository(CaseRepositoryPort):
     """Stores cases in the SQLite case database."""
 
     def __init__(self, connection):
-        """Takes an open connection rather than a file path.
-
-        This matters: every repository in a case shares one connection, so
-        they can be committed together, and a test can pass a ':memory:'
-        connection and get a real database with no file on disk.
-        """
+        """Takes an open connection rather than a path, so every repository in
+        a case shares one, and a test can pass ':memory:'."""
         self._connection = connection
 
     def save(self, case: Case) -> None:
         """Write a case, replacing it if the id is already there.
 
         Replacing rather than failing means re-running the pipeline on the
-        same case does not crash. The case row is only metadata - the name
-        and the examiner - so overwriting it does not touch any evidence.
+        same case does not crash. The row is case metadata, not evidence.
         """
         self._connection.execute(
-            """
-            INSERT OR REPLACE INTO cases (case_id, case_name, examiner, created_at)
-            VALUES (?, ?, ?, ?)
-            """,
+            f"INSERT OR REPLACE INTO cases ({_COLUMNS}) VALUES (?, ?, ?, ?, ?)",
             (
-                case.case_id,
-                case.case_name,
+                case.id,
+                case.name,
                 case.examiner,
-                _timestamp_to_text(case.created_at),
+                case.workspace_path,
+                to_text(case.created_at),
             ),
         )
         self._connection.commit()
 
-    def find_by_id(self, case_id: str):
+    def find_by_id(self, case_id: str) -> Optional[Case]:
         """Return the case with this id, or None if there is not one.
 
         None rather than an exception, because "we do not have that case" is
-        a normal answer to a lookup, not an error.
+        a normal answer to a lookup.
         """
         row = self._connection.execute(
-            """
-            SELECT case_id, case_name, examiner, created_at
-            FROM cases
-            WHERE case_id = ?
-            """,
+            f"SELECT {_COLUMNS} FROM cases WHERE case_id = ?",
             (case_id,),
         ).fetchone()
+        return _row_to_case(row) if row is not None else None
 
-        if row is None:
-            return None
-        return _row_to_case(row)
+    def get(self, case_id: str) -> Optional[Case]:
+        """Same lookup under the name the application's use cases call."""
+        return self.find_by_id(case_id)
 
 
 def _row_to_case(row) -> Case:
-    """Turn one database row back into the domain model."""
     return Case(
-        case_id=row["case_id"],
-        case_name=row["case_name"],
-        examiner=row["examiner"],
-        created_at=_text_to_timestamp(row["created_at"]),
+        row["case_id"],
+        row["case_name"],
+        row["examiner"],
+        from_text(row["created_at"]),
+        row["workspace_path"],
     )
-
-
-def _timestamp_to_text(value: datetime) -> str:
-    """datetime -> the text we store, e.g. 2026-09-23T10:15:00Z.
-
-    Always UTC. A datetime with no timezone on it is treated as UTC rather
-    than as local time, because guessing a local timezone here would put the
-    wrong time in the database with nothing to show it had happened.
-    """
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _text_to_timestamp(text: str) -> datetime:
-    """The stored text -> a timezone-aware datetime in UTC."""
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    return datetime.fromisoformat(text)

@@ -4,37 +4,50 @@
 -- one the code actually runs.
 
 CREATE TABLE IF NOT EXISTS cases (
-    case_id    TEXT PRIMARY KEY,
-    case_name  TEXT NOT NULL,
-    examiner   TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    case_id        TEXT PRIMARY KEY,
+    case_name      TEXT NOT NULL,
+    examiner       TEXT NOT NULL,
+    workspace_path TEXT NOT NULL,
+    created_at     TEXT NOT NULL
 ) STRICT;
 CREATE TABLE IF NOT EXISTS evidence_files (
-    evidence_id       TEXT PRIMARY KEY,
-    case_id           TEXT NOT NULL REFERENCES cases(case_id),
-    evidence_type     TEXT NOT NULL CHECK (evidence_type IN ('ibd', 'binlog', 'binlog_index')),
-    file_name         TEXT NOT NULL,
-    original_path     TEXT NOT NULL,
-    size_bytes        INTEGER NOT NULL,
-    sha256_original   TEXT NOT NULL,
-    working_copy_path TEXT NOT NULL,
-    sha256_working    TEXT NOT NULL,
-    registered_at     TEXT NOT NULL,
-    acquisition_method TEXT NOT NULL DEFAULT ''
+    evidence_id         TEXT PRIMARY KEY,
+    case_id             TEXT NOT NULL REFERENCES cases(case_id),
+    kind                TEXT NOT NULL CHECK (kind IN ('ibd', 'binlog', 'binlog_index')),
+    filename            TEXT NOT NULL,
+    source_path         TEXT NOT NULL,
+    size_bytes          INTEGER NOT NULL,
+    source_sha256       TEXT NOT NULL,
+    verification_status TEXT NOT NULL CHECK (verification_status IN
+                            ('registered', 'verified', 'hash_mismatch')),
+    working_copy_path   TEXT,
+    working_copy_sha256 TEXT,
+    acquisition_method  TEXT NOT NULL DEFAULT '',
+    registered_at       TEXT NOT NULL
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_evidence_case ON evidence_files(case_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_source ON evidence_files(case_id, source_path);
 CREATE TABLE IF NOT EXISTS tool_runs (
     tool_run_id       TEXT PRIMARY KEY,
+    case_id           TEXT NOT NULL REFERENCES cases(case_id),
     evidence_id       TEXT NOT NULL REFERENCES evidence_files(evidence_id),
-    tool_name         TEXT NOT NULL CHECK (tool_name IN ('ibd2sdi', 'innochecksum', 'ibd2sql', 'mysqlbinlog')),
-    tool_version      TEXT,
-    command           TEXT NOT NULL,
+    tool_name         TEXT NOT NULL CHECK (tool_name IN
+                          ('ibd2sdi', 'innochecksum', 'ibd2sql', 'mysqlbinlog')),
+    tool_version      TEXT NOT NULL,
+    executable_path   TEXT NOT NULL,
+    executable_sha256 TEXT NOT NULL,
+    arguments_json    TEXT NOT NULL CHECK (json_valid(arguments_json)),
+    status            TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'failed')),
     started_at        TEXT NOT NULL,
     finished_at       TEXT,
     exit_code         INTEGER,
-    raw_output_path   TEXT,
-    raw_output_sha256 TEXT
+    stdout_path       TEXT,
+    stdout_sha256     TEXT,
+    stdout_size_bytes INTEGER,
+    stderr_path       TEXT,
+    stderr_sha256     TEXT,
+    stderr_size_bytes INTEGER
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_tool_runs_evidence ON tool_runs(evidence_id);
