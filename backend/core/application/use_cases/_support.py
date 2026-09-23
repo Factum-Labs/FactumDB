@@ -28,4 +28,6 @@ def require_verified_evidence(
         )
     if evidence.verification_status is not VerificationStatus.VERIFIED:
         raise PrerequisiteError(f"evidence is not verified: {evidence_id}")
+    if not evidence.is_verified() or not evidence.working_copy_path.strip():
+        raise PrerequisiteError(f"evidence has no matching verified working copy: {evidence_id}")
     return evidence

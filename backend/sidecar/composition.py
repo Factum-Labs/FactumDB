@@ -117,6 +117,11 @@ def build_analysis_pipeline(
     reconstruct = ReconstructStateUseCase(d.domain)
     reconcile = ReconcileRecordsUseCase(d.domain)
 
+    def binlog_skip_reason(case_id: str) -> str | None:
+        if not any(item.kind is EvidenceKind.BINLOG for item in d.evidence.list_for_case(case_id)):
+            return "No binlog evidence registered in this case"
+        return None
+
     def decode_case(case_id: str) -> OperationReceipt:
         decoder = adapters.decoder_for_case(case_id)
         operation = DecodeBinaryLogsUseCase(d.evidence, decoder, d.extraction, d.clock)
@@ -132,7 +137,8 @@ def build_analysis_pipeline(
         EvidenceStageHandler(PipelineStage.EXTRACT_SCHEMA, ibd, d.evidence, schema),
         EvidenceStageHandler(PipelineStage.EXTRACT_PHYSICAL_ROWS, ibd, d.evidence, rows),
         CaseStageHandler(PipelineStage.DECODE_BINARY_LOGS, decode_case,
-                         lambda value: cast(OperationReceipt, value).item_count),
+                         lambda value: cast(OperationReceipt, value).item_count,
+                         skip_reason=binlog_skip_reason),
         CaseStageHandler(PipelineStage.NORMALIZE_EVIDENCE, normalize.execute,
                          lambda value: cast(OperationReceipt, value).item_count),
         CaseStageHandler(PipelineStage.GROUP_TRANSACTIONS, group.execute,

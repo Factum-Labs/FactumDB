@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
+from core.application.errors import PrerequisiteError
 from core.application.models import (
     EvidenceKind,
     EvidenceStageRequest,
@@ -35,6 +36,10 @@ class VerifyEvidenceStageHandler:
 
     def execute(self, context: PipelineExecutionContext) -> StageOutcome:
         items = tuple(self._evidence.list_for_case(context.case_id))
+        if not items:
+            raise PrerequisiteError("analysis requires registered evidence")
+        if not any(item.kind in {EvidenceKind.IBD, EvidenceKind.BINLOG} for item in items):
+            raise PrerequisiteError("analysis requires at least one .ibd or binlog file")
         for evidence in items:
             self._operation.execute(VerifyEvidenceRequest(context.case_id, evidence.id))
         return StageOutcome(len(items), f"verified {len(items)} evidence files")
@@ -65,6 +70,9 @@ class EvidenceStageHandler:
             for item in self._evidence.list_for_case(context.case_id)
             if item.kind in self._kinds
         )
+        if not items:
+            kinds = ", ".join(sorted(kind.value for kind in self._kinds))
+            return StageOutcome(skip_reason=f"No {kinds} evidence registered in this case")
         count = 0
         for evidence in items:
             receipt = self._operation.execute(
@@ -82,16 +90,23 @@ class CaseStageHandler:
         stage: PipelineStage,
         operation: Callable[[str], object],
         item_counter: Callable[[object], int] = lambda result: 1,
+        *,
+        skip_reason: Callable[[str], str | None] | None = None,
     ) -> None:
         self._stage = stage
         self._operation = operation
         self._item_counter = item_counter
+        self._skip_reason = skip_reason
 
     @property
     def stage(self) -> PipelineStage:
         return self._stage
 
     def execute(self, context: PipelineExecutionContext) -> StageOutcome:
+        if self._skip_reason is not None:
+            reason = self._skip_reason(context.case_id)
+            if reason is not None:
+                return StageOutcome(skip_reason=reason)
         result = self._operation(context.case_id)
         count = self._item_counter(result)
         return StageOutcome(count, f"{self.stage.value} completed")

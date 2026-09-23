@@ -167,8 +167,8 @@ returning a catalog restricted to its case ID.
 
 Progress counts reflect processed evidence, extracted items, transactions,
 correlated records, reconstructed histories and reconciliation rows. Existing
-stage failure, retry and cancellation behavior is retained. Applicability/skip
-policy, interrupted-run recovery, idempotency guarantees and tool-run audit wiring
+stage failure, retry and cancellation behavior is retained. Interrupted-run
+recovery, idempotency guarantees and tool-run audit wiring
 remain separate work. This composition does not register sidecar commands or
 create concrete SQLite repositories.
 
@@ -176,6 +176,38 @@ Composition tests execute the full sequence with controlled extraction ports,
 in-memory persistence, and real domain services. Additional tests cover deferred
 case-specific schema lookup and stopping on verification, extraction or
 normalization failures. They do not certify real tool execution or SQLite behavior.
+
+### Stage applicability and prerequisites
+
+Applicability is evaluated against the current case's registered evidence when a
+stage executes. The stage remains visible in the run rather than being removed:
+
+| Condition | Pipeline behavior |
+|---|---|
+| No `.ibd` evidence | Page validation, schema extraction and physical-row extraction become `SKIPPED` |
+| No binlog evidence | Binlog decoding becomes `SKIPPED`; no decoder or schema catalog is resolved |
+| No evidence, or only binlog-index evidence | Verification fails with `PrerequisiteError`; later stages remain pending |
+| Applicable tool produces zero rows | Stage succeeds with zero items; this is not a skip |
+| Missing case | Starting the pipeline raises `NotFoundError` before a run is saved |
+| Unverified evidence, missing working-copy path, or unequal recorded hashes | Extraction rejects the evidence before invoking a tool |
+
+`StageOutcome.skip_reason` carries an explicit nonempty reason with zero processed
+items. The orchestrator records a finished `SKIPPED` attempt with that reason in
+`StageAttempt.skip_reason`, saves it through `PipelineRepository`, and publishes
+the same reason in the progress event. Persistence implementations must serialize
+this new optional field (default `None` for existing non-skipped attempts). The
+initial `RUNNING` event represents evaluation of the stage; a subsequent `SKIPPED`
+event means no extraction operation was invoked. Skipped stages count toward
+completed progress and satisfy ordering prerequisites.
+
+Normalization and domain stages remain scheduled for single-source cases, allowing
+the domain to describe partial or unsupported evidence. Absence of a table schema
+is still a decoder warning, not an automatic rejection of the entire case. Existing
+domain use cases reject missing grouping/correlation/reconstruction results, and
+the orchestrator requires preceding stages to succeed or be skipped. Applicability
+does not bypass tool failures or hash mismatches. The working-copy metadata check
+does not rehash the file on disk; revalidation and concurrent evidence changes
+remain separate integrity/concurrency concerns.
 
 ## External-tool extraction integration
 

@@ -119,20 +119,22 @@ class AnalysisOrchestrator:
             self._publish(run, failed_state, str(error))
             return run
 
-        succeeded_attempt = replace(
+        status = StageStatus.SKIPPED if outcome.skip_reason is not None else StageStatus.SUCCEEDED
+        completed_attempt = replace(
             attempt,
-            status=StageStatus.SUCCEEDED,
+            status=status,
             finished_at=self._clock.now(),
             item_count=outcome.item_count,
+            skip_reason=outcome.skip_reason,
         )
-        succeeded_state = replace(
+        completed_state = replace(
             running_state,
-            status=StageStatus.SUCCEEDED,
-            attempts=(*running_state.attempts[:-1], succeeded_attempt),
+            status=status,
+            attempts=(*running_state.attempts[:-1], completed_attempt),
         )
-        run = self._replace_state(run, index, succeeded_state)
+        run = self._replace_state(run, index, completed_state)
         self._repository.save(run)
-        self._publish(run, succeeded_state, outcome.message or "stage completed")
+        self._publish(run, completed_state, outcome.skip_reason or outcome.message or "stage completed")
         return run
 
     def run_all(self, run_id: str) -> PipelineRun:
