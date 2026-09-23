@@ -125,12 +125,14 @@ CREATE TABLE schemas (
     tool_run_id      TEXT NOT NULL REFERENCES tool_runs(tool_run_id),
     database_name    TEXT NOT NULL,
     table_name       TEXT NOT NULL,
-    mysql_version_id INTEGER,
+    mysql_version_id INTEGER NOT NULL,
     UNIQUE (evidence_id, database_name, table_name)
 ) STRICT;
 ```
 
 The `UNIQUE` stops us storing the same table's schema twice for one evidence file, which would happen if someone ran the extraction stage twice.
+
+`mysql_version_id` is `NOT NULL` because the `Schema` model requires it. `ibd2sdi` always reports it, and a schema we could not place to a MySQL version is not one we should be trusting output from.
 
 ---
 

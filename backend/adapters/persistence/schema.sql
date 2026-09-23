@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS schemas (
     tool_run_id      TEXT NOT NULL REFERENCES tool_runs(tool_run_id),
     database_name    TEXT NOT NULL,
     table_name       TEXT NOT NULL,
-    mysql_version_id INTEGER,
+    mysql_version_id INTEGER NOT NULL,
     UNIQUE (evidence_id, database_name, table_name)
 ) STRICT;
 CREATE TABLE IF NOT EXISTS schema_columns (
