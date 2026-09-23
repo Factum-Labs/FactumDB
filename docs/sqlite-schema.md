@@ -199,7 +199,8 @@ CREATE TABLE binlog_events (
     thread_id      INTEGER,
     source_file    TEXT NOT NULL,
     log_position   INTEGER NOT NULL,
-    UNIQUE (evidence_id, source_file, log_position)
+    row_index      INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (evidence_id, source_file, log_position, row_index)
 ) STRICT;
 
 CREATE INDEX idx_binlog_table ON binlog_events(database_name, table_name);
@@ -209,6 +210,12 @@ CREATE INDEX idx_binlog_time  ON binlog_events(event_time_utc);
 `before_json` and `after_json` are nullable on purpose, because an INSERT has no before image and a DELETE has no after image. That is the `None` rule from the canonical model.
 
 The `UNIQUE` needs care. `log_position` is not unique on its own - every binlog file starts its positions again at 4, so `mysql-bin.000001` and `mysql-bin.000006` can both have a position 1112. The unique key has to be the file **and** the position together. Making `log_position` unique by itself would cause the second binlog file to fail to load.
+
+The file and position together are still not enough, because one binlog event can carry several rows. A statement like `UPDATE accounts SET status = 'frozen' WHERE balance > 3000` that changes two rows is written as a single `Update_rows` event with two row images, and both share the event's `end_log_pos`. `row_index` is the position of a row image within its event - 0 for the first, 1 for the second - and it is part of the unique key so those rows stay distinct.
+
+This was found by feeding a two-row event through the adapter: it produced two row changes at the same position. Without `row_index` the second one is rejected by the unique constraint, or, with `INSERT OR REPLACE`, silently overwrites the first one with no error at all. None of the original test scenarios hit this because each of their statements changed a single row.
+
+`row_index` defaults to 0, so a single-row event - which is most of them - has the same identity it always had.
 
 `event_time_utc` is indexed because building a timeline means sorting by time, and that is the main thing this tool does.
 

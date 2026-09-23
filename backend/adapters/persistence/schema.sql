@@ -98,7 +98,8 @@ CREATE TABLE IF NOT EXISTS binlog_events (
     thread_id      INTEGER,
     source_file    TEXT NOT NULL,
     log_position   INTEGER NOT NULL,
-    UNIQUE (evidence_id, source_file, log_position)
+    row_index      INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (evidence_id, source_file, log_position, row_index)
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_binlog_table ON binlog_events(database_name, table_name);
