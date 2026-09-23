@@ -3,8 +3,6 @@
 -- table and column exists. This file is the executable copy, and is the
 -- one the code actually runs.
 
-PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = WAL;
 CREATE TABLE IF NOT EXISTS cases (
     case_id    TEXT PRIMARY KEY,
     case_name  TEXT NOT NULL,
