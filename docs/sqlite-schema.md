@@ -4,7 +4,7 @@
 
 This is the internal store for one case. Everything the adapters extract goes in here, and Yasiru's domain services and the UI read it back out. The original evidence files are never stored inside the database - they stay in the case folder and we only keep their paths and hashes.
 
-The tables map fairly directly onto the models in `canonical-model.md`. Where a model field is a dict or a list I store it as a JSON column, which is explained in the decisions at the bottom.
+The tables map fairly directly onto the models in `canonical-model.md`. Where a model field is a dict or a list it is stored as a JSON column, which is explained in the decisions at the bottom.
 
 Written against SQLite 3.46.1 (the version in Ubuntu 26.04).
 
@@ -17,7 +17,7 @@ PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;
 ```
 
-Foreign keys are **off by default** in SQLite. All the `REFERENCES` below are parsed and then ignored unless you turn them on, and it is per connection, not stored in the file. This caught me out when I was reading about it - the schema looks correct but enforces nothing.
+Foreign keys are **off by default** in SQLite. All the `REFERENCES` below are parsed and then ignored unless you turn them on, and it is per connection, not stored in the file. This is easy to miss - the schema looks correct but enforces nothing.
 
 WAL mode just gives better behaviour when something reads while something else writes.
 
@@ -27,14 +27,17 @@ WAL mode just gives better behaviour when something reads while something else w
 
 ```sql
 CREATE TABLE cases (
-    case_id    TEXT PRIMARY KEY,
-    case_name  TEXT NOT NULL,
-    examiner   TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    case_id        TEXT PRIMARY KEY,
+    case_name      TEXT NOT NULL,
+    examiner       TEXT NOT NULL,
+    workspace_path TEXT NOT NULL,
+    created_at     TEXT NOT NULL
 ) STRICT;
 ```
 
-The fields match Nisal's `Case` model in `backend/core/domain/models/case.py` exactly, so the repository can map straight across without renaming anything.
+The fields follow Nisal's `Case` model in `backend/core/domain/models/case.py`. The column names stay `case_id` and `case_name` rather than the model's `id` and `name`, because a bare `id` is ambiguous once several tables are joined. The mapping happens in the repository, which is what that layer is for.
+
+`workspace_path` is the directory the case owns. Working copies and preserved raw output live under it, so the path belongs with the case rather than being recomputed.
 
 ---
 
@@ -42,24 +45,32 @@ The fields match Nisal's `Case` model in `backend/core/domain/models/case.py` ex
 
 ```sql
 CREATE TABLE evidence_files (
-    evidence_id       TEXT PRIMARY KEY,
-    case_id           TEXT NOT NULL REFERENCES cases(case_id),
-    evidence_type     TEXT NOT NULL CHECK (evidence_type IN ('ibd', 'binlog', 'binlog_index')),
-    file_name         TEXT NOT NULL,
-    original_path     TEXT NOT NULL,
-    size_bytes        INTEGER NOT NULL,
-    sha256_original   TEXT NOT NULL,
-    working_copy_path TEXT NOT NULL,
-    sha256_working    TEXT NOT NULL,
-    registered_at     TEXT NOT NULL
+    evidence_id         TEXT PRIMARY KEY,
+    case_id             TEXT NOT NULL REFERENCES cases(case_id),
+    kind                TEXT NOT NULL CHECK (kind IN ('ibd', 'binlog', 'binlog_index')),
+    filename            TEXT NOT NULL,
+    source_path         TEXT NOT NULL,
+    size_bytes          INTEGER NOT NULL,
+    source_sha256       TEXT NOT NULL,
+    verification_status TEXT NOT NULL CHECK (verification_status IN
+                            ('registered', 'verified', 'hash_mismatch')),
+    working_copy_path   TEXT,
+    working_copy_sha256 TEXT,
+    acquisition_method  TEXT NOT NULL DEFAULT '',
+    registered_at       TEXT NOT NULL
 ) STRICT;
 
 CREATE INDEX idx_evidence_case ON evidence_files(case_id);
+CREATE INDEX idx_evidence_source ON evidence_files(case_id, source_path);
 ```
 
-We store both hashes because the point of a working copy is that you prove it is identical to the original before you run anything on it. If the two hashes ever differ, that evidence is not usable and the tool has to say so.
+Both hashes are stored because the point of a working copy is proving it is identical to the original before anything is run against it. If `source_sha256` and `working_copy_sha256` ever differ, the copy is not a faithful reproduction and nothing extracted from it can be relied on.
+
+The working copy columns are nullable because of when the row is written. A file is registered and hashed first, and only then copied, so at registration there is no working copy to record. A null is the honest answer there, and `verification_status` says which stage the file has reached - `registered`, `verified`, or `hash_mismatch`.
 
 `binlog_index` is in the type list because of `mysql-bin.index`. It is not a log itself but it is evidence, since it is how we find out a log file is missing.
+
+`acquisition_method` records how the file was taken, for example "FLUSH TABLES FOR EXPORT + cp". That matters because it is what shows the page image is internally consistent rather than copied while the server was mid-write, so the method is part of the evidence rather than a footnote.
 
 ---
 
@@ -68,15 +79,24 @@ We store both hashes because the point of a working copy is that you prove it is
 ```sql
 CREATE TABLE tool_runs (
     tool_run_id       TEXT PRIMARY KEY,
+    case_id           TEXT NOT NULL REFERENCES cases(case_id),
     evidence_id       TEXT NOT NULL REFERENCES evidence_files(evidence_id),
-    tool_name         TEXT NOT NULL CHECK (tool_name IN ('ibd2sdi', 'innochecksum', 'ibd2sql', 'mysqlbinlog')),
-    tool_version      TEXT,
-    command           TEXT NOT NULL,
+    tool_name         TEXT NOT NULL CHECK (tool_name IN
+                          ('ibd2sdi', 'innochecksum', 'ibd2sql', 'mysqlbinlog')),
+    tool_version      TEXT NOT NULL,
+    executable_path   TEXT NOT NULL,
+    executable_sha256 TEXT NOT NULL,
+    arguments_json    TEXT NOT NULL CHECK (json_valid(arguments_json)),
+    status            TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'failed')),
     started_at        TEXT NOT NULL,
     finished_at       TEXT,
     exit_code         INTEGER,
-    raw_output_path   TEXT,
-    raw_output_sha256 TEXT
+    stdout_path       TEXT,
+    stdout_sha256     TEXT,
+    stdout_size_bytes INTEGER,
+    stderr_path       TEXT,
+    stderr_sha256     TEXT,
+    stderr_size_bytes INTEGER
 ) STRICT;
 
 CREATE INDEX idx_tool_runs_evidence ON tool_runs(evidence_id);
@@ -84,7 +104,13 @@ CREATE INDEX idx_tool_runs_evidence ON tool_runs(evidence_id);
 
 This is the most important table in the schema. Almost every other table has a `tool_run_id`, so any value we show in a report can be traced back to the exact command that produced it. That is the whole "how do you know that?" requirement.
 
-`tool_version` matters because these tools change their output format between versions. Three of them have a `--version` flag. `ibd2sql` does not have one at all, so for that one I use `git describe --tags` inside its clone, which gives something like `v2.3-3-g62b7db5`. That is actually better than a version number because it points at one exact commit.
+`tool_version` matters because these tools change their output format between versions. Three of them have a `--version` flag. `ibd2sql` does not have one at all, so for that one `git describe --tags` inside its clone is used, which gives something like `v2.3-3-g62b7db5`. That is better than a version number because it points at one exact commit.
+
+`executable_path` and `executable_sha256` identify the binary itself. A version string can be shared by several builds; a hash of the file cannot, so the claim is about one specific executable rather than a label.
+
+`arguments_json` holds the arguments as a JSON array instead of one command string. Re-joining arguments into a line loses the boundary between them as soon as a path contains a space, and then it is no longer possible to say exactly what was run.
+
+`stdout` and `stderr` are recorded separately, each with its own path, hash and size. Both are needed: `innochecksum` reports a damaged page on stderr, so keeping only stdout would record an empty success for a file the tool had just called invalid.
 
 The index is on `evidence_id` because "show me every tool run for this file" is the query the UI will use most.
 
@@ -99,12 +125,14 @@ CREATE TABLE schemas (
     tool_run_id      TEXT NOT NULL REFERENCES tool_runs(tool_run_id),
     database_name    TEXT NOT NULL,
     table_name       TEXT NOT NULL,
-    mysql_version_id INTEGER,
+    mysql_version_id INTEGER NOT NULL,
     UNIQUE (evidence_id, database_name, table_name)
 ) STRICT;
 ```
 
 The `UNIQUE` stops us storing the same table's schema twice for one evidence file, which would happen if someone ran the extraction stage twice.
+
+`mysql_version_id` is `NOT NULL` because the `Schema` model requires it. `ibd2sdi` always reports it, and a schema we could not place to a MySQL version is not one we should be trusting output from.
 
 ---
 
@@ -122,7 +150,7 @@ CREATE TABLE schema_columns (
 ) STRICT;
 ```
 
-I made this a real table instead of a JSON column inside `schemas`, even though I used JSON for other list-type things. The reason is that this is the one lookup that happens constantly: every single binlog row event needs to turn `@1`, `@2`, `@3` into column names. Making `(schema_id, position)` the primary key means that lookup is a direct index hit rather than parsing JSON every time.
+This is a real table instead of a JSON column inside `schemas`, unlike the other list-type fields. The reason is that this is the one lookup that happens constantly: every single binlog row event needs to turn `@1`, `@2`, `@3` into column names. Making `(schema_id, position)` the primary key means that lookup is a direct index hit rather than parsing JSON every time.
 
 SQLite has no boolean type, so the two flags are integers with a `CHECK` limiting them to 0 or 1. Without the check you could store 7 in `is_nullable`.
 
@@ -147,9 +175,9 @@ CREATE INDEX idx_physical_table ON physical_records(database_name, table_name);
 CREATE INDEX idx_physical_deleted ON physical_records(is_deleted);
 ```
 
-`page_no` and `page_offset` are nullable because we might not always be able to work them out, and a null is honest about that. In my scenario 2 evidence the deleted row was at page 4 offset 170.
+`page_no` and `page_offset` are nullable because we might not always be able to work them out, and a null is honest about that. In the scenario 2 evidence the deleted row is at page 4, offset 170.
 
-The index on `is_deleted` is there because "show me all recovered deleted rows" is going to be one of the main things an investigator asks for, and it is also the most interesting screen to demo.
+The index on `is_deleted` is there because "show me all recovered deleted rows" is going to be one of the main things an investigator asks for, and it is also one of the main screens to demonstrate.
 
 ---
 
@@ -171,7 +199,8 @@ CREATE TABLE binlog_events (
     thread_id      INTEGER,
     source_file    TEXT NOT NULL,
     log_position   INTEGER NOT NULL,
-    UNIQUE (evidence_id, source_file, log_position)
+    row_index      INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (evidence_id, source_file, log_position, row_index)
 ) STRICT;
 
 CREATE INDEX idx_binlog_table ON binlog_events(database_name, table_name);
@@ -180,7 +209,13 @@ CREATE INDEX idx_binlog_time  ON binlog_events(event_time_utc);
 
 `before_json` and `after_json` are nullable on purpose, because an INSERT has no before image and a DELETE has no after image. That is the `None` rule from the canonical model.
 
-The `UNIQUE` is the part I had to think about. `log_position` is not unique on its own - every binlog file starts its positions again at 4, so `mysql-bin.000001` and `mysql-bin.000006` can both have a position 1112. The unique key has to be the file **and** the position together. If I had made `log_position` unique by itself the second binlog file would fail to load.
+The `UNIQUE` needs care. `log_position` is not unique on its own - every binlog file starts its positions again at 4, so `mysql-bin.000001` and `mysql-bin.000006` can both have a position 1112. The unique key has to be the file **and** the position together. Making `log_position` unique by itself would cause the second binlog file to fail to load.
+
+The file and position together are still not enough, because one binlog event can carry several rows. A statement like `UPDATE accounts SET status = 'frozen' WHERE balance > 3000` that changes two rows is written as a single `Update_rows` event with two row images, and both share the event's `end_log_pos`. `row_index` is the position of a row image within its event - 0 for the first, 1 for the second - and it is part of the unique key so those rows stay distinct.
+
+This was found by feeding a two-row event through the adapter: it produced two row changes at the same position. Without `row_index` the second one is rejected by the unique constraint, or, with `INSERT OR REPLACE`, silently overwrites the first one with no error at all. None of the original test scenarios hit this because each of their statements changed a single row.
+
+`row_index` defaults to 0, so a single-row event - which is most of them - has the same identity it always had.
 
 `event_time_utc` is indexed because building a timeline means sorting by time, and that is the main thing this tool does.
 
@@ -218,7 +253,7 @@ CREATE TABLE transaction_events (
 ) STRICT;
 ```
 
-This one is not in the model list - I added it because `TransactionMarker.event_positions` is a list, and a list of things that already exist as rows should be a link table rather than a JSON blob. This way the foreign key actually checks that the event exists, which a JSON array of numbers could never do.
+This one is not in the model list - it is added because `TransactionMarker.event_positions` is a list, and a list of things that already exist as rows should be a link table rather than a JSON blob. This way the foreign key actually checks that the event exists, which a JSON array of numbers could never do.
 
 `event_order` keeps the original order of the events inside the transaction, because the order matters when the domain layer replays them.
 
@@ -239,7 +274,7 @@ CREATE TABLE integrity_results (
 ) STRICT;
 ```
 
-`page_counts_json` holds the full page type breakdown from `innochecksum -S`, including the ones that are zero. For my first evidence set `Undo log page` was 0, and that zero is the reason the original balance of 5000 cannot be recovered from the `.ibd` file at all. It would be easy to drop zeros as noise but that would throw away the finding.
+`page_counts_json` holds the full page type breakdown from `innochecksum -S`, including the ones that are zero. In the first evidence set `Undo log page` is 0, and that zero is the reason the original balance of 5000 cannot be recovered from the `.ibd` file at all. It would be easy to drop zeros as noise but that would throw away the finding.
 
 ---
 
@@ -284,11 +319,11 @@ Reminder from the model doc: `mysql-bin.index` stores absolute paths like `/var/
 
 ## Design decisions
 
-**A. IDs are text, not auto-increment integers.** Nisal's `Case` model already generates a UUID string for `case_id`, so I followed the same style everywhere rather than having two different kinds of ID in one database. Consistency across the three of us is worth more here than the small speed difference.
+**A. IDs are text, not auto-increment integers.** Nisal's `Case` model already generates a UUID string for `case_id`, so the same style is used everywhere rather than having two different kinds of ID in one database. Consistency across the team is worth more here than the small speed difference.
 
 **B. Timestamps are TEXT in ISO-8601 UTC**, for example `2026-08-15T19:06:25Z`. SQLite has no date type at all, so the choice is text or a number. Text sorts correctly, and someone opening the database directly can read it, which matters when the point of the tool is showing your working.
 
-**C. Dict and list fields are stored as JSON columns**, except where a real table is clearly better. Row values, page counts and the file lists are JSON. Schema columns and transaction events are real tables, because those two get looked up constantly and need foreign keys. A fully normalised design (one row per column value) would be more "correct" but it is a lot more work and we have 8 weeks, so I would rather have something that works and note the tradeoff.
+**C. Dict and list fields are stored as JSON columns**, except where a real table is clearly better. Row values, page counts and the file lists are JSON. Schema columns and transaction events are real tables, because those two get looked up constantly and need foreign keys. A fully normalised design (one row per column value) would be more "correct" but it is a lot more work, and the project runs to 8 weeks, so the simpler design is used and the tradeoff documented.
 
 **D. Undecodable values are stored inside the JSON as `{"__undecodable__": "reason"}`.** This is safe because MySQL column values are always scalars - a number, a string, a date, or NULL. They are never dictionaries. So any dict appearing where a value should be can only be our marker, and it can never collide with real data.
 
@@ -302,4 +337,4 @@ Reminder from the model doc: `mysql-bin.index` stores absolute paths like `/var/
 
 - Agree decision D with Nisal since he owns the storage side of the pipeline.
 - Check with Yasiru whether the domain services need anything from `transaction_events` that is not there yet.
-- The tables for correlation results, record histories and reconciliation results are not here yet. Those come out of Yasiru's domain services in weeks 5 and 6, so I will add them once we know their shape.
+- The tables for correlation results, record histories and reconciliation results are not here yet. Those come out of Yasiru's domain services in weeks 5 and 6, so they will be added once their shape is known.
