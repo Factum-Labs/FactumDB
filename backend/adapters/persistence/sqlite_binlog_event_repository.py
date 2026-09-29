@@ -94,6 +94,17 @@ class SqliteBinlogEventRepository(BinlogEventRepositoryPort):
 
         with self._connection:
             for source_file in files:
+                # Transactions link to these events, and the foreign key
+                # would block the delete. The links go too; saving the
+                # markers again afterwards puts them back.
+                self._connection.execute(
+                    """
+                    DELETE FROM transaction_events WHERE event_id IN (
+                        SELECT event_id FROM binlog_events
+                        WHERE evidence_id = ? AND source_file = ?)
+                    """,
+                    (evidence_id, source_file),
+                )
                 self._connection.execute(
                     "DELETE FROM binlog_events WHERE evidence_id = ? AND source_file = ?",
                     (evidence_id, source_file),

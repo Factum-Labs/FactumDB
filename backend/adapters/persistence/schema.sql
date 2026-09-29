@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS integrity_results (
 ) STRICT;
 CREATE TABLE IF NOT EXISTS warnings (
     warning_id   TEXT PRIMARY KEY,
+    case_id      TEXT NOT NULL REFERENCES cases(case_id),
     evidence_id  TEXT REFERENCES evidence_files(evidence_id),
     tool_run_id  TEXT REFERENCES tool_runs(tool_run_id),
     code         TEXT NOT NULL,
@@ -142,7 +143,7 @@ CREATE TABLE IF NOT EXISTS warnings (
     created_at   TEXT NOT NULL
 ) STRICT;
 
-CREATE INDEX IF NOT EXISTS idx_warnings_code ON warnings(code);
+CREATE INDEX IF NOT EXISTS idx_warnings_code ON warnings(case_id, code);
 CREATE TABLE IF NOT EXISTS binlog_inventory (
     inventory_id       TEXT PRIMARY KEY,
     evidence_id        TEXT NOT NULL REFERENCES evidence_files(evidence_id),

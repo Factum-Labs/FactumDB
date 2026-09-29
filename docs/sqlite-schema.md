@@ -257,6 +257,10 @@ This one is not in the model list - it is added because `TransactionMarker.event
 
 `event_order` keeps the original order of the events inside the transaction, because the order matters when the domain layer replays them.
 
+A marker lists log positions, but since `row_index` was added one position can be several rows in `binlog_events` (a multi-row UPDATE or DELETE). Every row at the position is linked, and they share the position's `event_order`. Reading the marker back takes each position once, so `event_positions` comes back exactly as the adapter produced it.
+
+The events have to be saved before the markers. If a marker points at a position with no stored event, the foreign key rejects it, which is the point: a transaction claiming an event we do not have is a gap that should be noticed, not a dangling number.
+
 ---
 
 ## 10. integrity_results
@@ -276,6 +280,8 @@ CREATE TABLE integrity_results (
 
 `page_counts_json` holds the full page type breakdown from `innochecksum -S`, including the ones that are zero. In the first evidence set `Undo log page` is 0, and that zero is the reason the original balance of 5000 cannot be recovered from the `.ibd` file at all. It would be easy to drop zeros as noise but that would throw away the finding.
 
+There is no table name in this table because `innochecksum` does not know about tables, only pages. `integrity_for(database, table)` finds the right row by joining through `schemas` on `evidence_id`, since the schema extracted from an `.ibd` says which table that file holds. So an integrity result can only be found by table once that file's schema has been extracted.
+
 ---
 
 ## 11. warnings
@@ -283,6 +289,7 @@ CREATE TABLE integrity_results (
 ```sql
 CREATE TABLE warnings (
     warning_id   TEXT PRIMARY KEY,
+    case_id      TEXT NOT NULL REFERENCES cases(case_id),
     evidence_id  TEXT REFERENCES evidence_files(evidence_id),
     tool_run_id  TEXT REFERENCES tool_runs(tool_run_id),
     code         TEXT NOT NULL,
@@ -291,10 +298,12 @@ CREATE TABLE warnings (
     created_at   TEXT NOT NULL
 ) STRICT;
 
-CREATE INDEX idx_warnings_code ON warnings(code);
+CREATE INDEX idx_warnings_code ON warnings(case_id, code);
 ```
 
-The two foreign keys are nullable here, unlike everywhere else, because some warnings are about the case in general rather than one specific file or one specific tool run.
+`evidence_id` and `tool_run_id` are nullable here, unlike everywhere else, because some warnings are about the case in general rather than one specific file or one specific tool run.
+
+`case_id` is required for the same reason. Every other table reaches its case through `evidence_id`, but a case-level warning has no evidence file to go through, so without its own `case_id` it would belong to no case at all and `list_by_case` could never find it.
 
 ---
 
