@@ -4,6 +4,7 @@ InnochecksumAdapter already implements PageValidator.validate directly.
 """
 
 from adapters.tools.extraction import (
+    AuditedPageValidator,
     Ibd2SdiSchemaExtractor,
     Ibd2SqlPhysicalRowExtractor,
     MysqlBinlogDecoder,
@@ -14,6 +15,7 @@ from adapters.tools.innochecksum_adapter import InnochecksumAdapter
 from adapters.tools.mysqlbinlog_adapter import MysqlBinlogAdapter
 
 __all__ = [
+    "AuditedPageValidator",
     "Ibd2SdiAdapter",
     "Ibd2SdiSchemaExtractor",
     "Ibd2SqlAdapter",

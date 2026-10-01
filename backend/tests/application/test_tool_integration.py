@@ -7,6 +7,7 @@ from dataclasses import replace
 from unittest.mock import Mock, patch
 
 from adapters.tools import (
+    AuditedPageValidator,
     Ibd2SdiAdapter,
     Ibd2SdiSchemaExtractor,
     Ibd2SqlAdapter,
@@ -63,6 +64,52 @@ class ToolIntegrationTests(unittest.TestCase):
             EvidenceStageRequest(item.case_id, item.id)
         )
 
+    @staticmethod
+    def audit_recorder():
+        audit = Mock()
+        audit.start.side_effect = [Mock(id="run-1"), Mock(id="run-2")]
+        return audit
+
+    @patch("subprocess.run")
+    def test_audited_page_validation_records_each_command(self, run):
+        run.side_effect = [completed(), completed(b"#PAGE_COUNT\n  2\tIndex page\n")]
+        audit = self.audit_recorder()
+        receipt = self.execute(
+            RunPageValidationUseCase,
+            AuditedPageValidator(InnochecksumAdapter(), audit),
+        )
+        self.assertEqual(receipt.tool_run_ids, ("run-1", "run-2"))
+        self.assertEqual(audit.start.call_count, 2)
+        self.assertEqual(audit.complete.call_count, 2)
+        self.assertEqual(self.results.integrity.status, "valid")
+
+    @patch("subprocess.run")
+    def test_audited_failure_is_completed_before_propagation(self, run):
+        run.return_value = completed(code=1, stderr=b"failed")
+        audit = Mock()
+        audit.start.return_value = Mock(id="run-failed")
+        with self.assertRaises(RuntimeError):
+            self.execute(
+                ExtractSchemaUseCase,
+                Ibd2SdiSchemaExtractor(Ibd2SdiAdapter(), audit),
+            )
+        audit.complete.assert_called_once()
+        self.assertEqual(audit.complete.call_args.args[0].exit_code, 1)
+        self.assertIsNone(self.results.schemas)
+
+    @patch("subprocess.run")
+    def test_live_and_deleted_rows_keep_their_producing_run_ids(self, run):
+        run.return_value = completed(ROWS)
+        audit = self.audit_recorder()
+        receipt = self.execute(
+            ExtractPhysicalRowsUseCase,
+            Ibd2SqlPhysicalRowExtractor(
+                Ibd2SqlAdapter("/tools/main.py"), include_deleted=True, audit=audit,
+            ),
+        )
+        self.assertEqual(receipt.tool_run_ids, ("run-1", "run-2"))
+        self.assertEqual(self.results.record_run_ids, ["run-1", "run-2"])
+
     @patch("subprocess.run")
     def test_schema_wrapper_saves_single_schema_sequence(self, run):
         run.return_value = completed(SDI)
@@ -74,7 +121,7 @@ class ToolIntegrationTests(unittest.TestCase):
     @patch("subprocess.run")
     def test_page_validator_connects_directly(self, run):
         run.side_effect = [completed(), completed(b"#PAGE_COUNT\n  2\tIndex page\n")]
-        self.execute(RunPageValidationUseCase, InnochecksumAdapter())
+        self.execute(RunPageValidationUseCase, AuditedPageValidator(InnochecksumAdapter()))
         self.assertEqual(self.results.integrity.status, "valid")
         self.assertEqual(self.results.integrity.total_pages, 2)
         self.assertEqual(run.call_args_list[0].args[0],
@@ -90,6 +137,8 @@ class ToolIntegrationTests(unittest.TestCase):
         self.assertEqual(run.call_count, 1)
         self.assertFalse(self.results.records[0].is_deleted)
         run.reset_mock()
+        self.results.records = None
+        self.results.record_run_ids.clear()
         receipt = self.execute(ExtractPhysicalRowsUseCase,
                                Ibd2SqlPhysicalRowExtractor(adapter, include_deleted=True))
         self.assertEqual(receipt.item_count, 2)

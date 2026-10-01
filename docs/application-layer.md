@@ -265,8 +265,24 @@ propagates before the use case saves any row bundle. Other tool exceptions also 
 the existing innochecksum adapter's damaged/unknown classifications are preserved.
 
 Use cases enforce evidence type and verified working-copy prerequisites. Wrappers do not
-rehash evidence, implement normalization, or add raw-output/tool-run auditing to utility
-invocations. Those remain separate integration work. Tool parsing implementations are
-unchanged. Tests run the actual parsers with mocked subprocess results; real utility
+rehash evidence or implement normalization. Audited composition records each utility
+invocation and preserves raw output through `ToolRunAuditService`. Tool parsing implementations
+are unchanged. Tests run the actual parsers with mocked subprocess results; real utility
 execution against evidence on Linux remains to be validated. The backend wheel now includes
 the `adapters` package so these implementations are included in installations.
+
+## SQLite extraction integration
+
+The application extraction ports return provenance-bearing results. Each external
+process is recorded as its own `ToolRun`; receipts expose every contributing run
+ID, while SQLite result rows reference the primary run that produced their data.
+
+`SqliteExtractionRepository` is the application-facing facade over the existing
+integrity, schema, physical-record, binlog-event, transaction, and warning stores.
+It validates case/evidence/run ownership and saves decoded bundles atomically in
+event, marker, warning order. `build_sqlite_application_stores()` constructs the
+facade and its shared repositories for one case database.
+
+The current SQLite schema has no pipeline-run or analysis-result tables and no
+normalized-evidence store. Those dependencies remain explicitly injected; this
+integration does not substitute in-memory state in a production bootstrap.

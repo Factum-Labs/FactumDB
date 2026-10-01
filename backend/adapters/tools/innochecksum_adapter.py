@@ -35,17 +35,18 @@ class InnochecksumAdapter:
     def __init__(self, innochecksum_path="innochecksum"):
         self.innochecksum_path = innochecksum_path
 
-    def validate(self, ibd_path):
+    def validate(self, ibd_path, *, run=None):
         """Check one .ibd file and return an IntegrityResult.
 
         Runs the tool twice: once with no flags to validate the checksums, and
         once with -S to get the page type breakdown. Neither run writes to the
         file.
         """
-        check = subprocess.run(
+        execute = run or subprocess.run
+        check = execute(
             [self.innochecksum_path, ibd_path], capture_output=True
         )
-        summary = subprocess.run(
+        summary = execute(
             [self.innochecksum_path, "-S", ibd_path], capture_output=True
         )
         return self.parse(check, summary)

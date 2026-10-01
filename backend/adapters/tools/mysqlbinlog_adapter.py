@@ -72,7 +72,7 @@ class MysqlBinlogAdapter:
     def __init__(self, mysqlbinlog_path="mysqlbinlog"):
         self.mysqlbinlog_path = mysqlbinlog_path
 
-    def decode(self, binlog_path, schema_lookup):
+    def decode(self, binlog_path, schema_lookup, *, run=None):
         """Run mysqlbinlog on one file and parse what it prints.
 
         schema_lookup(database, table) should return a Schema or None.
@@ -82,7 +82,7 @@ class MysqlBinlogAdapter:
             self.mysqlbinlog_path, "-v", "-v",
             "--base64-output=DECODE-ROWS", binlog_path,
         ]
-        result = subprocess.run(command, capture_output=True)
+        result = (run or subprocess.run)(command, capture_output=True)
         if result.returncode != 0:
             raise RuntimeError(
                 f"mysqlbinlog failed (exit {result.returncode}): "

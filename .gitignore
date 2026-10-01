@@ -39,6 +39,9 @@ src-tauri/target/
 # Local tool paths and secrets (e.g. FACTUMDB_IBD2SQL_PATH)
 .env
 
+# Private Codex chat handoff (Nisal only; may contain local working context)
+/backend/context.md
+
 *.exe
 *.AppImage
 *.deb

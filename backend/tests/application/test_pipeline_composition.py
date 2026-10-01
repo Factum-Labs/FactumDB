@@ -5,7 +5,7 @@ from dataclasses import replace
 from unittest.mock import Mock, patch
 
 from core.application.models import (
-    DecodedBinlog, EvidenceKind, NormalizedEvidence, VerificationStatus,
+    DecodedBinlog, EvidenceKind, NormalizedEvidence, ProvenancedResult, VerificationStatus,
 )
 from core.application.orchestration.models import ANALYSIS_STAGES, PipelineStage, StageStatus
 from core.application.ports import DomainInputs
@@ -60,13 +60,15 @@ class PipelineCompositionTests(unittest.TestCase):
 
         self.results.save_normalized = save_normalized
         self.validator = Mock()
-        self.validator.validate.return_value = integrity()
+        self.validator.validate.return_value = ProvenancedResult(integrity(), "run-1", ("run-1",))
         self.schema = Mock()
-        self.schema.extract.return_value = DS02.schemas
+        self.schema.extract.return_value = ProvenancedResult(DS02.schemas, "run-2", ("run-2",))
         self.rows = Mock()
-        self.rows.extract.return_value = DS02.physical
+        self.rows.extract.return_value = ProvenancedResult(DS02.physical, "run-3", ("run-3",))
         self.decoder = Mock()
-        self.decoder.decode.return_value = DecodedBinlog(DS02.events, DS02.markers)
+        self.decoder.decode.return_value = ProvenancedResult(
+            DecodedBinlog(DS02.events, DS02.markers), "run-4", ("run-4",)
+        )
         self.decoder_factory = Mock()
 
         def decoder_for_case(case_id):
@@ -96,10 +98,10 @@ class PipelineCompositionTests(unittest.TestCase):
         self.assertTrue(run.complete, run)
         self.assertEqual(tuple(s.stage for s in run.stages), ANALYSIS_STAGES)
         self.assertEqual(self.copies.create.call_count, 2)
-        self.validator.validate.assert_called_once_with("/working/accounts.ibd")
-        self.schema.extract.assert_called_once_with("/working/accounts.ibd")
-        self.rows.extract.assert_called_once_with("/working/accounts.ibd")
-        self.decoder.decode.assert_called_once_with("/working/binlog.000018")
+        self.validator.validate.assert_called_once_with("case-1", self.ibd.id, "/working/accounts.ibd")
+        self.schema.extract.assert_called_once_with("case-1", self.ibd.id, "/working/accounts.ibd")
+        self.rows.extract.assert_called_once_with("case-1", self.ibd.id, "/working/accounts.ibd")
+        self.decoder.decode.assert_called_once_with("case-1", self.binlog.id, "/working/binlog.000018")
         self.decoder_factory.assert_called_once_with("case-1")
         self.assertIsNotNone(self.domain.reconciliation)
         self.assertEqual(run.stages[-1].attempts[-1].item_count,
@@ -143,7 +145,7 @@ class PipelineCompositionTests(unittest.TestCase):
         with patch("adapters.tools.mysqlbinlog_adapter.MysqlBinlogAdapter.decode",
                    return_value=([], [], [])) as decode:
             for case in catalogs:
-                adapters.decoder_for_case(case).decode("/working/binlog.000018")
+                adapters.decoder_for_case(case).decode(case, "evidence-1", "/working/binlog.000018")
                 self.assertIs(decode.call_args.args[1], catalogs[case].schema_for)
         self.assertEqual([c.args[0] for c in lookup.call_args_list], ["case-a", "case-b"])
         run.assert_not_called()
