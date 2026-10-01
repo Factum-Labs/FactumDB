@@ -270,7 +270,10 @@ class _ParserState:
             thread_id=self.thread_id,
         )
         self.events.append(event)
-        if self.txn_open:
+        # A multi-row event reaches here once per row, all at one position.
+        # The marker lists binlog events, not rows, so the position goes in
+        # once - listing it twice would make the event look like two.
+        if self.txn_open and self.log_position not in self.txn_positions[-1:]:
             self.txn_positions.append(self.log_position)
         self._reset_row()
 
