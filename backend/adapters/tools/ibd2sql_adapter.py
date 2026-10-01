@@ -39,7 +39,7 @@ class Ibd2SqlAdapter:
         self.ibd2sql_path = ibd2sql_path or os.environ.get("FACTUMDB_IBD2SQL_PATH")
         self.python_path = python_path
 
-    def extract_records(self, ibd_path, deleted=False):
+    def extract_records(self, ibd_path, deleted=False, *, run=None):
         """Return the rows in one .ibd file.
 
         deleted=False gives the live rows, deleted=True gives the rows that are
@@ -55,7 +55,7 @@ class Ibd2SqlAdapter:
         if deleted:
             command += ["--delete", "only"]
 
-        result = subprocess.run(command, capture_output=True)
+        result = (run or subprocess.run)(command, capture_output=True)
         if result.returncode != 0:
             raise RuntimeError(
                 f"ibd2sql failed (exit {result.returncode}): "

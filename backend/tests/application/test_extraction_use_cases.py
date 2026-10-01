@@ -10,6 +10,7 @@ from core.application.models import (
     EvidenceKind,
     EvidenceStageRequest,
     NormalizedEvidence,
+    ProvenancedResult,
     VerificationStatus,
 )
 from core.application.use_cases.extraction import (
@@ -49,19 +50,21 @@ class MemoryExtractionResults:
         self.integrity = None
         self.schemas = None
         self.records = None
+        self.record_run_ids = []
         self.decoded = None
         self.normalized = None
 
-    def save_integrity(self, case_id: str, evidence_id: str, result: object) -> None:
+    def save_integrity(self, case_id: str, evidence_id: str, tool_run_id: str, result: object) -> None:
         self.integrity = result
 
-    def save_schemas(self, case_id: str, evidence_id: str, schemas: object) -> None:
+    def save_schemas(self, case_id: str, evidence_id: str, tool_run_id: str, schemas: object) -> None:
         self.schemas = schemas
 
-    def save_physical_records(self, case_id: str, evidence_id: str, records: object) -> None:
-        self.records = records
+    def save_physical_records(self, case_id: str, evidence_id: str, tool_run_id: str, records: object) -> None:
+        self.record_run_ids.append(tool_run_id)
+        self.records = tuple(self.records or ()) + tuple(records)
 
-    def save_decoded_binlog(self, case_id: str, evidence_id: str, decoded: object) -> None:
+    def save_decoded_binlog(self, case_id: str, evidence_id: str, tool_run_id: str, decoded: object) -> None:
         self.decoded = decoded
 
     def save_normalized(self, case_id: str, normalized: object) -> None:
@@ -75,24 +78,24 @@ class StaticAdapter:
         self.records = (phys("accounts", row()),)
         self.decoded = DecodedBinlog(DS02.events, DS02.markers)
 
-    def validate(self, working_copy_path: str):
-        return self.integrity_result
+    def validate(self, case_id: str, evidence_id: str, working_copy_path: str):
+        return ProvenancedResult(self.integrity_result, "run-1", ("run-1",))
 
-    def extract(self, working_copy_path: str):
+    def extract(self, case_id: str, evidence_id: str, working_copy_path: str):
         if working_copy_path.endswith(".ibd"):
-            return self.schemas
-        return ()
+            return ProvenancedResult(self.schemas, "run-1", ("run-1",))
+        return ProvenancedResult((), "run-1", ("run-1",))
 
-    def decode(self, working_copy_path: str) -> DecodedBinlog:
-        return self.decoded
+    def decode(self, case_id: str, evidence_id: str, working_copy_path: str):
+        return ProvenancedResult(self.decoded, "run-1", ("run-1",))
 
 
 class StaticRowExtractor:
     def __init__(self, records: tuple) -> None:
         self.records = records
 
-    def extract(self, working_copy_path: str):
-        return self.records
+    def extract(self, case_id: str, evidence_id: str, working_copy_path: str):
+        return ProvenancedResult(self.records, "run-1", ("run-1",))
 
 
 class StaticNormalizer:

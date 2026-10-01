@@ -4,7 +4,7 @@ import unittest
 from dataclasses import asdict, replace
 
 from core.application.errors import NotFoundError, PrerequisiteError
-from core.application.models import EvidenceKind, NormalizedEvidence
+from core.application.models import EvidenceKind, NormalizedEvidence, ProvenancedResult
 from core.application.orchestration.models import (
     PipelineStage, StageAttempt, StageOutcome, StageStatus,
 )
@@ -97,7 +97,7 @@ class StageApplicabilityTests(unittest.TestCase):
                             "No binlog evidence registered in this case")
 
     def test_zero_extracted_rows_is_success_not_skip(self):
-        self.fixture.rows.extract.return_value = ()
+        self.fixture.rows.extract.return_value = ProvenancedResult((), "run-3", ("run-3",))
         run = self.run_case(self.fixture.ibd)
         state = run.state_for(PipelineStage.EXTRACT_PHYSICAL_ROWS)
         self.assertEqual(state.status, StageStatus.SUCCEEDED)

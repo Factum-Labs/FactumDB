@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import cast
 
 from adapters.tools import (
-    Ibd2SdiAdapter, Ibd2SdiSchemaExtractor, Ibd2SqlAdapter,
+    AuditedPageValidator, Ibd2SdiAdapter, Ibd2SdiSchemaExtractor, Ibd2SqlAdapter,
     Ibd2SqlPhysicalRowExtractor, InnochecksumAdapter, MysqlBinlogAdapter,
     MysqlBinlogDecoder,
 )
@@ -30,6 +30,7 @@ from core.application.use_cases.analysis import (
     ReconcileRecordsUseCase, ReconstructStateUseCase,
 )
 from core.application.use_cases.evidence import VerifyEvidenceUseCase
+from core.application.use_cases.audit import ToolRunAuditService
 from core.application.use_cases.extraction import (
     DecodeBinaryLogsUseCase, ExtractPhysicalRowsUseCase, ExtractSchemaUseCase,
     NormalizeEvidenceUseCase, RunPageValidationUseCase,
@@ -91,6 +92,7 @@ def build_application_services(
 def build_tool_adapters(
     schemas_for_case: Callable[[str], SchemaCatalog],
     *,
+    audit: ToolRunAuditService | None = None,
     ibd2sdi_path: str = "ibd2sdi",
     innochecksum_path: str = "innochecksum",
     ibd2sql_path: str | None = None,
@@ -107,13 +109,14 @@ def build_tool_adapters(
     def decoder_for_case(case_id: str) -> BinlogDecoder:
         return MysqlBinlogDecoder(
             MysqlBinlogAdapter(mysqlbinlog_path), schemas_for_case(case_id).schema_for,
+            audit,
         )
 
     return ExtractionAdapters(
-        page_validator=InnochecksumAdapter(innochecksum_path),
-        schema_extractor=Ibd2SdiSchemaExtractor(Ibd2SdiAdapter(ibd2sdi_path)),
+        page_validator=AuditedPageValidator(InnochecksumAdapter(innochecksum_path), audit),
+        schema_extractor=Ibd2SdiSchemaExtractor(Ibd2SdiAdapter(ibd2sdi_path), audit),
         row_extractor=Ibd2SqlPhysicalRowExtractor(
-            Ibd2SqlAdapter(ibd2sql_path, python_path), include_deleted=include_deleted,
+            Ibd2SqlAdapter(ibd2sql_path, python_path), include_deleted=include_deleted, audit=audit,
         ),
         decoder_for_case=decoder_for_case,
     )
@@ -149,10 +152,16 @@ def build_analysis_pipeline(
         decoder = adapters.decoder_for_case(case_id)
         operation = DecodeBinaryLogsUseCase(d.evidence, decoder, d.extraction, d.clock)
         count = 0
+        receipts = []
         for item in d.evidence.list_for_case(case_id):
             if item.kind is EvidenceKind.BINLOG:
-                count += operation.execute(EvidenceStageRequest(case_id, item.id)).item_count
-        return OperationReceipt(case_id, "binlog_decoding", d.clock.now(), count)
+                receipt = operation.execute(EvidenceStageRequest(case_id, item.id))
+                receipts.append(receipt)
+                count += receipt.item_count
+        return OperationReceipt(
+            case_id, "binlog_decoding", d.clock.now(), count,
+            tuple(run_id for receipt in receipts for run_id in receipt.tool_run_ids),
+        )
 
     handlers = (
         VerifyEvidenceStageHandler(d.evidence, verify),

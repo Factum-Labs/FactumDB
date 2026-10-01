@@ -23,10 +23,10 @@ class Ibd2SdiAdapter:
     def __init__(self, ibd2sdi_path="ibd2sdi"):
         self.ibd2sdi_path = ibd2sdi_path
 
-    def extract_schema(self, ibd_path):
+    def extract_schema(self, ibd_path, *, run=None):
         """Run ibd2sdi on one .ibd file and return its Schema."""
         command = [self.ibd2sdi_path, ibd_path]
-        result = subprocess.run(command, capture_output=True)
+        result = (run or subprocess.run)(command, capture_output=True)
 
         if result.returncode != 0:
             message = result.stderr.decode(errors="replace").strip()

@@ -36,9 +36,9 @@ class RunPageValidationUseCase:
             self._evidence, request.case_id, request.evidence_id, {EvidenceKind.IBD}
         )
         assert evidence.verified_working_path is not None
-        result = self._validator.validate(evidence.verified_working_path)
-        self._results.save_integrity(request.case_id, request.evidence_id, result)
-        return OperationReceipt(request.case_id, "page_validation", self._clock.now(), 1)
+        result = self._validator.validate(request.case_id, request.evidence_id, evidence.verified_working_path)
+        self._results.save_integrity(request.case_id, request.evidence_id, result.primary_tool_run_id, result.value)
+        return OperationReceipt(request.case_id, "page_validation", self._clock.now(), 1, result.contributing_tool_run_ids)
 
 
 class ExtractSchemaUseCase:
@@ -59,10 +59,11 @@ class ExtractSchemaUseCase:
             self._evidence, request.case_id, request.evidence_id, {EvidenceKind.IBD}
         )
         assert evidence.verified_working_path is not None
-        schemas: Sequence[Schema] = tuple(self._extractor.extract(evidence.verified_working_path))
-        self._results.save_schemas(request.case_id, request.evidence_id, schemas)
+        result = self._extractor.extract(request.case_id, request.evidence_id, evidence.verified_working_path)
+        schemas: Sequence[Schema] = tuple(result.value)
+        self._results.save_schemas(request.case_id, request.evidence_id, result.primary_tool_run_id, schemas)
         return OperationReceipt(
-            request.case_id, "schema_extraction", self._clock.now(), len(schemas)
+            request.case_id, "schema_extraction", self._clock.now(), len(schemas), result.contributing_tool_run_ids
         )
 
 
@@ -84,12 +85,19 @@ class ExtractPhysicalRowsUseCase:
             self._evidence, request.case_id, request.evidence_id, {EvidenceKind.IBD}
         )
         assert evidence.verified_working_path is not None
-        records: Sequence[PhysicalRecord] = tuple(
-            self._extractor.extract(evidence.verified_working_path)
-        )
-        self._results.save_physical_records(request.case_id, request.evidence_id, records)
+        result = self._extractor.extract(request.case_id, request.evidence_id, evidence.verified_working_path)
+        records: Sequence[PhysicalRecord] = tuple(result.value)
+        if result.batches:
+            for batch in result.batches:
+                self._results.save_physical_records(
+                    request.case_id, request.evidence_id, batch.tool_run_id, batch.value,
+                )
+        else:
+            self._results.save_physical_records(
+                request.case_id, request.evidence_id, result.primary_tool_run_id, records,
+            )
         return OperationReceipt(
-            request.case_id, "physical_row_extraction", self._clock.now(), len(records)
+            request.case_id, "physical_row_extraction", self._clock.now(), len(records), result.contributing_tool_run_ids
         )
 
 
@@ -111,10 +119,11 @@ class DecodeBinaryLogsUseCase:
             self._evidence, request.case_id, request.evidence_id, {EvidenceKind.BINLOG}
         )
         assert evidence.verified_working_path is not None
-        decoded = self._decoder.decode(evidence.verified_working_path)
-        self._results.save_decoded_binlog(request.case_id, request.evidence_id, decoded)
+        result = self._decoder.decode(request.case_id, request.evidence_id, evidence.verified_working_path)
+        decoded = result.value
+        self._results.save_decoded_binlog(request.case_id, request.evidence_id, result.primary_tool_run_id, decoded)
         count = len(decoded.events) + len(decoded.markers)
-        return OperationReceipt(request.case_id, "binlog_decoding", self._clock.now(), count)
+        return OperationReceipt(request.case_id, "binlog_decoding", self._clock.now(), count, result.contributing_tool_run_ids)
 
 
 class NormalizeEvidenceUseCase:

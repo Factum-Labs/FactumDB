@@ -31,6 +31,8 @@ from core.application.models.extraction_models import (
     DecodedBinlog,
     NormalizedEvidence,
     OperationReceipt,
+    ProvenancedBatch,
+    ProvenancedResult,
 )
 
 from core.application.models.audit_models import (
@@ -50,6 +52,8 @@ __all__ = [
     "EvidenceStageRequest",
     "NormalizedEvidence",
     "OperationReceipt",
+    "ProvenancedBatch",
+    "ProvenancedResult",
     "RawOutputReference",
     "RegisterEvidenceRequest",
     "RegisterEvidenceResponse",
