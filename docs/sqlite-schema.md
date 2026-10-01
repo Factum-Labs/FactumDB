@@ -330,7 +330,9 @@ Reminder from the model doc: `mysql-bin.index` stores absolute paths like `/var/
 
 **A. IDs are text, not auto-increment integers.** Nisal's `Case` model already generates a UUID string for `case_id`, so the same style is used everywhere rather than having two different kinds of ID in one database. Consistency across the team is worth more here than the small speed difference.
 
-**B. Timestamps are TEXT in ISO-8601 UTC**, for example `2026-08-15T19:06:25Z`. SQLite has no date type at all, so the choice is text or a number. Text sorts correctly, and someone opening the database directly can read it, which matters when the point of the tool is showing your working.
+**B. Timestamps are TEXT in ISO-8601 UTC**, for example `2026-08-15T19:06:25.000000Z`. SQLite has no date type at all, so the choice is text or a number. Text sorts correctly, and someone opening the database directly can read it, which matters when the point of the tool is showing your working.
+
+The microseconds are always written, even when they are zero. Text only sorts in time order if every value has the same layout: `19:06:25.500000Z` would otherwise sort before `19:06:25Z`, because `.` comes before `Z`.
 
 **C. Dict and list fields are stored as JSON columns**, except where a real table is clearly better. Row values, page counts and the file lists are JSON. Schema columns and transaction events are real tables, because those two get looked up constantly and need foreign keys. A fully normalised design (one row per column value) would be more "correct" but it is a lot more work, and the project runs to 8 weeks, so the simpler design is used and the tradeoff documented.
 
