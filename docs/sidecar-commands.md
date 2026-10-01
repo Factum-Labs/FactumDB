@@ -35,17 +35,17 @@ fields, nulls, booleans, numbers and collections are rejected with
 `InvalidPayloadError` before a service is called. Names and identifiers are trimmed;
 valid source paths are preserved exactly, including whitespace in filenames.
 
-| Command | Payload fields | Result / behavior |
-|---|---|---|
-| `health` | None | Name, readiness, protocol, `application_configured` |
-| `create_case` | `case_name`, `examiner` | Flat case object: `case_id`, `case_name`, `examiner`, `created_at`, `workspace_path` |
-| `register_evidence` | `case_id`, `source_path` | Evidence metadata and initial verification status |
-| `verify_evidence` | `case_id`, `evidence_id` | Working-copy metadata and verification result |
-| `start_pipeline` | `case_id` | Creates a pending run; does not execute a stage |
-| `run_next_stage` | `run_id` | Executes the next stage synchronously and returns the updated run |
-| `get_pipeline_status` | `run_id` | Reads persisted state without executing or changing anything |
-| `cancel_pipeline` | `run_id` | Records a cancellation request; applied at the next execution boundary |
-| `retry_pipeline` | `run_id` | Resets a retryable failed stage to pending; does not execute it |
+| Command               | Payload fields           | Result / behavior                                                                    |
+| --------------------- | ------------------------ | ------------------------------------------------------------------------------------ |
+| `health`              | None                     | Name, readiness, protocol, `application_configured`                                  |
+| `create_case`         | `case_name`, `examiner`  | Flat case object: `case_id`, `case_name`, `examiner`, `created_at`, `workspace_path` |
+| `register_evidence`   | `case_id`, `source_path` | Evidence metadata and initial verification status                                    |
+| `verify_evidence`     | `case_id`, `evidence_id` | Working-copy metadata and verification result                                        |
+| `start_pipeline`      | `case_id`                | Creates a pending run; does not execute a stage                                      |
+| `run_next_stage`      | `run_id`                 | Executes the next stage synchronously and returns the updated run                    |
+| `get_pipeline_status` | `run_id`                 | Reads persisted state without executing or changing anything                         |
+| `cancel_pipeline`     | `run_id`                 | Records a cancellation request; applied at the next execution boundary               |
+| `retry_pipeline`      | `run_id`                 | Resets a retryable failed stage to pending; does not execute it                      |
 
 Evidence results contain `evidence_id`, `case_id`, `source_path`, `filename`, `kind`,
 `size_bytes`, `source_sha256`, `registered_at`, `verification_status`,
@@ -62,7 +62,11 @@ reasons at the frontend boundary.
 ## Request and response examples
 
 ```json
-{"request_id":"req-1","command":"start_pipeline","payload":{"case_id":"case-1"}}
+{
+  "request_id": "req-1",
+  "command": "start_pipeline",
+  "payload": { "case_id": "case-1" }
+}
 ```
 
 The response envelope always contains `request_id`, `ok`, `result`, `error_code`
@@ -70,7 +74,13 @@ and `error_message`. Successful commands set the error fields to null; failed
 commands set result to null. Unknown cases or run IDs, for example, produce:
 
 ```json
-{"request_id":"req-1","ok":false,"result":null,"error_code":"NotFoundError","error_message":"case not found: case-1"}
+{
+  "request_id": "req-1",
+  "ok": false,
+  "result": null,
+  "error_code": "NotFoundError",
+  "error_message": "case not found: case-1"
+}
 ```
 
 Application errors retain their class names (`NotFoundError`, `ConflictError`,
