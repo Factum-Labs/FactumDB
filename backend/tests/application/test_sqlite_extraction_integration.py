@@ -56,9 +56,11 @@ class SqliteExtractionIntegrationTests(unittest.TestCase):
         self.assertEqual(row["tool_run_id"], run.id)
 
     def test_rejects_failed_or_mismatched_tool_run(self):
-        failed = self._run("failed", self.ibd.id, status=ToolRunStatus.FAILED)
+        # innochecksum is the exception: it exits 1 when it finds damage, so
+        # its failed runs are accepted for integrity results.
+        failed = self._run("failed", self.ibd.id, "ibd2sdi", status=ToolRunStatus.FAILED)
         with self.assertRaises(PrerequisiteError):
-            self.stores.extraction.save_integrity("case-1", self.ibd.id, failed.id, integrity())
+            self.stores.extraction.save_schemas("case-1", self.ibd.id, failed.id, ())
         other = self._run("other", self.binlog.id, "mysqlbinlog")
         with self.assertRaises(ConflictError):
             self.stores.extraction.save_integrity("case-1", self.ibd.id, other.id, integrity())

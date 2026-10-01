@@ -14,6 +14,7 @@ column's name.
 import json
 import subprocess
 
+from adapters.tools.versions import read_version
 from core.domain.models.canonical import Column, Schema
 
 
@@ -22,6 +23,9 @@ class Ibd2SdiAdapter:
 
     def __init__(self, ibd2sdi_path="ibd2sdi"):
         self.ibd2sdi_path = ibd2sdi_path
+
+    def version(self):
+        return read_version([self.ibd2sdi_path])
 
     def extract_schema(self, ibd_path, *, run=None):
         """Run ibd2sdi on one .ibd file and return its Schema."""

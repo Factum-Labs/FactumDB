@@ -15,6 +15,12 @@ Two things about this tool are worth knowing before reading the code:
    value cannot be recovered from the tablespace, so dropping zeros as noise
    would throw away a real finding.
 
+3. It exits with 1 both when it finds a damaged page and when it could not
+   check the file at all - a missing file, a file it could not lock, a file
+   too small to be a tablespace. Only the first is damage. The output tells
+   them apart: a bad page is reported on a line starting "Fail", a problem
+   with the run on a line starting "Error".
+
 The tool is only ever run in read-only mode. innochecksum can rewrite checksums
 with -w, and that flag must never be used here because it would modify evidence.
 """
@@ -22,6 +28,7 @@ with -w, and that flag must never be used here because it would modify evidence.
 import re
 import subprocess
 
+from adapters.tools.versions import read_version
 from core.domain.models.canonical import IntegrityResult
 
 # Lines in the summary look like "       1\tIndex page" - spaces, the count,
@@ -34,6 +41,9 @@ class InnochecksumAdapter:
 
     def __init__(self, innochecksum_path="innochecksum"):
         self.innochecksum_path = innochecksum_path
+
+    def version(self):
+        return read_version([self.innochecksum_path])
 
     def validate(self, ibd_path, *, run=None):
         """Check one .ibd file and return an IntegrityResult.
@@ -78,8 +88,16 @@ class InnochecksumAdapter:
         # A damaged file also makes -S fail, so total_pages is 0 in that case -
         # we know the file is bad but could not count its pages.
         if check_result.returncode != 0:
-            status = "damaged"
             damaged_pages = InnochecksumAdapter._count_failures(check_text)
+            if damaged_pages == 0:
+                # A non-zero exit with no failed page means the file was never
+                # checked. Reporting that as damage would be a finding the
+                # evidence does not support.
+                raise RuntimeError(
+                    "innochecksum could not check the file "
+                    f"(exit {check_result.returncode}): {check_text.strip()[:300]}"
+                )
+            status = "damaged"
         elif summary_result.returncode != 0 or not page_counts:
             # Nothing failed outright, but we could not read enough to judge.
             status = "unknown"
@@ -127,14 +145,13 @@ class InnochecksumAdapter:
 
     @staticmethod
     def _count_failures(check_text):
-        """How many pages innochecksum complained about.
+        """How many pages innochecksum reported as bad.
 
-        The tool stops at the first bad page by default, so this is usually 1.
-        We return at least 1 whenever validation failed, because a non-zero exit
-        means something was wrong even if we could not parse the message.
+        A bad page is reported as "Fail: page 4 invalid". The tool stops at the
+        first one by default, so this is usually 1 for a damaged file, and 0
+        when the run failed for some other reason - those are reported on
+        "Error:" lines instead.
         """
-        failures = 0
-        for line in check_text.splitlines():
-            if "Fail" in line or "fail" in line:
-                failures += 1
-        return max(failures, 1)
+        return sum(
+            1 for line in check_text.splitlines() if line.strip().startswith("Fail")
+        )
