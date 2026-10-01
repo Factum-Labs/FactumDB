@@ -32,13 +32,22 @@ class AuditedSubprocessRunner:
             raise ValueError("tool command must not be empty")
         requested = str(command[0])
         executable = shutil.which(requested) or requested
+        tool_name = _tool_name(requested)
+        recorded_executable = executable
+        recorded_arguments = tuple(str(value) for value in command[1:])
+        if tool_name == "ibd2sql" and recorded_arguments:
+            # ibd2sql is a Python script run by an interpreter. The script is
+            # what identifies the tool: hashing python3 would record which
+            # Python ran, not which ibd2sql produced the rows.
+            recorded_executable = recorded_arguments[0]
+            recorded_arguments = recorded_arguments[1:]
         started = self._audit.start(StartToolRunRequest(
             case_id=self._case_id,
             evidence_id=self._evidence_id,
-            tool_name=_tool_name(requested),
-            tool_version=self._versions.get(_tool_name(requested), "unknown"),
-            executable_path=executable,
-            arguments=tuple(str(value) for value in command[1:]),
+            tool_name=tool_name,
+            tool_version=self._versions.get(tool_name, "unknown"),
+            executable_path=recorded_executable,
+            arguments=recorded_arguments,
         ))
         self.run_ids.append(started.id)
         executed_command = [executable, *(str(value) for value in command[1:])]

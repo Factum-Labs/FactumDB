@@ -57,7 +57,22 @@ def test_timestamp_is_stored_as_iso_8601_utc(cases, connection) -> None:
 
     stored = connection.execute("SELECT created_at FROM cases").fetchone()["created_at"]
 
-    assert stored == "2026-09-23T10:00:00Z"
+    assert stored == "2026-09-23T10:00:00.000000Z"
+
+
+def test_stored_timestamps_sort_in_time_order() -> None:
+    """Every ORDER BY on a timestamp column compares the stored text.
+
+    Without the microseconds always written, a whole second is stored as
+    "10:00:00Z" and half a second later as "10:00:00.500000Z" - and the
+    later one sorts first, because "." comes before "Z".
+    """
+    from adapters.persistence._timestamps import to_text
+
+    whole = datetime(2026, 9, 23, 10, 0, 0, tzinfo=timezone.utc)
+    later = whole.replace(microsecond=500000)
+
+    assert to_text(whole) < to_text(later)
 
 
 def test_workspace_path_survives(cases) -> None:

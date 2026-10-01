@@ -24,6 +24,7 @@ import os
 import re
 import subprocess
 
+from adapters.tools.versions import read_version
 from core.domain.models.canonical import PhysicalRecord
 
 # One INSERT statement: schema, table, the column list, then the values.
@@ -39,16 +40,17 @@ class Ibd2SqlAdapter:
         self.ibd2sql_path = ibd2sql_path or os.environ.get("FACTUMDB_IBD2SQL_PATH")
         self.python_path = python_path
 
+    def version(self):
+        self._require_path()
+        return read_version([self.python_path, self.ibd2sql_path])
+
     def extract_records(self, ibd_path, deleted=False, *, run=None):
         """Return the rows in one .ibd file.
 
         deleted=False gives the live rows, deleted=True gives the rows that are
         still on the page but flagged as deleted.
         """
-        if not self.ibd2sql_path:
-            raise RuntimeError(
-                "FACTUMDB_IBD2SQL_PATH is not set. It must point at ibd2sql's main.py"
-            )
+        self._require_path()
 
         command = [self.python_path, self.ibd2sql_path, ibd_path,
                    "--sql", "--complete-insert"]
@@ -62,6 +64,12 @@ class Ibd2SqlAdapter:
                 f"{result.stderr.decode(errors='replace')[:300]}"
             )
         return self.parse(result.stdout.decode(errors="replace"), is_deleted=deleted)
+
+    def _require_path(self):
+        if not self.ibd2sql_path:
+            raise RuntimeError(
+                "FACTUMDB_IBD2SQL_PATH is not set. It must point at ibd2sql's main.py"
+            )
 
     @staticmethod
     def parse(text, is_deleted=False):

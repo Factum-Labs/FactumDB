@@ -13,6 +13,7 @@ from adapters.tools import (
     Ibd2SqlPhysicalRowExtractor, InnochecksumAdapter, MysqlBinlogAdapter,
     MysqlBinlogDecoder,
 )
+from adapters.tools.versions import ToolVersions
 from core.application.models import EvidenceKind, EvidenceStageRequest, OperationReceipt
 from core.application.orchestration.handlers import (
     CaseStageHandler, EvidenceStageHandler, VerifyEvidenceStageHandler,
@@ -106,17 +107,27 @@ def build_tool_adapters(
     It is deliberately independent of DomainRepository.inputs_for: a complete
     domain input bundle may not exist until normalization has finished.
     """
+    checksum = InnochecksumAdapter(innochecksum_path)
+    sdi = Ibd2SdiAdapter(ibd2sdi_path)
+    rows = Ibd2SqlAdapter(ibd2sql_path, python_path)
+    binlog = MysqlBinlogAdapter(mysqlbinlog_path)
+    # Read lazily, on the first audited run of each tool, so building the
+    # adapters still launches nothing.
+    versions = ToolVersions({
+        "innochecksum": checksum.version, "ibd2sdi": sdi.version,
+        "ibd2sql": rows.version, "mysqlbinlog": binlog.version,
+    })
+
     def decoder_for_case(case_id: str) -> BinlogDecoder:
         return MysqlBinlogDecoder(
-            MysqlBinlogAdapter(mysqlbinlog_path), schemas_for_case(case_id).schema_for,
-            audit,
+            binlog, schemas_for_case(case_id).schema_for, audit, versions=versions,
         )
 
     return ExtractionAdapters(
-        page_validator=AuditedPageValidator(InnochecksumAdapter(innochecksum_path), audit),
-        schema_extractor=Ibd2SdiSchemaExtractor(Ibd2SdiAdapter(ibd2sdi_path), audit),
+        page_validator=AuditedPageValidator(checksum, audit, versions=versions),
+        schema_extractor=Ibd2SdiSchemaExtractor(sdi, audit, versions=versions),
         row_extractor=Ibd2SqlPhysicalRowExtractor(
-            Ibd2SqlAdapter(ibd2sql_path, python_path), include_deleted=include_deleted, audit=audit,
+            rows, include_deleted=include_deleted, audit=audit, versions=versions,
         ),
         decoder_for_case=decoder_for_case,
     )

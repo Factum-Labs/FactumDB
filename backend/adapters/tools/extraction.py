@@ -20,23 +20,27 @@ from core.domain.models.canonical import PhysicalRecord, Schema
 class Ibd2SdiSchemaExtractor:
     """Adapt a single extracted Schema to the SchemaExtractor sequence contract."""
 
-    def __init__(self, adapter: Ibd2SdiAdapter, audit: ToolRunAuditService | None = None) -> None:
+    def __init__(self, adapter: Ibd2SdiAdapter, audit: ToolRunAuditService | None = None,
+                 *, versions=None) -> None:
         self._adapter = adapter
         self._audit = audit
+        self._versions = versions
 
     def extract(self, case_id: str, evidence_id: str, working_copy_path: str) -> ProvenancedResult[tuple[Schema, ...]]:
-        runner = _runner(self._audit, case_id, evidence_id)
+        runner = _runner(self._audit, case_id, evidence_id, self._versions)
         value = (self._adapter.extract_schema(working_copy_path, run=runner.run if runner else None),)
         return _result(value, runner)
 
 
 class AuditedPageValidator:
-    def __init__(self, adapter, audit: ToolRunAuditService | None = None) -> None:
+    def __init__(self, adapter, audit: ToolRunAuditService | None = None,
+                 *, versions=None) -> None:
         self._adapter = adapter
         self._audit = audit
+        self._versions = versions
 
     def validate(self, case_id: str, evidence_id: str, working_copy_path: str) -> ProvenancedResult[IntegrityResult]:
-        runner = _runner(self._audit, case_id, evidence_id)
+        runner = _runner(self._audit, case_id, evidence_id, self._versions)
         value = self._adapter.validate(working_copy_path, run=runner.run if runner else None)
         return _result(value, runner)
 
@@ -49,13 +53,14 @@ class Ibd2SqlPhysicalRowExtractor:
     """
 
     def __init__(self, adapter: Ibd2SqlAdapter, *, include_deleted: bool = False,
-                 audit: ToolRunAuditService | None = None) -> None:
+                 audit: ToolRunAuditService | None = None, versions=None) -> None:
         self._adapter = adapter
         self._include_deleted = include_deleted
         self._audit = audit
+        self._versions = versions
 
     def extract(self, case_id: str, evidence_id: str, working_copy_path: str) -> ProvenancedResult[tuple[PhysicalRecord, ...]]:
-        runner = _runner(self._audit, case_id, evidence_id)
+        runner = _runner(self._audit, case_id, evidence_id, self._versions)
         execute = runner.run if runner else None
         live = tuple(self._adapter.extract_records(working_copy_path, run=execute))
         live_run_id = runner.run_ids[-1] if runner else "unaudited"
@@ -87,21 +92,26 @@ class MysqlBinlogDecoder:
         adapter: MysqlBinlogAdapter,
         schema_lookup: Callable[[str, str], Schema | None],
         audit: ToolRunAuditService | None = None,
+        *,
+        versions=None,
     ) -> None:
         self._adapter = adapter
         self._schema_lookup = schema_lookup
         self._audit = audit
+        self._versions = versions
 
     def decode(self, case_id: str, evidence_id: str, working_copy_path: str) -> ProvenancedResult[DecodedBinlog]:
-        runner = _runner(self._audit, case_id, evidence_id)
+        runner = _runner(self._audit, case_id, evidence_id, self._versions)
         events, markers, warnings = self._adapter.decode(
             working_copy_path, self._schema_lookup, run=runner.run if runner else None,
         )
         return _result(DecodedBinlog(tuple(events), tuple(markers), tuple(warnings)), runner)
 
 
-def _runner(audit, case_id, evidence_id):
-    return AuditedSubprocessRunner(audit, case_id, evidence_id) if audit is not None else None
+def _runner(audit, case_id, evidence_id, versions=None):
+    if audit is None:
+        return None
+    return AuditedSubprocessRunner(audit, case_id, evidence_id, versions=versions)
 
 
 def _result(value, runner):

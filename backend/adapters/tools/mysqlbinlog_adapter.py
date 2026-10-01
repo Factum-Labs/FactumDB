@@ -41,6 +41,7 @@ import re
 import subprocess
 from datetime import datetime, timedelta, timezone
 
+from adapters.tools.versions import read_version
 from core.domain.models.canonical import BinlogEvent, TransactionMarker
 from core.domain.models.values import UndecodableValue
 from core.domain.models.canonical import AnalysisWarning
@@ -71,6 +72,9 @@ class MysqlBinlogAdapter:
 
     def __init__(self, mysqlbinlog_path="mysqlbinlog"):
         self.mysqlbinlog_path = mysqlbinlog_path
+
+    def version(self):
+        return read_version([self.mysqlbinlog_path])
 
     def decode(self, binlog_path, schema_lookup, *, run=None):
         """Run mysqlbinlog on one file and parse what it prints.
@@ -270,7 +274,10 @@ class _ParserState:
             thread_id=self.thread_id,
         )
         self.events.append(event)
-        if self.txn_open:
+        # A multi-row event reaches here once per row, all at one position.
+        # The marker lists binlog events, not rows, so the position goes in
+        # once - listing it twice would make the event look like two.
+        if self.txn_open and self.log_position not in self.txn_positions[-1:]:
             self.txn_positions.append(self.log_position)
         self._reset_row()
 

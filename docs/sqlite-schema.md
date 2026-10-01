@@ -104,9 +104,9 @@ CREATE INDEX idx_tool_runs_evidence ON tool_runs(evidence_id);
 
 This is the most important table in the schema. Almost every other table has a `tool_run_id`, so any value we show in a report can be traced back to the exact command that produced it. That is the whole "how do you know that?" requirement.
 
-`tool_version` matters because these tools change their output format between versions. Three of them have a `--version` flag. `ibd2sql` does not have one at all, so for that one `git describe --tags` inside its clone is used, which gives something like `v2.3-3-g62b7db5`. That is better than a version number because it points at one exact commit.
+`tool_version` matters because these tools change their output format between versions. It is read from the tool's own `--version` the first time each tool runs, not written into configuration, because a system update can change it without anything in the project changing - the MySQL utilities here went from 8.4.10 to 8.4.11 that way. The MySQL tools print `innochecksum  Ver 8.4.11-0ubuntu0.26.04.1 for Linux...` and only the part after `Ver` is kept. `ibd2sql` prints `ibd2sql v2.3-20260526`, which is kept as printed.
 
-`executable_path` and `executable_sha256` identify the binary itself. A version string can be shared by several builds; a hash of the file cannot, so the claim is about one specific executable rather than a label.
+`executable_path` and `executable_sha256` identify the binary itself. A version string can be shared by several builds; a hash of the file cannot, so the claim is about one specific executable rather than a label. For `ibd2sql`, which is a Python script, the executable recorded is `main.py`, not `python3`. Hashing the interpreter would say which Python ran, not which `ibd2sql` produced the rows.
 
 `arguments_json` holds the arguments as a JSON array instead of one command string. Re-joining arguments into a line loses the boundary between them as soon as a path contains a space, and then it is no longer possible to say exactly what was run.
 
@@ -330,7 +330,9 @@ Reminder from the model doc: `mysql-bin.index` stores absolute paths like `/var/
 
 **A. IDs are text, not auto-increment integers.** Nisal's `Case` model already generates a UUID string for `case_id`, so the same style is used everywhere rather than having two different kinds of ID in one database. Consistency across the team is worth more here than the small speed difference.
 
-**B. Timestamps are TEXT in ISO-8601 UTC**, for example `2026-08-15T19:06:25Z`. SQLite has no date type at all, so the choice is text or a number. Text sorts correctly, and someone opening the database directly can read it, which matters when the point of the tool is showing your working.
+**B. Timestamps are TEXT in ISO-8601 UTC**, for example `2026-08-15T19:06:25.000000Z`. SQLite has no date type at all, so the choice is text or a number. Text sorts correctly, and someone opening the database directly can read it, which matters when the point of the tool is showing your working.
+
+The microseconds are always written, even when they are zero. Text only sorts in time order if every value has the same layout: `19:06:25.500000Z` would otherwise sort before `19:06:25Z`, because `.` comes before `Z`.
 
 **C. Dict and list fields are stored as JSON columns**, except where a real table is clearly better. Row values, page counts and the file lists are JSON. Schema columns and transaction events are real tables, because those two get looked up constantly and need foreign keys. A fully normalised design (one row per column value) would be more "correct" but it is a lot more work, and the project runs to 8 weeks, so the simpler design is used and the tradeoff documented.
 

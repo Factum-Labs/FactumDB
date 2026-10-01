@@ -21,25 +21,32 @@ class SqliteExtractionRepository:
 
     def save_integrity(self, case_id, evidence_id, tool_run_id, result) -> None:
         with self._atomic():
-            self._validate_provenance(case_id, evidence_id, tool_run_id)
+            # innochecksum exits 1 when it finds a damaged page, so the run
+            # that finds damage is recorded as failed - and on a damaged file
+            # the -S run fails too. Accepting only successful runs would make
+            # damage, the most important result this stage has, unsaveable.
+            # The adapter refuses runs that failed for any other reason.
+            self._validate_provenance(
+                case_id, evidence_id, tool_run_id, "innochecksum", allow_failed=True
+            )
             self._integrity.save(result, evidence_id, tool_run_id)
 
     def save_schemas(self, case_id, evidence_id, tool_run_id, schemas) -> None:
         with self._atomic():
-            self._validate_provenance(case_id, evidence_id, tool_run_id)
+            self._validate_provenance(case_id, evidence_id, tool_run_id, "ibd2sdi")
             for schema in schemas:
                 self._schemas.save(schema, evidence_id, tool_run_id)
 
     def save_physical_records(self, case_id, evidence_id, tool_run_id, records) -> None:
         with self._atomic():
-            self._validate_provenance(case_id, evidence_id, tool_run_id)
+            self._validate_provenance(case_id, evidence_id, tool_run_id, "ibd2sql")
             self._physical.save_many(records, evidence_id, tool_run_id)
 
     def save_decoded_binlog(
         self, case_id: str, evidence_id: str, tool_run_id: str, decoded: DecodedBinlog,
     ) -> None:
         with self._atomic():
-            self._validate_provenance(case_id, evidence_id, tool_run_id)
+            self._validate_provenance(case_id, evidence_id, tool_run_id, "mysqlbinlog")
             self._events.save_many(decoded.events, evidence_id, tool_run_id)
             self._transactions.save_many(decoded.markers, evidence_id, tool_run_id)
             self._warnings.save_many(decoded.warnings, case_id, evidence_id, tool_run_id)
@@ -49,7 +56,8 @@ class SqliteExtractionRepository:
             "normalized evidence persistence is not available in the current SQLite schema"
         )
 
-    def _validate_provenance(self, case_id: str, evidence_id: str, tool_run_id: str) -> None:
+    def _validate_provenance(self, case_id: str, evidence_id: str, tool_run_id: str,
+                             tool_name: str, *, allow_failed: bool = False) -> None:
         evidence = self._connection.execute(
             "SELECT case_id FROM evidence_files WHERE evidence_id = ?", (evidence_id,)
         ).fetchone()
@@ -58,13 +66,22 @@ class SqliteExtractionRepository:
         if evidence["case_id"] != case_id:
             raise ConflictError("evidence does not belong to the supplied case")
         run = self._connection.execute(
-            "SELECT case_id, evidence_id, status, exit_code FROM tool_runs WHERE tool_run_id = ?",
+            "SELECT case_id, evidence_id, tool_name, status, exit_code FROM tool_runs "
+            "WHERE tool_run_id = ?",
             (tool_run_id,),
         ).fetchone()
         if run is None:
             raise NotFoundError(f"tool run not found: {tool_run_id}")
         if run["case_id"] != case_id or run["evidence_id"] != evidence_id:
             raise ConflictError("tool run does not belong to the supplied case and evidence")
+        if run["tool_name"] != tool_name:
+            # Schemas pointing at an innochecksum run would be provenance
+            # that is present but false.
+            raise ConflictError(
+                f"{tool_name} output cannot point at a {run['tool_name']} run"
+            )
+        if allow_failed and run["status"] == "failed":
+            return
         if run["status"] != "succeeded" or run["exit_code"] != 0:
             raise PrerequisiteError("extraction results require a successful tool run")
 
