@@ -137,6 +137,10 @@ class AnalysisOrchestrator:
         self._publish(run, completed_state, outcome.skip_reason or outcome.message or "stage completed")
         return run
 
+    def get_status(self, run_id: str) -> PipelineRun:
+        """Return persisted state without executing or changing a stage."""
+        return self._require_run(run_id)
+
     def run_all(self, run_id: str) -> PipelineRun:
         run = self._require_run(run_id)
         while not run.stopped:

@@ -98,14 +98,15 @@ progress events, failure capture, safe-retry policy, run-next/run-all operations
 cancellation between stages. Persistence and progress delivery remain ports so SQLite and
 Tauri can be connected by their owners.
 
-The Python sidecar skeleton provides a versioned JSON-lines request/response boundary, command
-routing, structured failures, request correlation, and a health command. Application commands
-can be registered in its composition root after the SQLite repositories are supplied.
+The Python sidecar provides a versioned JSON-lines request/response boundary, command
+routing, structured failures, request correlation, a health command, and eight application
+commands. `build_application_services` connects injected dependencies to command handlers;
+see [sidecar-commands.md](sidecar-commands.md) for payloads and bootstrap instructions.
 
 ## Deferred work
 
-Concrete SQLite and Tauri integration remain outstanding. The sidecar transport exists,
-but production application commands have not been registered yet. The composition factory
+Concrete SQLite and Tauri integration remain outstanding. Application commands are registered,
+but production dependencies still need to be supplied. The composition factory
 assembles use cases and handlers; a production caller still needs to supply repositories,
 normalization and case-scoped schema access. Report generation is a separate increment.
 
@@ -169,8 +170,8 @@ Progress counts reflect processed evidence, extracted items, transactions,
 correlated records, reconstructed histories and reconciliation rows. Existing
 stage failure, retry and cancellation behavior is retained. Interrupted-run
 recovery, idempotency guarantees and tool-run audit wiring
-remain separate work. This composition does not register sidecar commands or
-create concrete SQLite repositories.
+remain separate work. `build_application_services` assembles the command dependencies;
+`build_router` registers them. Neither creates concrete SQLite repositories.
 
 Composition tests execute the full sequence with controlled extraction ports,
 in-memory persistence, and real domain services. Additional tests cover deferred
