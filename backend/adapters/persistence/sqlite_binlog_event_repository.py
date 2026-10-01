@@ -28,6 +28,7 @@ on the transaction repository.
 from typing import Optional, Sequence
 
 from adapters.persistence._timestamps import from_text, to_text
+from adapters.persistence._transactions import transaction
 from adapters.persistence._values import from_json, to_json
 from core.application.ports.binlog_event_repository_port import (
     BinlogEventRepositoryPort,
@@ -92,7 +93,7 @@ class SqliteBinlogEventRepository(BinlogEventRepositoryPort):
 
         files = {event.source_file for event in events}
 
-        with self._connection:
+        with transaction(self._connection):
             for source_file in files:
                 # Transactions link to these events, and the foreign key
                 # would block the delete. The links go too; saving the

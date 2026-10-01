@@ -21,6 +21,7 @@ events() is on the binlog event repository.
 
 from typing import Sequence
 
+from adapters.persistence._transactions import transaction
 from core.application.ports.transaction_repository_port import (
     TransactionRepositoryPort,
 )
@@ -57,7 +58,7 @@ class SqliteTransactionRepository(TransactionRepositoryPort):
 
         files = {marker.source_file for marker in markers}
 
-        with self._connection:
+        with transaction(self._connection):
             for source_file in files:
                 self._delete_file(evidence_id, source_file)
 

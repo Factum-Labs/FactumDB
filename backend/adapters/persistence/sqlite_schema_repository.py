@@ -21,6 +21,7 @@ correlation services with nothing in between.
 
 from typing import Optional, Sequence, Tuple
 
+from adapters.persistence._transactions import transaction
 from core.application.ports.schema_repository_port import SchemaRepositoryPort
 from core.domain.models.canonical import Column, Schema
 
@@ -49,7 +50,7 @@ class SqliteSchemaRepository(SchemaRepositoryPort):
         # One transaction: the schema row and its columns land together, or
         # neither does. A schema with no columns would be found by a lookup
         # and then map every @N to nothing.
-        with self._connection:
+        with transaction(self._connection):
             # Delete first so a re-extraction that found fewer columns does
             # not leave the old extras behind.
             self._connection.execute(

@@ -14,6 +14,7 @@ says which table that file holds.
 import json
 from typing import Optional, Sequence
 
+from adapters.persistence._transactions import transaction
 from core.application.ports.integrity_repository_port import IntegrityRepositoryPort
 from core.domain.models.canonical import IntegrityResult
 
@@ -36,7 +37,7 @@ class SqliteIntegrityRepository(IntegrityRepositoryPort):
         reason an earlier value cannot be recovered from the file, so a zero
         here is a finding, not noise.
         """
-        with self._connection:
+        with transaction(self._connection):
             self._connection.execute(
                 "DELETE FROM integrity_results WHERE evidence_id = ?", (evidence_id,)
             )

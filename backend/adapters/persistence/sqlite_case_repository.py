@@ -18,6 +18,7 @@ The mapping happens here, which is what this layer is for.
 from typing import Optional
 
 from adapters.persistence._timestamps import from_text, to_text
+from adapters.persistence._transactions import transaction
 from core.application.ports.case_repository_port import CaseRepositoryPort
 from core.domain.models.case import Case
 
@@ -38,17 +39,17 @@ class SqliteCaseRepository(CaseRepositoryPort):
         Replacing rather than failing means re-running the pipeline on the
         same case does not crash. The row is case metadata, not evidence.
         """
-        self._connection.execute(
-            f"INSERT OR REPLACE INTO cases ({_COLUMNS}) VALUES (?, ?, ?, ?, ?)",
-            (
-                case.id,
-                case.name,
-                case.examiner,
-                case.workspace_path,
-                to_text(case.created_at),
-            ),
-        )
-        self._connection.commit()
+        with transaction(self._connection):
+            self._connection.execute(
+                f"INSERT OR REPLACE INTO cases ({_COLUMNS}) VALUES (?, ?, ?, ?, ?)",
+                (
+                    case.id,
+                    case.name,
+                    case.examiner,
+                    case.workspace_path,
+                    to_text(case.created_at),
+                ),
+            )
 
     def find_by_id(self, case_id: str) -> Optional[Case]:
         """Return the case with this id, or None if there is not one.

@@ -28,6 +28,7 @@ import json
 from typing import Optional, Sequence
 
 from adapters.persistence._timestamps import from_text, to_text
+from adapters.persistence._transactions import transaction
 from core.application.ports.tool_run_repository_port import ToolRunRepositoryPort
 from core.domain.models.canonical import EventRef, ProvenanceReference
 from core.domain.models.evidence import RawOutputReference, ToolRun, ToolRunStatus
@@ -48,27 +49,27 @@ class SqliteToolRunRepository(ToolRunRepositoryPort):
         self._connection = connection
 
     def save(self, run: ToolRun) -> None:
-        self._connection.execute(
-            f"INSERT OR REPLACE INTO tool_runs ({_COLUMNS}) "
-            "VALUES (" + ", ".join(["?"] * 18) + ")",
-            (
-                run.id,
-                run.case_id,
-                run.evidence_id,
-                run.tool_name,
-                run.tool_version,
-                run.executable_path,
-                run.executable_sha256,
-                json.dumps(list(run.arguments)),
-                str(run.status),
-                to_text(run.started_at),
-                to_text(run.finished_at) if run.finished_at is not None else None,
-                run.exit_code,
-                *_output_columns(run.stdout),
-                *_output_columns(run.stderr),
-            ),
-        )
-        self._connection.commit()
+        with transaction(self._connection):
+            self._connection.execute(
+                f"INSERT OR REPLACE INTO tool_runs ({_COLUMNS}) "
+                "VALUES (" + ", ".join(["?"] * 18) + ")",
+                (
+                    run.id,
+                    run.case_id,
+                    run.evidence_id,
+                    run.tool_name,
+                    run.tool_version,
+                    run.executable_path,
+                    run.executable_sha256,
+                    json.dumps(list(run.arguments)),
+                    str(run.status),
+                    to_text(run.started_at),
+                    to_text(run.finished_at) if run.finished_at is not None else None,
+                    run.exit_code,
+                    *_output_columns(run.stdout),
+                    *_output_columns(run.stderr),
+                ),
+            )
 
     def find_by_id(self, tool_run_id: str) -> Optional[ToolRun]:
         row = self._connection.execute(

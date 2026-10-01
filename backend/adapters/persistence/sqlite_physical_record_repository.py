@@ -18,6 +18,7 @@ methods, so this class can be passed straight to the reconciliation service.
 
 from typing import FrozenSet, Sequence, Tuple
 
+from adapters.persistence._transactions import transaction
 from adapters.persistence._values import from_json, to_json
 from core.application.ports.physical_record_repository_port import (
     PhysicalRecordRepositoryPort,
@@ -71,7 +72,7 @@ class SqlitePhysicalRecordRepository(PhysicalRecordRepositoryPort):
                 )
             )
 
-        with self._connection:
+        with transaction(self._connection):
             for database, table, is_deleted in groups:
                 self._connection.execute(
                     """

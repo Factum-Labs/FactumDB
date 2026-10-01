@@ -14,6 +14,7 @@ import json
 import os
 from typing import Optional, Sequence
 
+from adapters.persistence._transactions import transaction
 from core.application.ports.binlog_inventory_repository_port import (
     BinlogInventoryRepositoryPort,
 )
@@ -43,7 +44,7 @@ class SqliteBinlogInventoryRepository(BinlogInventoryRepositoryPort):
         present_set = set(present)
         missing = [name for name in listed if name not in present_set]
 
-        with self._connection:
+        with transaction(self._connection):
             self._connection.execute(
                 "DELETE FROM binlog_inventory WHERE evidence_id = ?", (evidence_id,)
             )

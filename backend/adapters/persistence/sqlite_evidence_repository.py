@@ -18,6 +18,7 @@ import json
 from typing import Optional, Sequence
 
 from adapters.persistence._timestamps import from_text, to_text
+from adapters.persistence._transactions import transaction
 from core.application.ports.evidence_repository_port import EvidenceRepositoryPort
 from core.domain.models.evidence import EvidenceFile, EvidenceKind, VerificationStatus
 
@@ -35,25 +36,25 @@ class SqliteEvidenceRepository(EvidenceRepositoryPort):
         self._connection = connection
 
     def save(self, evidence: EvidenceFile) -> None:
-        self._connection.execute(
-            f"INSERT OR REPLACE INTO evidence_files ({_COLUMNS}) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                evidence.id,
-                evidence.case_id,
-                str(evidence.kind),
-                evidence.filename,
-                evidence.source_path,
-                evidence.size_bytes,
-                evidence.source_sha256,
-                str(evidence.verification_status),
-                evidence.working_copy_path,
-                evidence.working_copy_sha256,
-                evidence.acquisition_method,
-                to_text(evidence.registered_at),
-            ),
-        )
-        self._connection.commit()
+        with transaction(self._connection):
+            self._connection.execute(
+                f"INSERT OR REPLACE INTO evidence_files ({_COLUMNS}) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    evidence.id,
+                    evidence.case_id,
+                    str(evidence.kind),
+                    evidence.filename,
+                    evidence.source_path,
+                    evidence.size_bytes,
+                    evidence.source_sha256,
+                    str(evidence.verification_status),
+                    evidence.working_copy_path,
+                    evidence.working_copy_sha256,
+                    evidence.acquisition_method,
+                    to_text(evidence.registered_at),
+                ),
+            )
 
     def find_by_id(self, evidence_id: str) -> Optional[EvidenceFile]:
         row = self._connection.execute(

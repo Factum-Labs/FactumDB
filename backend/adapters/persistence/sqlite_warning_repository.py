@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Callable, Optional, Sequence
 
 from adapters.persistence._timestamps import to_text
+from adapters.persistence._transactions import transaction
 from core.application.ports.warning_repository_port import WarningRepositoryPort
 from core.domain.models.canonical import AnalysisWarning
 
@@ -65,7 +66,7 @@ class SqliteWarningRepository(WarningRepositoryPort):
             for i, warning in enumerate(warnings)
         ]
 
-        with self._connection:
+        with transaction(self._connection):
             self._connection.executemany(
                 f"INSERT INTO warnings ({_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 rows,
