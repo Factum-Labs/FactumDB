@@ -253,6 +253,35 @@ def test_each_ibd_stage_is_stored_against_its_own_tool(
     assert run_in("physical_records") == "run-sql"
 
 
+def test_damage_is_saved_against_the_failed_innochecksum_run(
+    extraction, evidence, tool_runs, case_id, connection
+) -> None:
+    """innochecksum exits 1 when it finds damage, so that run is recorded as
+    failed. If only successful runs counted, damage could never be saved."""
+    evidence.save(an_ibd(case_id))
+    tool_runs.save(
+        a_run(case_id, "ev-ibd", "run-check", tool_name="innochecksum",
+              status=ToolRunStatus.FAILED, exit_code=1)
+    )
+
+    extraction.save_integrity(case_id, "ev-ibd", IntegrityResult(0, 1, "damaged"))
+
+    stored = connection.execute("SELECT tool_run_id, status FROM integrity_results").fetchone()
+    assert tuple(stored) == ("run-check", "damaged")
+
+
+def test_a_run_still_in_progress_is_never_used(extraction, evidence, tool_runs, case_id) -> None:
+    """It has not produced its output yet, so nothing can come from it."""
+    evidence.save(an_ibd(case_id))
+    tool_runs.save(
+        a_run(case_id, "ev-ibd", tool_name="innochecksum", status=ToolRunStatus.RUNNING,
+              finished_at=None, exit_code=None, stdout=None)
+    )
+
+    with pytest.raises(PrerequisiteError):
+        extraction.save_integrity(case_id, "ev-ibd", IntegrityResult(7, 0, "valid"))
+
+
 def test_finding_no_rows_still_needs_a_run(extraction, evidence, case_id) -> None:
     """"No deleted rows found" is only a finding if ibd2sql is known to have run."""
     evidence.save(an_ibd(case_id))

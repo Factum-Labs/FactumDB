@@ -54,7 +54,18 @@ class SqliteExtractionRepository:
 
     def save_integrity(self, case_id: str, evidence_id: str,
                        result: IntegrityResult) -> None:
-        run_id = self._tool_run_for(case_id, evidence_id, "innochecksum")
+        """A failed innochecksum run still counts here.
+
+        innochecksum exits with 1 when it finds a damaged page, so the run
+        that discovers damage is recorded as failed - and on a damaged file
+        the -S run fails as well. Accepting only successful runs would mean a
+        damaged tablespace, the most important result this stage can give,
+        could never be saved. Telling damage apart from a run that could not
+        check the file at all is the adapter's job.
+        """
+        run_id = self._tool_run_for(
+            case_id, evidence_id, "innochecksum", statuses=("succeeded", "failed")
+        )
         self._integrity.save(result, evidence_id, run_id)
 
     def save_schemas(self, case_id: str, evidence_id: str,
@@ -103,26 +114,32 @@ class SqliteExtractionRepository:
             "has not been agreed"
         )
 
-    def _tool_run_for(self, case_id: str, evidence_id: str, tool_name: str) -> str:
-        """The latest successful run of this tool on this file, in this case.
+    def _tool_run_for(self, case_id: str, evidence_id: str, tool_name: str,
+                      statuses: Sequence[str] = ("succeeded",)) -> str:
+        """The latest finished run of this tool on this file, in this case.
+
+        Only successful runs count unless the caller says otherwise. A run
+        still marked running never counts, because it has not produced its
+        output yet.
 
         Scoping by case as well as evidence means evidence from another case
         can never borrow a run from this one.
         """
+        placeholders = ", ".join("?" * len(statuses))
         row = self._connection.execute(
-            """
+            f"""
             SELECT tool_run_id FROM tool_runs
             WHERE case_id = ? AND evidence_id = ? AND tool_name = ?
-              AND status = 'succeeded'
+              AND status IN ({placeholders})
             ORDER BY finished_at DESC, rowid DESC
             LIMIT 1
             """,
-            (case_id, evidence_id, tool_name),
+            (case_id, evidence_id, tool_name, *statuses),
         ).fetchone()
         if row is None:
             raise PrerequisiteError(
-                f"no successful {tool_name} run is recorded for evidence "
-                f"{evidence_id} in case {case_id}, so its output cannot be "
-                f"saved with provenance"
+                f"no {tool_name} run with status {' or '.join(statuses)} is "
+                f"recorded for evidence {evidence_id} in case {case_id}, so its "
+                f"output cannot be saved with provenance"
             )
         return row["tool_run_id"]
