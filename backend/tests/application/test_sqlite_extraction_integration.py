@@ -6,7 +6,7 @@ from adapters.persistence.sqlite_database import open_case_database
 from adapters.persistence.sqlite_integration import build_sqlite_application_stores
 from core.application.errors import ConflictError, PrerequisiteError
 from core.application.models import (
-    Case, DecodedBinlog, EvidenceFile, EvidenceKind, ToolRun, ToolRunStatus,
+    Case, DecodedBinlog, EvidenceFile, EvidenceKind, NormalizedEvidence, ToolRun, ToolRunStatus,
     VerificationStatus,
 )
 from core.domain.models.canonical import AnalysisWarning
@@ -84,9 +84,12 @@ class SqliteExtractionIntegrationTests(unittest.TestCase):
         self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM binlog_events").fetchone()[0], 0)
         self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM transactions").fetchone()[0], 0)
 
-    def test_normalized_storage_fails_clearly(self):
-        with self.assertRaisesRegex(NotImplementedError, "current SQLite schema"):
-            self.stores.extraction.save_normalized("case-1", None)
+    def test_normalized_storage_records_the_normalization(self):
+        self.stores.extraction.save_normalized("case-1", NormalizedEvidence((), (), (), ()))
+        row = self.connection.execute(
+            "SELECT case_id FROM normalizations WHERE case_id = 'case-1'"
+        ).fetchone()
+        self.assertIsNotNone(row)
 
 
 if __name__ == "__main__":

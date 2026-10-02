@@ -152,3 +152,14 @@ CREATE TABLE IF NOT EXISTS binlog_inventory (
     present_files_json TEXT NOT NULL CHECK (json_valid(present_files_json)),
     missing_files_json TEXT NOT NULL CHECK (json_valid(missing_files_json))
 ) STRICT;
+CREATE TABLE IF NOT EXISTS case_scopes (
+    case_id    TEXT PRIMARY KEY REFERENCES cases(case_id),
+    scope_json TEXT NOT NULL CHECK (json_valid(scope_json)),
+    updated_at TEXT NOT NULL
+) STRICT;
+CREATE TABLE IF NOT EXISTS normalizations (
+    case_id       TEXT PRIMARY KEY REFERENCES cases(case_id),
+    scope_json    TEXT NOT NULL CHECK (json_valid(scope_json)),
+    counts_json   TEXT NOT NULL CHECK (json_valid(counts_json)),
+    normalized_at TEXT NOT NULL
+) STRICT;

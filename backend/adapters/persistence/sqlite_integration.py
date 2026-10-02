@@ -4,11 +4,14 @@ from dataclasses import dataclass
 
 from adapters.persistence.sqlite_binlog_event_repository import SqliteBinlogEventRepository
 from adapters.persistence.sqlite_case_repository import SqliteCaseRepository
+from adapters.persistence.sqlite_evidence_normalizer import SqliteEvidenceNormalizer
 from adapters.persistence.sqlite_evidence_repository import SqliteEvidenceRepository
+from adapters.persistence.sqlite_evidence_scope_repository import SqliteEvidenceScopeRepository
 from adapters.persistence.sqlite_extraction_repository import (
     SqliteExtractionRepository, TransactionalConnection,
 )
 from adapters.persistence.sqlite_integrity_repository import SqliteIntegrityRepository
+from adapters.persistence.sqlite_normalization_repository import SqliteNormalizationRepository
 from adapters.persistence.sqlite_physical_record_repository import SqlitePhysicalRecordRepository
 from adapters.persistence.sqlite_schema_repository import SqliteSchemaRepository
 from adapters.persistence.sqlite_tool_run_repository import SqliteToolRunRepository
@@ -23,6 +26,8 @@ class SqliteApplicationStores:
     tool_runs: SqliteToolRunRepository
     schemas: SqliteSchemaRepository
     extraction: SqliteExtractionRepository
+    scopes: SqliteEvidenceScopeRepository
+    normalizer: SqliteEvidenceNormalizer
 
     def schemas_for_case(self, case_id: str) -> SqliteSchemaRepository:
         """Return this case database's catalog after rejecting cross-case use."""
@@ -41,9 +46,19 @@ def build_sqlite_application_stores(connection, *, now=None) -> SqliteApplicatio
     physical = SqlitePhysicalRecordRepository(shared)
     events = SqliteBinlogEventRepository(shared)
     transactions = SqliteTransactionRepository(shared)
-    warnings = SqliteWarningRepository(shared, **({"now": now} if now else {}))
+    clock = {"now": now} if now else {}
+    warnings = SqliteWarningRepository(shared, **clock)
+    scopes = SqliteEvidenceScopeRepository(shared, **clock)
+    normalizations = SqliteNormalizationRepository(shared, **clock)
     extraction = SqliteExtractionRepository(
         shared, integrity=integrity, schemas=schemas, physical=physical,
         events=events, transactions=transactions, warnings=warnings,
+        scopes=scopes, normalizations=normalizations,
     )
-    return SqliteApplicationStores(cases, evidence, tool_runs, schemas, extraction)
+    normalizer = SqliteEvidenceNormalizer(
+        cases=cases, scopes=scopes, schemas=schemas, physical=physical,
+        events=events, transactions=transactions,
+    )
+    return SqliteApplicationStores(
+        cases, evidence, tool_runs, schemas, extraction, scopes, normalizer,
+    )

@@ -35,6 +35,8 @@ from core.application.models.extraction_models import (
     ProvenancedResult,
 )
 
+from core.application.models.scope_models import EvidenceScope
+
 from core.application.models.audit_models import (
     StartToolRunRequest,
     CompleteToolRunRequest,
@@ -49,6 +51,7 @@ __all__ = [
     "EvidenceFile",
     "EvidenceKind",
     "EvidenceMetadata",
+    "EvidenceScope",
     "EvidenceStageRequest",
     "NormalizedEvidence",
     "OperationReceipt",
