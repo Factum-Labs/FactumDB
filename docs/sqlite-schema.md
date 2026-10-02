@@ -366,6 +366,27 @@ The scope is applied to every kind of evidence the same way. Filtering a table's
 
 ---
 
+## 15. analysis_results
+
+```sql
+CREATE TABLE analysis_results (
+    case_id     TEXT NOT NULL REFERENCES cases(case_id),
+    stage       TEXT NOT NULL CHECK (stage IN
+                    ('grouping', 'correlation', 'reconstruction', 'reconciliation')),
+    result_json TEXT NOT NULL CHECK (json_valid(result_json)),
+    saved_at    TEXT NOT NULL,
+    PRIMARY KEY (case_id, stage)
+) STRICT;
+```
+
+The four results of Yasiru's domain services, one JSON document per case and stage. His `correlation-engine-output-schema.md` describes a fully relational design instead, which would let single findings be queried in SQL. The UI reads results through the sidecar, which loads a whole result at a time anyway, so one document per stage does the job for now. Tables can replace it later without changing the `DomainRepository` interface.
+
+The round trip has to be exact, because each stage reads the previous stage's result back from here. Column values keep the tags from decision D, so a `Decimal` cannot come back as a string, and everything else is rebuilt from the type hints of the dataclass it belongs to (`_results.py`). All 48 results from Yasiru's 12 golden datasets load back equal, with the same type at every level - which matters because his enums are `StrEnum`s and would compare equal to plain strings.
+
+The results build on each other, so saving one stage deletes the stages after it, and normalizing the case again deletes all of them. A later stage can then never load a result made from an older version of an earlier one: it finds nothing, and the use case says which stage has to run first.
+
+---
+
 ## Design decisions
 
 **A. IDs are text, not auto-increment integers.** Nisal's `Case` model already generates a UUID string for `case_id`, so the same style is used everywhere rather than having two different kinds of ID in one database. Consistency across the team is worth more here than the small speed difference.
@@ -388,4 +409,4 @@ The microseconds are always written, even when they are zero. Text only sorts in
 
 - Agree decision D with Nisal since he owns the storage side of the pipeline.
 - Check with Yasiru whether the domain services need anything from `transaction_events` that is not there yet.
-- The tables for correlation results, record histories and reconciliation results are not here yet. Those come out of Yasiru's domain services in weeks 5 and 6, so they will be added once their shape is known.
+- If the UI needs to query single findings or record histories in SQL, replace the JSON documents in `analysis_results` with tables following `correlation-engine-output-schema.md`.

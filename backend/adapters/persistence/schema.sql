@@ -163,3 +163,11 @@ CREATE TABLE IF NOT EXISTS normalizations (
     counts_json   TEXT NOT NULL CHECK (json_valid(counts_json)),
     normalized_at TEXT NOT NULL
 ) STRICT;
+CREATE TABLE IF NOT EXISTS analysis_results (
+    case_id     TEXT NOT NULL REFERENCES cases(case_id),
+    stage       TEXT NOT NULL CHECK (stage IN
+                    ('grouping', 'correlation', 'reconstruction', 'reconciliation')),
+    result_json TEXT NOT NULL CHECK (json_valid(result_json)),
+    saved_at    TEXT NOT NULL,
+    PRIMARY KEY (case_id, stage)
+) STRICT;
