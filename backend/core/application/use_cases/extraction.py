@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from core.application.errors import ConflictError
 from core.application.models import EvidenceKind, EvidenceStageRequest, OperationReceipt
 from core.application.ports import (
     BinlogDecoder,
+    BinlogIndexReader,
     CaseRepository,
     Clock,
     EvidenceNormalizer,
@@ -15,7 +17,7 @@ from core.application.ports import (
     SchemaExtractor,
 )
 from core.application.use_cases._support import require_case, require_verified_evidence
-from core.domain.models.canonical import PhysicalRecord, Schema
+from core.domain.models.canonical import BinlogInventory, PhysicalRecord, Schema
 
 
 class RunPageValidationUseCase:
@@ -150,3 +152,49 @@ class NormalizeEvidenceUseCase:
             + len(normalized.markers)
         )
         return OperationReceipt(case_id, "normalization", self._clock.now(), count)
+
+
+class RecordBinlogInventoryUseCase:
+    """Compare the server's binlog index with the binlogs that were seized.
+
+    With no index registered nothing is recorded, and the analysis treats
+    binlog coverage as unknown rather than complete. More than one index is
+    refused: a case is one server, and two indexes could give two different
+    answers to "is any log missing".
+    """
+
+    def __init__(
+        self,
+        evidence: EvidenceRepository,
+        reader: BinlogIndexReader,
+        results: ExtractionRepository,
+        clock: Clock,
+    ) -> None:
+        self._evidence = evidence
+        self._reader = reader
+        self._results = results
+        self._clock = clock
+
+    def execute(self, case_id: str) -> OperationReceipt:
+        items = self._evidence.list_for_case(case_id)
+        indexes = [item for item in items if item.kind is EvidenceKind.BINLOG_INDEX]
+        if not indexes:
+            return OperationReceipt(case_id, "binlog_inventory", self._clock.now(), 0)
+        if len(indexes) > 1:
+            raise ConflictError("more than one binlog index is registered for this case")
+
+        index = require_verified_evidence(
+            self._evidence, case_id, indexes[0].id, {EvidenceKind.BINLOG_INDEX}
+        )
+        assert index.verified_working_path is not None
+        listed = tuple(self._reader.read(index.verified_working_path))
+        present = tuple(item.filename for item in items if item.kind is EvidenceKind.BINLOG)
+        seized = set(present)
+        inventory = BinlogInventory(
+            index_file=index.filename,
+            listed_files=listed,
+            present_files=present,
+            missing_files=tuple(name for name in listed if name not in seized),
+        )
+        self._results.save_inventory(case_id, index.id, inventory)
+        return OperationReceipt(case_id, "binlog_inventory", self._clock.now(), len(listed))

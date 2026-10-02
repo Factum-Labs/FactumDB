@@ -57,7 +57,7 @@ def build_sqlite_application_stores(connection, *, now=None) -> SqliteApplicatio
     extraction = SqliteExtractionRepository(
         shared, integrity=integrity, schemas=schemas, physical=physical,
         events=events, transactions=transactions, warnings=warnings,
-        scopes=scopes, normalizations=normalizations,
+        scopes=scopes, normalizations=normalizations, inventory=inventory,
     )
     normalizer = SqliteEvidenceNormalizer(
         cases=cases, scopes=scopes, schemas=schemas, physical=physical,

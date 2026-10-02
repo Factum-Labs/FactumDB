@@ -4,7 +4,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 from core.application.models import DecodedBinlog, NormalizedEvidence, ProvenancedResult
-from core.domain.models.canonical import IntegrityResult, PhysicalRecord, Schema
+from core.domain.models.canonical import (
+    BinlogInventory, IntegrityResult, PhysicalRecord, Schema,
+)
 
 
 class PageValidator(Protocol):
@@ -21,6 +23,12 @@ class PhysicalRowExtractor(Protocol):
 
 class BinlogDecoder(Protocol):
     def decode(self, case_id: str, evidence_id: str, working_copy_path: str) -> ProvenancedResult[DecodedBinlog]: ...
+
+
+class BinlogIndexReader(Protocol):
+    def read(self, working_copy_path: str) -> Sequence[str]:
+        """The binlog file names a mysql-bin.index lists, oldest first."""
+        ...
 
 
 class EvidenceNormalizer(Protocol):
@@ -50,3 +58,12 @@ class ExtractionRepository(Protocol):
         ...
 
     def save_normalized(self, case_id: str, normalized: NormalizedEvidence) -> None: ...
+
+    def save_inventory(
+        self, case_id: str, evidence_id: str, inventory: BinlogInventory
+    ) -> None:
+        """Store what a binlog index listed against what was seized.
+
+        evidence_id is the index file's own evidence id.
+        """
+        ...

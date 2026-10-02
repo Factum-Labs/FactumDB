@@ -10,7 +10,7 @@ from core.application.errors import ConflictError, NotFoundError, PrerequisiteEr
 
 class SqliteExtractionRepository:
     def __init__(self, connection, *, integrity, schemas, physical, events,
-                 transactions, warnings, scopes, normalizations) -> None:
+                 transactions, warnings, scopes, normalizations, inventory) -> None:
         self._connection = connection
         self._integrity = integrity
         self._schemas = schemas
@@ -20,6 +20,7 @@ class SqliteExtractionRepository:
         self._warnings = warnings
         self._scopes = scopes
         self._normalizations = normalizations
+        self._inventory = inventory
 
     def save_integrity(self, case_id, evidence_id, tool_run_id, result) -> None:
         with self._atomic():
@@ -87,6 +88,29 @@ class SqliteExtractionRepository:
             self._connection.execute(
                 "DELETE FROM analysis_results WHERE case_id = ?", (case_id,)
             )
+
+    def save_inventory(self, case_id: str, evidence_id: str, inventory) -> None:
+        """Store what a binlog index listed against what was seized.
+
+        There is no tool run behind an inventory - the index is read as a
+        plain file - so the evidence is checked instead: it has to be this
+        case's binlog index, whose registered hash is what ties the
+        inventory to the file it came from.
+        """
+        with self._atomic():
+            evidence = self._connection.execute(
+                "SELECT case_id, kind FROM evidence_files WHERE evidence_id = ?",
+                (evidence_id,),
+            ).fetchone()
+            if evidence is None:
+                raise NotFoundError(f"evidence not found: {evidence_id}")
+            if evidence["case_id"] != case_id:
+                raise ConflictError("evidence does not belong to the supplied case")
+            if evidence["kind"] != "binlog_index":
+                raise ConflictError(
+                    f"an inventory can only come from a binlog index, not {evidence['kind']}"
+                )
+            self._inventory.save(inventory, evidence_id)
 
     def _stored_counts(self) -> dict[str, int]:
         def count(sql: str) -> int:
