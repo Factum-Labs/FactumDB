@@ -326,6 +326,46 @@ Reminder from the model doc: `mysql-bin.index` stores absolute paths like `/var/
 
 ---
 
+## 13. case_scopes
+
+```sql
+CREATE TABLE case_scopes (
+    case_id    TEXT PRIMARY KEY REFERENCES cases(case_id),
+    scope_json TEXT NOT NULL CHECK (json_valid(scope_json)),
+    updated_at TEXT NOT NULL
+) STRICT;
+```
+
+The databases and tables the investigator wants the analysis to cover, for example `{"databases": [], "tables": [["finance", "accounts"]]}`. A name under `databases` brings in every table of that database. No row means everything is in scope.
+
+This is the database and table filtering from the week 4 plan. It filters what the analysis **looks at**, never what is **stored**: every row and event extracted stays in its table whatever the scope, so a narrow scope can always be widened again without extracting anything twice. Filtering at extraction time instead (for example `mysqlbinlog --database`) would throw evidence away before anyone had looked at it.
+
+A case has one scope, and saving a new one replaces it. It is a setting, not evidence - what each analysis actually used is kept in `normalizations`.
+
+---
+
+## 14. normalizations
+
+```sql
+CREATE TABLE normalizations (
+    case_id       TEXT PRIMARY KEY REFERENCES cases(case_id),
+    scope_json    TEXT NOT NULL CHECK (json_valid(scope_json)),
+    counts_json   TEXT NOT NULL CHECK (json_valid(counts_json)),
+    normalized_at TEXT NOT NULL
+) STRICT;
+```
+
+The normalization stage does not copy the canonical data again. The extraction stages already stored it, and two copies could drift apart. What normalization adds is a decision - which part of the stored evidence the analysis covers - and this table records it:
+
+- `scope_json` is a copy of the scope that was used, not a link to `case_scopes`, so changing the scope later cannot rewrite what an earlier analysis was based on.
+- `counts_json` holds, for each kind of evidence, how much was in scope out of how much is stored, for example `{"events": [2, 5], ...}`. That is what lets a report say "2 of 5 events were in scope" rather than leaving the reader to wonder whether anything was left out.
+
+Saving refuses counts larger than what the database stores, since normalized evidence like that cannot have come from this case.
+
+The scope is applied to every kind of evidence the same way. Filtering a table's rows but not its binlog events would show the domain services events for a table with no tablespace, and they would report "we were not given the file" about a file we do have. A transaction that touched tables inside and outside the scope keeps only its in-scope events, one with no in-scope events is left out, and one that listed no events at all is kept, because nothing in it says which tables it was about.
+
+---
+
 ## Design decisions
 
 **A. IDs are text, not auto-increment integers.** Nisal's `Case` model already generates a UUID string for `case_id`, so the same style is used everywhere rather than having two different kinds of ID in one database. Consistency across the team is worth more here than the small speed difference.

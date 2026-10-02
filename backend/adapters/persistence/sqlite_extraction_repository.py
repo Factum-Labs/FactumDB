@@ -10,7 +10,7 @@ from core.application.errors import ConflictError, NotFoundError, PrerequisiteEr
 
 class SqliteExtractionRepository:
     def __init__(self, connection, *, integrity, schemas, physical, events,
-                 transactions, warnings) -> None:
+                 transactions, warnings, scopes, normalizations) -> None:
         self._connection = connection
         self._integrity = integrity
         self._schemas = schemas
@@ -18,6 +18,8 @@ class SqliteExtractionRepository:
         self._events = events
         self._transactions = transactions
         self._warnings = warnings
+        self._scopes = scopes
+        self._normalizations = normalizations
 
     def save_integrity(self, case_id, evidence_id, tool_run_id, result) -> None:
         with self._atomic():
@@ -52,9 +54,48 @@ class SqliteExtractionRepository:
             self._warnings.save_many(decoded.warnings, case_id, evidence_id, tool_run_id)
 
     def save_normalized(self, case_id: str, normalized: NormalizedEvidence) -> None:
-        raise NotImplementedError(
-            "normalized evidence persistence is not available in the current SQLite schema"
-        )
+        """Record which part of the stored evidence the analysis covers.
+
+        The extraction stages already stored the canonical data, so it is not
+        copied a second time - two copies could drift apart. What is saved is
+        the scope that was used and, for each kind of evidence, how much was
+        in scope out of how much is stored.
+        """
+        with self._atomic():
+            if self._connection.execute(
+                "SELECT 1 FROM cases WHERE case_id = ?", (case_id,)
+            ).fetchone() is None:
+                raise NotFoundError(f"case not found: {case_id}")
+            stored = self._stored_counts()
+            counts = {
+                "schemas": (len(normalized.schemas), stored["schemas"]),
+                "physical_records": (len(normalized.physical_records), stored["physical_records"]),
+                "events": (len(normalized.events), stored["events"]),
+                "markers": (len(normalized.markers), stored["markers"]),
+            }
+            for kind, (in_scope, total) in counts.items():
+                if in_scope > total:
+                    # More than the database holds cannot have come from it,
+                    # and the analysis reads from the database.
+                    raise ConflictError(
+                        f"normalized evidence has {in_scope} {kind} but the case "
+                        f"database stores only {total}"
+                    )
+            self._normalizations.save(case_id, self._scopes.scope_for(case_id), counts)
+
+    def _stored_counts(self) -> dict[str, int]:
+        def count(sql: str) -> int:
+            return self._connection.execute(sql).fetchone()[0]
+
+        return {
+            # One schema per table, however many files it was extracted from.
+            "schemas": count(
+                "SELECT COUNT(*) FROM (SELECT DISTINCT database_name, table_name FROM schemas)"
+            ),
+            "physical_records": count("SELECT COUNT(*) FROM physical_records"),
+            "events": count("SELECT COUNT(*) FROM binlog_events"),
+            "markers": count("SELECT COUNT(*) FROM transactions"),
+        }
 
     def _validate_provenance(self, case_id: str, evidence_id: str, tool_run_id: str,
                              tool_name: str, *, allow_failed: bool = False) -> None:

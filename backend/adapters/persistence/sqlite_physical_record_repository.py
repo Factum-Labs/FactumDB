@@ -129,9 +129,18 @@ class SqlitePhysicalRecordRepository(PhysicalRecordRepositoryPort):
         missing because nobody seized that table's .ibd. Without it "not
         found" would collapse both into one answer, and the tool could report
         a deletion that never happened.
+
+        A seized .ibd can hold no rows at all - every row deleted and purged -
+        and that table must still count, or "the rows are gone" would be
+        reported as "we were never given the file". So the tables come from
+        the schemas as well, since every seized .ibd has its schema extracted.
         """
         rows = self._connection.execute(
-            "SELECT DISTINCT database_name, table_name FROM physical_records"
+            """
+            SELECT database_name, table_name FROM schemas
+            UNION
+            SELECT database_name, table_name FROM physical_records
+            """
         ).fetchall()
         return frozenset((r["database_name"], r["table_name"]) for r in rows)
 

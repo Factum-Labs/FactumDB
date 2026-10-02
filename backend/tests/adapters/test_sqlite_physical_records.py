@@ -241,6 +241,26 @@ def test_tables_with_physical_evidence(records, stored) -> None:
     assert ("finance", "transfers") not in held
 
 
+def test_a_seized_table_with_no_rows_left_still_counts(records, stored, connection) -> None:
+    """Every row deleted and purged leaves a tablespace with nothing in it.
+
+    That is "the rows are gone", not "we were never given the file", and the
+    two reconcile very differently. The schema extracted from the .ibd shows
+    the file was seized even though no row came out of it.
+    """
+    from adapters.persistence.sqlite_schema_repository import SqliteSchemaRepository
+    from core.domain.models.canonical import Column, Schema
+
+    evidence_id, run_id = stored
+    SqliteSchemaRepository(connection).save(
+        Schema("finance", "transfers", (Column("transfer_id", 1, "int", False, True),), 80410),
+        evidence_id, run_id,
+    )
+
+    assert ("finance", "transfers") in records.tables_with_physical_evidence()
+    assert records.records_for("finance", "transfers") == []
+
+
 # ── Referential integrity ────────────────────────────────────────────────────
 
 
