@@ -82,6 +82,11 @@ class SqliteExtractionRepository:
                         f"database stores only {total}"
                     )
             self._normalizations.save(case_id, self._scopes.scope_for(case_id), counts)
+            # Every analysis result was built on the previous normalization,
+            # so none of them describes the evidence any more.
+            self._connection.execute(
+                "DELETE FROM analysis_results WHERE case_id = ?", (case_id,)
+            )
 
     def _stored_counts(self) -> dict[str, int]:
         def count(sql: str) -> int:

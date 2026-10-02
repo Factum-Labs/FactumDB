@@ -3,7 +3,9 @@
 from dataclasses import dataclass
 
 from adapters.persistence.sqlite_binlog_event_repository import SqliteBinlogEventRepository
+from adapters.persistence.sqlite_binlog_inventory_repository import SqliteBinlogInventoryRepository
 from adapters.persistence.sqlite_case_repository import SqliteCaseRepository
+from adapters.persistence.sqlite_domain_repository import SqliteDomainRepository
 from adapters.persistence.sqlite_evidence_normalizer import SqliteEvidenceNormalizer
 from adapters.persistence.sqlite_evidence_repository import SqliteEvidenceRepository
 from adapters.persistence.sqlite_evidence_scope_repository import SqliteEvidenceScopeRepository
@@ -28,6 +30,7 @@ class SqliteApplicationStores:
     extraction: SqliteExtractionRepository
     scopes: SqliteEvidenceScopeRepository
     normalizer: SqliteEvidenceNormalizer
+    domain: SqliteDomainRepository
 
     def schemas_for_case(self, case_id: str) -> SqliteSchemaRepository:
         """Return this case database's catalog after rejecting cross-case use."""
@@ -50,6 +53,7 @@ def build_sqlite_application_stores(connection, *, now=None) -> SqliteApplicatio
     warnings = SqliteWarningRepository(shared, **clock)
     scopes = SqliteEvidenceScopeRepository(shared, **clock)
     normalizations = SqliteNormalizationRepository(shared, **clock)
+    inventory = SqliteBinlogInventoryRepository(shared)
     extraction = SqliteExtractionRepository(
         shared, integrity=integrity, schemas=schemas, physical=physical,
         events=events, transactions=transactions, warnings=warnings,
@@ -59,6 +63,11 @@ def build_sqlite_application_stores(connection, *, now=None) -> SqliteApplicatio
         cases=cases, scopes=scopes, schemas=schemas, physical=physical,
         events=events, transactions=transactions,
     )
+    domain = SqliteDomainRepository(
+        shared, cases=cases, normalizations=normalizations, schemas=schemas,
+        physical=physical, events=events, transactions=transactions,
+        integrity=integrity, inventory=inventory, tool_runs=tool_runs, **clock,
+    )
     return SqliteApplicationStores(
-        cases, evidence, tool_runs, schemas, extraction, scopes, normalizer,
+        cases, evidence, tool_runs, schemas, extraction, scopes, normalizer, domain,
     )
