@@ -28,6 +28,7 @@ from core.application.ports.extraction import (
     SchemaExtractor,
     PhysicalRowExtractor,
     BinlogDecoder,
+    BinlogIndexReader,
     EvidenceNormalizer,
     ExtractionRepository,
 )
@@ -79,6 +80,7 @@ from core.application.ports.warning_repository_port import (
 
 __all__ = [
     "BinlogDecoder",
+    "BinlogIndexReader",
     "BinlogEventRepositoryPort",
     "BinlogInventoryRepositoryPort",
     "CaseRepository",

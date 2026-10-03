@@ -324,6 +324,8 @@ CREATE TABLE binlog_inventory (
 
 Reminder from the model doc: `mysql-bin.index` stores absolute paths like `/var/log/mysql/mysql-bin.000006`, so the comparison has to be on file names only.
 
+The inventory is recorded at the start of the binlog decoding stage, before any log is decoded, by reading the registered `mysql-bin.index` (`adapters/tools/binlog_index.py`). `listed` is what the index says the server had; `present` is the binlog files registered in the case. If no index was seized, nothing is recorded and the analysis reports binlog coverage as unknown (R-COV-001) - never as complete. There is no `tool_run_id` here because no external tool is run: the index is registered evidence with its own hash, and that is what ties the inventory to the file it was read from.
+
 ---
 
 ## 13. case_scopes

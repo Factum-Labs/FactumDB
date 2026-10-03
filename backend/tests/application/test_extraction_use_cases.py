@@ -53,6 +53,7 @@ class MemoryExtractionResults:
         self.record_run_ids = []
         self.decoded = None
         self.normalized = None
+        self.inventory = None
 
     def save_integrity(self, case_id: str, evidence_id: str, tool_run_id: str, result: object) -> None:
         self.integrity = result
@@ -69,6 +70,9 @@ class MemoryExtractionResults:
 
     def save_normalized(self, case_id: str, normalized: object) -> None:
         self.normalized = normalized
+
+    def save_inventory(self, case_id: str, evidence_id: str, inventory: object) -> None:
+        self.inventory = inventory
 
 
 class StaticAdapter:

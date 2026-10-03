@@ -13,6 +13,7 @@ from adapters.tools import (
     Ibd2SqlPhysicalRowExtractor, InnochecksumAdapter, MysqlBinlogAdapter,
     MysqlBinlogDecoder,
 )
+from adapters.tools.binlog_index import MysqlBinlogIndexAdapter
 from adapters.tools.versions import ToolVersions
 from core.application.models import EvidenceKind, EvidenceStageRequest, OperationReceipt
 from core.application.orchestration.handlers import (
@@ -22,7 +23,7 @@ from core.application.orchestration.models import PipelineStage
 from core.application.orchestration.pipeline import AnalysisOrchestrator
 from core.application.orchestration.ports import PipelineRepository, ProgressPublisher
 from core.application.ports import (
-    BinlogDecoder, CaseRepository, Clock, DomainRepository, EvidenceNormalizer,
+    BinlogDecoder, BinlogIndexReader, CaseRepository, Clock, DomainRepository, EvidenceNormalizer,
     EvidenceRepository, ExtractionRepository, FileHasher, IdGenerator,
     PageValidator, PhysicalRowExtractor, SchemaExtractor, WorkingCopyManager,
 )
@@ -34,7 +35,7 @@ from core.application.use_cases.evidence import VerifyEvidenceUseCase
 from core.application.use_cases.audit import ToolRunAuditService
 from core.application.use_cases.extraction import (
     DecodeBinaryLogsUseCase, ExtractPhysicalRowsUseCase, ExtractSchemaUseCase,
-    NormalizeEvidenceUseCase, RunPageValidationUseCase,
+    NormalizeEvidenceUseCase, RecordBinlogInventoryUseCase, RunPageValidationUseCase,
 )
 from core.domain.models.correlation import CorrelationResult
 from core.domain.models.history import ReconstructionResult
@@ -69,6 +70,8 @@ class ExtractionAdapters:
     row_extractor: PhysicalRowExtractor
     # Resolve the decoder at execution time, after schema extraction has finished.
     decoder_for_case: Callable[[str], BinlogDecoder]
+    # Without a reader no inventory is recorded, and binlog coverage stays unknown.
+    binlog_index_reader: BinlogIndexReader | None = None
 
 
 def build_application_services(
@@ -130,6 +133,7 @@ def build_tool_adapters(
             rows, include_deleted=include_deleted, audit=audit, versions=versions,
         ),
         decoder_for_case=decoder_for_case,
+        binlog_index_reader=MysqlBinlogIndexAdapter(),
     )
 
 
@@ -160,6 +164,11 @@ def build_analysis_pipeline(
         return None
 
     def decode_case(case_id: str) -> OperationReceipt:
+        # The index first: it is what says whether the logs below are all of them.
+        if adapters.binlog_index_reader is not None:
+            RecordBinlogInventoryUseCase(
+                d.evidence, adapters.binlog_index_reader, d.extraction, d.clock,
+            ).execute(case_id)
         decoder = adapters.decoder_for_case(case_id)
         operation = DecodeBinaryLogsUseCase(d.evidence, decoder, d.extraction, d.clock)
         count = 0

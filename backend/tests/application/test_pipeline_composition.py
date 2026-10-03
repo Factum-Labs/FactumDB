@@ -9,6 +9,7 @@ from core.application.models import (
 )
 from core.application.orchestration.models import ANALYSIS_STAGES, PipelineStage, StageStatus
 from core.application.ports import DomainInputs
+from core.domain.models.canonical import BinlogInventory
 from sidecar.composition import (
     ExtractionAdapters, PipelineDependencies, build_analysis_pipeline, build_tool_adapters,
 )
@@ -135,6 +136,30 @@ class PipelineCompositionTests(unittest.TestCase):
         self.assertEqual(run.state_for(PipelineStage.NORMALIZE_EVIDENCE).status,
                          StageStatus.FAILED)
         self.assertIsNone(self.domain.grouping)
+
+    def test_binlog_stage_reads_the_index_before_decoding(self):
+        self.evidence.save(replace(
+            self.binlog, id="index-1", kind=EvidenceKind.BINLOG_INDEX,
+            source_path="/source/mysql-bin.index", filename="mysql-bin.index",
+        ))
+        reader = Mock()
+
+        def read(path):
+            # The index says whether the logs are all there, so it comes first.
+            self.assertEqual(self.decoder.decode.call_count, 0)
+            self.assertEqual(path, "/working/mysql-bin.index")
+            return ("binlog.000018", "binlog.000019")
+
+        reader.read.side_effect = read
+        pipeline = build_analysis_pipeline(
+            self.dependencies, replace(self.adapters, binlog_index_reader=reader),
+        )
+        run = pipeline.run_all(pipeline.start("case-1").id)
+        self.assertTrue(run.complete, run)
+        self.assertEqual(self.results.inventory, BinlogInventory(
+            "mysql-bin.index", ("binlog.000018", "binlog.000019"),
+            ("binlog.000018",), ("binlog.000019",),
+        ))
 
     @patch("subprocess.run")
     def test_tool_factory_is_lazy_and_resolves_distinct_case_catalogs(self, run):
