@@ -7,6 +7,8 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
+    "bundle:windows:prepare": "py -3 scripts/prepare_windows_bundle.py",
+    "bundle:windows": "npm run bundle:windows:prepare && tauri build --target x86_64-pc-windows-msvc",
     "frontend:dev": "npm --prefix frontend run dev",
     "frontend:build": "npm --prefix frontend run build",
     "frontend:install": "npm --prefix frontend install"

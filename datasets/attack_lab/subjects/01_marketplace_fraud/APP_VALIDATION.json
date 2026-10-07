@@ -1,0 +1,200 @@
+{
+  "complete": true,
+  "elapsed_seconds": null,
+  "include_deleted": false,
+  "stages": [
+    {
+      "stage": "verify_evidence",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T17:00:39.332894+00:00",
+          "finished_at": "2026-10-07T17:00:39.448213+00:00",
+          "item_count": 11,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "validate_pages",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T17:00:39.451723+00:00",
+          "finished_at": "2026-10-07T17:00:40.142068+00:00",
+          "item_count": 7,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "extract_schema",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T17:00:40.146068+00:00",
+          "finished_at": "2026-10-07T17:00:40.480606+00:00",
+          "item_count": 7,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "extract_physical_rows",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T17:00:40.486118+00:00",
+          "finished_at": "2026-10-07T17:00:43.419269+00:00",
+          "item_count": 16271,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "decode_binary_logs",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T17:00:43.448276+00:00",
+          "finished_at": "2026-10-07T17:00:45.590665+00:00",
+          "item_count": 16547,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "normalize_evidence",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T17:00:45.594663+00:00",
+          "finished_at": "2026-10-07T17:00:46.613455+00:00",
+          "item_count": 32825,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "group_transactions",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T17:00:46.619077+00:00",
+          "finished_at": "2026-10-07T17:01:40.955155+00:00",
+          "item_count": 75,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "correlate_records",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T17:01:40.962155+00:00",
+          "finished_at": "2026-10-07T17:01:46.278064+00:00",
+          "item_count": 15772,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "reconstruct_state",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T17:01:46.288637+00:00",
+          "finished_at": "2026-10-07T17:05:29.250432+00:00",
+          "item_count": 15772,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "reconcile_records",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T17:05:29.263957+00:00",
+          "finished_at": "2026-10-07T17:10:13.526443+00:00",
+          "item_count": 109907,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    }
+  ],
+  "physical_rows": 16271,
+  "classification_occurrences": {
+    "Unsupported": 3004,
+    "Exact": 1116,
+    "Unresolved": 247236,
+    "Partial": 4
+  },
+  "finding_rule_counts": {
+    "R-CORR-003": 1,
+    "R-CORR-010": 1,
+    "R-CORR-012": 1,
+    "R-CORR-020": 2,
+    "R-CORR-031": 15700,
+    "R-GRP-001": 75,
+    "R-GRP-013": 73,
+    "R-HIST-002": 72,
+    "R-HIST-003": 72,
+    "R-HIST-004": 2,
+    "R-HIST-010": 3,
+    "R-HIST-011": 1,
+    "R-HIST-012": 15771,
+    "R-RECON-001": 417,
+    "R-RECON-005": 92210,
+    "R-RECON-006": 15707,
+    "R-RECON-008": 1500,
+    "R-RECON-011": 1,
+    "R-RECON-020": 71,
+    "R-ROLL-002": 69,
+    "R-ROLL-004": 2,
+    "R-ROLL-005": 15701,
+    "R-ROLL-006": 1
+  },
+  "note": "Counts include nested field/record results. Actual app observations; consult EXPECTED_FINDINGS.md for acceptance criteria."
+}

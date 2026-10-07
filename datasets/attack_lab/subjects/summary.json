@@ -1,0 +1,50 @@
+[
+  {
+    "subject": "01_marketplace_fraud",
+    "seeded_rows": 16300,
+    "source_live_rows": 16271,
+    "ibd_files": 7,
+    "binlog_files": 3,
+    "evidence_bytes": 2943820
+  },
+  {
+    "subject": "02_credit_union_log_erasure",
+    "seeded_rows": 16300,
+    "source_live_rows": 16271,
+    "ibd_files": 7,
+    "binlog_files": 2,
+    "evidence_bytes": 2971939
+  },
+  {
+    "subject": "03_clinic_interrupted_coverup",
+    "seeded_rows": 16300,
+    "source_live_rows": 16271,
+    "ibd_files": 7,
+    "binlog_files": 3,
+    "evidence_bytes": 2970263
+  },
+  {
+    "subject": "04_payroll_page_damage",
+    "seeded_rows": 16300,
+    "source_live_rows": 16271,
+    "ibd_files": 7,
+    "binlog_files": 3,
+    "evidence_bytes": 2975420
+  },
+  {
+    "subject": "05_logistics_scope_gaps",
+    "seeded_rows": 16300,
+    "source_live_rows": 16271,
+    "ibd_files": 6,
+    "binlog_files": 3,
+    "evidence_bytes": 2481552
+  },
+  {
+    "subject": "06_clean_marketplace",
+    "seeded_rows": 15500,
+    "source_live_rows": 15500,
+    "ibd_files": 5,
+    "binlog_files": 3,
+    "evidence_bytes": 2507413
+  }
+]

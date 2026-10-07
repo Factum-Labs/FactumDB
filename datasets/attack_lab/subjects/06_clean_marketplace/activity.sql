@@ -1,0 +1,1 @@
+USE `willow_market`; START TRANSACTION; UPDATE `orders` SET note='Receipt checked by branch supervisor' WHERE id BETWEEN 401 AND 450; COMMIT; START TRANSACTION; UPDATE `orders` SET amount_minor=1 WHERE id=91; ROLLBACK; FLUSH BINARY LOGS;

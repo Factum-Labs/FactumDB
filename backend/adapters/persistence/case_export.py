@@ -99,16 +99,23 @@ def case_export(connection, case_id: str, *, now=_utc_now) -> dict:
     """The whole case as one JSON-ready document."""
     if connection.execute("SELECT 1 FROM cases WHERE case_id = ?", (case_id,)).fetchone() is None:
         raise NotFoundError(f"case not found: {case_id}")
+    tables = {
+        name: [_row(row) for row in connection.execute(sql, (case_id,)).fetchall()]
+        for name, sql in _TABLES
+    }
+    # Desktop orchestration adds this table to existing case databases. Older
+    # standalone databases remain exportable without a migration.
+    if connection.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'pipeline_runs'").fetchone():
+        tables["pipeline_runs"] = [_row(row) for row in connection.execute(
+            "SELECT * FROM pipeline_runs WHERE case_id = ? ORDER BY rowid", (case_id,),
+        ).fetchall()]
     return {
         "format": FORMAT,
         "format_version": FORMAT_VERSION,
         "case_id": case_id,
         "exported_at": to_text(now()),
         "value_tags": dict(VALUE_TAGS),
-        "tables": {
-            name: [_row(row) for row in connection.execute(sql, (case_id,)).fetchall()]
-            for name, sql in _TABLES
-        },
+        "tables": tables,
     }
 
 

@@ -1,0 +1,142 @@
+{
+  "subject": "05_logistics_scope_gaps",
+  "database": "meridian_freight",
+  "title": "Meridian Freight",
+  "seed": 20261012,
+  "mysql_version": "C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqld.exe  Ver 8.0.43 for Win64 on x86_64 (MySQL Community Server - GPL)",
+  "acquisition": "clean private-server shutdown, followed by listed acquisition mutations",
+  "acquired_at_utc": "2026-10-07T16:58:33.667384+00:00",
+  "binlog_format": "ROW",
+  "default_row_image": "FULL",
+  "page_size": 16384,
+  "baseline_rows": {
+    "clients": 2500,
+    "shipments": 2500,
+    "shipment_items": 5000,
+    "invoices": 5000,
+    "dispatchers": 500,
+    "access_notes": 500,
+    "documents": 300
+  },
+  "source_live_rows": {
+    "clients": 2500,
+    "shipments": 2501,
+    "shipment_items": 5000,
+    "invoices": 4970,
+    "dispatchers": 500,
+    "access_notes": 500,
+    "documents": 300
+  },
+  "acquisition_mutations": [
+    {
+      "type": "omitted_tablespace",
+      "file": "invoices.ibd",
+      "original_sha256": "163287b5efc95d264e61db6b8243622bc9718b14262400c9126af814f3833564"
+    },
+    {
+      "type": "omitted_index",
+      "file": "mysql-bin.index"
+    }
+  ],
+  "files": [
+    {
+      "path": "ibd/access_notes.ibd",
+      "bytes": 147456,
+      "sha256": "8ef6373bb3fadcc8e5d75b3a920f5ffcbcd3ec9d30e05e31eef0fe1785b3aa7e"
+    },
+    {
+      "path": "ibd/clients.ibd",
+      "bytes": 327680,
+      "sha256": "cc299204fe78026bb2b88ed34df4b2249af5e844441d24d23c2079d7c8bf75e6"
+    },
+    {
+      "path": "ibd/dispatchers.ibd",
+      "bytes": 147456,
+      "sha256": "aa83c86471fa6fdae869eb5af782655704c46a24b4d463481a793b1a7add1c89"
+    },
+    {
+      "path": "ibd/documents.ibd",
+      "bytes": 163840,
+      "sha256": "0e107428d8646db43afaff5a2b53f33adee68ec64bc8685f067b786451bed44f"
+    },
+    {
+      "path": "ibd/shipment_items.ibd",
+      "bytes": 393216,
+      "sha256": "8e2d68991dedcc54e4bf5cff8950fea8ad5ecd4a9f7f5f92f734cc72aa42b5c8"
+    },
+    {
+      "path": "ibd/shipments.ibd",
+      "bytes": 458752,
+      "sha256": "bef0772535a1fccf580f4b57d41efdbaa192217e9e434a08e4e7333f676e3d3a"
+    },
+    {
+      "path": "binlog/mysql-bin.000001",
+      "bytes": 817937,
+      "sha256": "c5456364532a4cda421ecea0b4951d542c17246c0827c991caefbe1d00374828"
+    },
+    {
+      "path": "binlog/mysql-bin.000002",
+      "bytes": 24524,
+      "sha256": "c4158186ab10c566beebdf35afaf8786468ce057965392786b81faa722d125ef"
+    },
+    {
+      "path": "binlog/mysql-bin.000003",
+      "bytes": 691,
+      "sha256": "aed27aee4ceb81589384442e20f20a590e210d2373dcb160d3e27828d82bdedf"
+    }
+  ],
+  "utility_validation": {
+    "ibd": {
+      "access_notes.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "clients.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "dispatchers.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "documents.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "shipment_items.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "shipments.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      }
+    },
+    "binlog": {
+      "mysql-bin.000001": {
+        "checksum_valid": true,
+        "event_count": 436,
+        "row_images": 16300,
+        "diagnostic": ""
+      },
+      "mysql-bin.000002": {
+        "checksum_valid": true,
+        "event_count": 50,
+        "row_images": 171,
+        "diagnostic": ""
+      },
+      "mysql-bin.000003": {
+        "checksum_valid": true,
+        "event_count": 8,
+        "row_images": 1,
+        "diagnostic": ""
+      }
+    }
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "subject": "02_credit_union_log_erasure",
+  "database": "cedar_credit",
+  "title": "Cedar Credit Union",
+  "seed": 20261009,
+  "mysql_version": "C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqld.exe  Ver 8.0.43 for Win64 on x86_64 (MySQL Community Server - GPL)",
+  "acquisition": "clean private-server shutdown, followed by listed acquisition mutations",
+  "acquired_at_utc": "2026-10-07T16:58:18.427772+00:00",
+  "binlog_format": "ROW",
+  "default_row_image": "FULL",
+  "page_size": 16384,
+  "baseline_rows": {
+    "members": 2500,
+    "accounts": 2500,
+    "account_products": 5000,
+    "transfers": 5000,
+    "employees": 500,
+    "access_notes": 500,
+    "documents": 300
+  },
+  "source_live_rows": {
+    "members": 2500,
+    "accounts": 2501,
+    "account_products": 5000,
+    "transfers": 4970,
+    "employees": 500,
+    "access_notes": 500,
+    "documents": 300
+  },
+  "acquisition_mutations": [
+    {
+      "type": "omitted_binlog",
+      "file": "mysql-bin.000002",
+      "original_sha256": "aae756b7582fa97227cbce5c621b3da4e40023b512162160bde3136d978518e1"
+    }
+  ],
+  "files": [
+    {
+      "path": "ibd/access_notes.ibd",
+      "bytes": 147456,
+      "sha256": "207953eb63747d789e14cd4469f231f3214578cf38f6fd738510e51e4f75f6fb"
+    },
+    {
+      "path": "ibd/account_products.ibd",
+      "bytes": 409600,
+      "sha256": "7ea0e4c0ba8b95968fe92c6c9ab33f82882d55331f180cae2175830369b6e0a8"
+    },
+    {
+      "path": "ibd/accounts.ibd",
+      "bytes": 458752,
+      "sha256": "8389b65a052cd8c9e39a69b7922d9334b942db2c92d400d606966ba38b4f840a"
+    },
+    {
+      "path": "ibd/documents.ibd",
+      "bytes": 163840,
+      "sha256": "5bae343c0e0721a7288bc8f7d3e84e97e1a24af6cf77e558820fc88b018e9372"
+    },
+    {
+      "path": "ibd/employees.ibd",
+      "bytes": 147456,
+      "sha256": "1823cc19af1ccc41064887d9052cfe2302453acbaad2e7465c2bad2ca06657d0"
+    },
+    {
+      "path": "ibd/members.ibd",
+      "bytes": 327680,
+      "sha256": "17505a3f73befbf5463325d835cc94d39ab0733f4bd00c861c3e3ad570229a19"
+    },
+    {
+      "path": "ibd/transfers.ibd",
+      "bytes": 491520,
+      "sha256": "e763413794a1523c94b0d5452e303d13223889e7959b3f74f5b539350c6ce32e"
+    },
+    {
+      "path": "binlog/mysql-bin.000001",
+      "bytes": 824599,
+      "sha256": "903294c41d3396294b09ae65a8542dc3bfbb7c772c51d45d753a3ac2303a9b50"
+    },
+    {
+      "path": "binlog/mysql-bin.000003",
+      "bytes": 682,
+      "sha256": "f527817e8f8d001e66c6050b0930ea497a0cdea07cfe81d282fca3419dc65678"
+    },
+    {
+      "path": "binlog/mysql-bin.index",
+      "bytes": 354,
+      "sha256": "0178408c15d47a7c647b4eb52cec8836180cd2d48ab71e04992576d4c772c620"
+    }
+  ],
+  "utility_validation": {
+    "ibd": {
+      "access_notes.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "account_products.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "accounts.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "documents.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "employees.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "members.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "transfers.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      }
+    },
+    "binlog": {
+      "mysql-bin.000001": {
+        "checksum_valid": true,
+        "event_count": 436,
+        "row_images": 16300,
+        "diagnostic": ""
+      },
+      "mysql-bin.000003": {
+        "checksum_valid": true,
+        "event_count": 8,
+        "row_images": 1,
+        "diagnostic": ""
+      }
+    }
+  }
+}

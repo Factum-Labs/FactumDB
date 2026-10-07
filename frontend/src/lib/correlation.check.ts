@@ -3,7 +3,7 @@
  * Run with: npm run check:graph
  */
 import { correlationEdges, reconRows, records, transactions } from '../data/caseData'
-import { buildFlaggedGroups, computeGraphLayout, decorateRows } from './correlation'
+import { buildFlaggedGroups, cmpRecord, computeGraphLayout, decorateRows } from './correlation'
 
 let failures = 0
 function check(name: string, cond: boolean, detail = '') {
@@ -19,6 +19,12 @@ const build = () => buildFlaggedGroups(records, transactions, correlationEdges, 
 
 console.log('\nGroups built from case FDB-2026-014:\n')
 const groups = build()
+const keyRecord = (pk: string) => ({ ...records[0], id: 'key:' + pk, pk })
+check('BIGINT primary keys stay exact beyond JavaScript precision', cmpRecord(keyRecord('9007199254740992'), keyRecord('9007199254740993')) < 0)
+check('composite keys sort component by component', cmpRecord(keyRecord('1|9'), keyRecord('1|10')) < 0)
+check('hexadecimal-looking string keys remain lexical', cmpRecord(keyRecord('0x10'), keyRecord('0x9')) < 0)
+const unsupportedRows = reconRows.map(r => r.recordId === 'transfers:9001' ? { ...r, result: 'Unsupported' as const } : r)
+check('unsupported records are not labelled as agreeing', buildFlaggedGroups(records, transactions, correlationEdges, unsupportedRows).flatMap(g => g.records).find(r => r.record.id === 'transfers:9001')?.kind === 'unsupported')
 for (const g of groups) {
   console.log(`  group ${g.id}`)
   console.log(`    anchor row      ${g.anchorRowIndex} (${reconRows[g.anchorRowIndex].recordId} · ${reconRows[g.anchorRowIndex].field})`)

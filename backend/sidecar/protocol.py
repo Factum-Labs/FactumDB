@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass, replace
 from typing import TextIO
 
 
@@ -80,7 +80,10 @@ class CommandRouter:
                 error_message=f"unknown command: {request.command}",
             )
         try:
-            return SidecarResponse(request.request_id, True, result=handler(request.payload))
+            result = handler(request.payload)
+            if isinstance(result, SidecarResponse):
+                return replace(result, request_id=request.request_id)
+            return SidecarResponse(request.request_id, True, result=result)
         except Exception as error:
             return SidecarResponse(
                 request.request_id,

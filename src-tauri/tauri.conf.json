@@ -32,6 +32,11 @@
     }
   },
   "bundle": {
+    "resources": {
+      "../backend/core/": "backend/core/",
+      "../backend/adapters/": "backend/adapters/",
+      "../backend/sidecar/": "backend/sidecar/"
+    },
     "active": true,
     "targets": "all",
     "icon": [
