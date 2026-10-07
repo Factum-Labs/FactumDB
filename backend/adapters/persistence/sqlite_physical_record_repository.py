@@ -18,6 +18,7 @@ methods, so this class can be passed straight to the reconciliation service.
 
 from typing import FrozenSet, Sequence, Tuple
 
+from adapters.persistence._provenance import provenance_from
 from adapters.persistence._values import from_json, to_json
 from core.application.ports.physical_record_repository_port import (
     PhysicalRecordRepositoryPort,
@@ -28,6 +29,15 @@ _COLUMNS = """
     record_id, evidence_id, tool_run_id, database_name, table_name,
     values_json, is_deleted, page_no, page_offset
 """
+
+# Reads also fetch the tool's name and the evidence file's name, which a
+# row's provenance needs (see _provenance.py).
+_SELECT = (
+    "SELECT " + ", ".join(f"p.{c.strip()}" for c in _COLUMNS.split(","))
+    + ", t.tool_name, e.filename FROM physical_records p"
+    " LEFT JOIN tool_runs t ON t.tool_run_id = p.tool_run_id"
+    " LEFT JOIN evidence_files e ON e.evidence_id = p.evidence_id"
+)
 
 
 class SqlitePhysicalRecordRepository(PhysicalRecordRepositoryPort):
@@ -95,8 +105,7 @@ class SqlitePhysicalRecordRepository(PhysicalRecordRepositoryPort):
         service needs to see it to say so.
         """
         rows = self._connection.execute(
-            f"SELECT {_COLUMNS} FROM physical_records "
-            "WHERE database_name = ? AND table_name = ? ORDER BY record_id",
+            f"{_SELECT} WHERE p.database_name = ? AND p.table_name = ? ORDER BY p.record_id",
             (database, table),
         ).fetchall()
         return [_row_to_record(r) for r in rows]
@@ -109,14 +118,8 @@ class SqlitePhysicalRecordRepository(PhysicalRecordRepositoryPort):
         joins through evidence_files rather than duplicating the column.
         """
         rows = self._connection.execute(
-            """
-            SELECT p.record_id, p.evidence_id, p.tool_run_id, p.database_name,
-                   p.table_name, p.values_json, p.is_deleted, p.page_no, p.page_offset
-            FROM physical_records p
-            JOIN evidence_files e ON e.evidence_id = p.evidence_id
-            WHERE e.case_id = ? AND p.is_deleted = 1
-            ORDER BY p.database_name, p.table_name, p.record_id
-            """,
+            f"{_SELECT} WHERE e.case_id = ? AND p.is_deleted = 1 "
+            "ORDER BY p.database_name, p.table_name, p.record_id",
             (case_id,),
         ).fetchall()
         return [_row_to_record(r) for r in rows]
@@ -165,4 +168,5 @@ def _row_to_record(row) -> PhysicalRecord:
         is_deleted=bool(row["is_deleted"]),
         page_no=row["page_no"],
         page_offset=row["page_offset"],
+        provenance=provenance_from(row, row["filename"]),
     )
