@@ -23,9 +23,14 @@ comes from the FACTUMDB_IBD2SQL_PATH environment variable.
 import os
 import re
 import subprocess
+from decimal import Decimal, InvalidOperation
 
 from adapters.tools.versions import read_version
 from core.domain.models.canonical import PhysicalRecord
+from core.domain.models.values import UndecodableValue
+
+# A binary value as ibd2sql prints it, e.g. 0x89504e47.
+_HEX = re.compile(r"^0x[0-9a-fA-F]*$")
 
 # One INSERT statement: schema, table, the column list, then the values.
 INSERT_LINE = re.compile(
@@ -185,12 +190,20 @@ class Ibd2SqlAdapter:
             pass
 
         try:
-            return float(raw)
-        except ValueError:
+            # DECIMAL columns are printed as plain numbers such as 4000.10. A
+            # float cannot hold most of them exactly, so they become Decimals.
+            return Decimal(raw)
+        except InvalidOperation:
             pass
 
-        # Anything else (hex blobs, values we do not recognise) is kept as the
-        # exact text the tool printed rather than being altered.
+        if _HEX.match(raw):
+            # Binary columns (BLOB, BINARY, VARBINARY) are printed as 0x...,
+            # and mysqlbinlog prints the same bytes another way. Neither
+            # spelling is real text, so both sides mark them as not decoded.
+            return UndecodableValue("binary data is not decoded")
+
+        # Anything else is kept as the exact text the tool printed rather
+        # than being altered.
         return raw
 
     @staticmethod

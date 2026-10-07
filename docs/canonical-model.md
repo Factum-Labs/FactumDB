@@ -260,4 +260,19 @@ Worth noting: the index file stores **absolute paths**, like `/var/log/mysql/mys
 
 **7. We model the binlog file list from `mysql-bin.index`.** Agreed with the team. It is the only way to tell that a log file is missing, and that difference decides whether a mismatch is reported as an evidence gap or wrongly reported as tampering.
 
+**8. A column value is written the same way whichever tool it came from.** The analysis compares the binlog side with the page side value by value, so if the two tools write the same value differently, the tool reports a conflict that never happened. Scenario 4 (`datasets/scenario4_types`) showed exactly where they differ:
+
+| Type | `mysqlbinlog` prints | `ibd2sql` prints | Stored as |
+|---|---|---|---|
+| `DECIMAL` | `4000.10` | `4000.10` | `Decimal("4000.10")` - never a float, which cannot hold 4000.10 exactly |
+| `ENUM` | `2` (position in the list) | `'paid'` | the label, `"paid"` |
+| `DATE` | `'2026:10:03'` | `'2026-10-03'` | `"2026-10-03"` |
+| `TIMESTAMP` | `1790999160` (seconds since 1970, UTC) | `'2026-10-03 09:16:00'` | the wall-clock text, in the time zone of the machine running the analysis |
+| `BLOB`, `BINARY` | escaped bytes `'\x89PNG...'` | `0x89504e47...` | `UndecodableValue("binary data is not decoded")` |
+| `DATETIME`, `CHAR`, `VARCHAR`, `TEXT`, `JSON`, `INT`, `TINYINT` | same as `ibd2sql` | | as printed |
+
+The binlog adapter does the conversions, because it already has the schema to name the `@N` columns and the column type tells it what each value is. `TIMESTAMP` is the odd one: `ibd2sql` turns the stored UTC instant into local time using the zone of whatever machine runs it (running it with `TZ=UTC` changes its output), so the binlog value is converted to that same zone. Both sides then agree on any machine, but the times shown depend on where the analysis ran, so the report should state that zone.
+
+A partial row image (`binlog_row_image=MINIMAL`) only has the key and the changed columns. The columns it did not log are left out of `before` and `after` rather than set to `None`, because "not logged" is not "NULL"; the domain layer reads a missing column as unobserved.
+
 ---
