@@ -40,6 +40,7 @@ UTC. The original text is kept in raw_timestamp either way.
 import re
 import subprocess
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 
 from adapters.tools.versions import read_version
 from core.domain.models.canonical import BinlogEvent, TransactionMarker
@@ -305,7 +306,7 @@ class _ParserState:
                              "table": f"{schema.database}.{schema.table}"},
                 ))
                 continue
-            named[column.name] = value
+            named[column.name] = _typed(column.data_type, value)
         return named
 
     def _reset_row(self):
@@ -382,11 +383,63 @@ def _convert_field(raw):
     except ValueError:
         pass
     try:
-        return float(raw)
-    except ValueError:
+        # DECIMAL columns are printed as plain numbers such as 4000.10. A float
+        # cannot hold most of them exactly, so the text becomes a Decimal.
+        return Decimal(raw)
+    except InvalidOperation:
         pass
 
-    # mysqlbinlog prints some types in forms we do not decode yet, for example
-    # binary data as hex. Keeping the raw text would look like a real value, so
-    # it is marked instead.
+    # Anything else is a form this parser does not know. Keeping the raw text
+    # would look like a real value, so it is marked instead.
     return UndecodableValue(f"unrecognised binlog value: {raw[:40]}")
+
+
+_COLON_DATE = re.compile(r"^\d{4}:\d{2}:\d{2}$")
+
+
+def _typed(data_type, value):
+    """Write a value the way ibd2sql writes the same column.
+
+    The two tools print some types differently, and the analysis compares
+    the binlog side with the page side value by value, so the binlog values
+    are brought into line here, using the column type from the schema:
+
+    - ENUM is printed as its position in the list (2), not its label ('paid').
+    - DATE is printed with colons (2026:10:03) instead of dashes.
+    - TIMESTAMP is printed as seconds since 1970 in UTC. ibd2sql prints the
+      wall-clock time in the time zone of the machine running it, so the
+      binlog value is converted to that same zone.
+    - Binary columns are printed as escaped bytes, which would pass for
+      ordinary text, so they are marked as not decoded - as on the page side.
+    """
+    if value is None or isinstance(value, UndecodableValue):
+        return value
+    kind = data_type.lower()
+    if kind.startswith("enum(") and isinstance(value, int):
+        labels = _enum_labels(data_type)
+        if value == 0:
+            return ""  # MySQL stores an invalid enum entry as the empty string
+        if value <= len(labels):
+            return labels[value - 1]
+        return UndecodableValue(f"enum position {value} is not in {data_type}")
+    if kind == "date" and isinstance(value, str) and _COLON_DATE.match(value):
+        return value.replace(":", "-")
+    if kind.startswith("timestamp") and isinstance(value, (int, Decimal)):
+        return _local_time(value)
+    if kind.endswith("blob") or kind.startswith(("binary", "varbinary")):
+        return UndecodableValue("binary data is not decoded")
+    return value
+
+
+def _enum_labels(data_type):
+    """enum('pending','paid') -> ['pending', 'paid']. A quote inside a label is doubled."""
+    return [label.replace("''", "'") for label in re.findall(r"'((?:[^']|'')*)'", data_type)]
+
+
+def _local_time(epoch):
+    """Seconds since 1970 -> wall-clock time in this machine's zone, as ibd2sql prints it."""
+    seconds = int(epoch)
+    text = datetime.fromtimestamp(seconds).strftime("%Y-%m-%d %H:%M:%S")
+    if epoch != seconds:
+        text += "." + str(epoch).split(".")[1]
+    return text
