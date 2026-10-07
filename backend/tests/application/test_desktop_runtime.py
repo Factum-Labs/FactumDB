@@ -104,7 +104,8 @@ def test_full_analysis_restart_provenance_export_and_case_isolation(runtime, tmp
     data = call(runtime, "get_case_data", case_id=first)
     assert set(data["analysis"]) == {"grouping", "correlation", "reconstruction", "reconciliation"}
     assert data["analysis"]["reconciliation"]["rows"]
-    assert len(data["tables"]["physical_records"]) == 1
+    assert data["table_counts"]["physical_records"] == 1
+    assert data["tables"]["physical_records"] == []
     assert len(data["tables"]["tool_runs"]) == 5
     assert all(row["verification_status"] == "verified" for row in data["tables"]["evidence_files"])
     for row in data["tables"]["evidence_files"]:

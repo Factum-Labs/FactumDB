@@ -59,11 +59,16 @@ export const useApp = create<AppState>((set, get) => {
         run = await request<PipelineRun>('start_pipeline', { case_id: caseId() })
         await refresh()
       }
+      if (run.complete) return
       if (run.stopped) throw new Error('Retry the failed stage or start a new analysis run.')
       do {
         const index = run.stages.findIndex(s => s.status === 'pending')
         set({ runningStage: index < 0 ? null : index })
         run = await request<PipelineRun>('run_next_stage', { run_id: run.run_id })
+        // Persisted stage success must reach the UI even if refreshing a view
+        // fails. Never leave a completed run looking like a running stage.
+        set({ pipelineComplete: run.complete, stagesDone: run.stages.filter(s => ['succeeded', 'skipped'].includes(s.status)).length,
+          runningStage: null, data: get().data ? { ...get().data!, run } : null })
         await refresh()
         if (get().cancelRequested && !run.stopped) {
           await request('cancel_pipeline', { run_id: run.run_id })

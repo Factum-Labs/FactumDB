@@ -102,10 +102,11 @@ class MysqlBinlogDecoder:
 
     def decode(self, case_id: str, evidence_id: str, working_copy_path: str) -> ProvenancedResult[DecodedBinlog]:
         runner = _runner(self._audit, case_id, evidence_id, self._versions)
-        events, markers, warnings = self._adapter.decode(
+        events, markers, warnings, creations = self._adapter.decode(
             working_copy_path, self._schema_lookup, run=runner.run if runner else None,
+            include_creations=True,
         )
-        return _result(DecodedBinlog(tuple(events), tuple(markers), tuple(warnings)), runner)
+        return _result(DecodedBinlog(tuple(events), tuple(markers), tuple(warnings), tuple(creations)), runner)
 
 
 def _runner(audit, case_id, evidence_id, versions=None):

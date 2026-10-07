@@ -6,6 +6,7 @@ Usage: py -3.11 datasets/attack_lab/verify_app.py --mysql-bin ".../bin" --ibd2sq
 """
 import argparse
 from collections import Counter
+from datetime import datetime
 import json
 from pathlib import Path
 import sys
@@ -15,6 +16,83 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT.parents[1] / "backend"))
 from sidecar.desktop import DesktopRuntime
 from sidecar.protocol import SidecarRequest, _json_default
+from generate import SUBJECTS
+from core.engine import ENGINE_REVISION
+
+
+def pipeline_seconds(stages):
+    def timestamp(value):
+        return value if isinstance(value, datetime) else datetime.fromisoformat(value.replace('Z', '+00:00'))
+    return round(sum((timestamp(a['finished_at']) - timestamp(a['started_at'])).total_seconds()
+                     for stage in stages for a in stage['attempts'] if a['finished_at']), 2)
+
+
+def acceptance(subject, view):
+    """Assert individual keys and fields, never nested occurrence counts."""
+    _, _, _, people, headers, lines, ledger, staff = next(s for s in SUBJECTS if s[0] == subject)
+    analysis = view['analysis']
+    reconciliation = analysis['reconciliation']
+    by_id = {r['record']['id']: r for r in reconciliation['records']}
+    histories = {h['record']['id']: h for h in analysis['reconstruction']['histories']}
+    rules = {f['rule_id'] for f in view['findings']}
+    checks = {}
+
+    def all_fields(table, keys, field, result):
+        return all(any(f['field'] == field and f['result'] == result
+                       for f in by_id.get(f'{table}:{key}', {}).get('fields', [])) for key in keys)
+
+    grouped = analysis['grouping']
+    retained = sum(len(t['events']) for t in grouped['transactions']) + len(grouped['ungrouped_events'])
+    checks['all_decoded_rows_accounted_for'] = retained == len(view['tables']['binlog_events'])
+    checks['no_false_duplicate_rows'] = 'R-GRP-013' not in rules
+    if subject.startswith('06'):
+        checks['15500_live_records_exact'] = len(by_id) == 15500 and all(r['rollup'] == 'Exact' for r in by_id.values())
+        checks['no_unexpected_warnings'] = not any(f['severity'] in ('warning', 'error', 'notice') for f in view['findings']) and not view['tables']['warnings']
+    else:
+        checks['keyless_table_visible'] = 'R-CORR-020' in rules
+        checks['unsupported_type_limitations_visible'] = 'R-RECON-008' in rules
+        if not subject.startswith('02'):
+            checks['composite_key_continuity'] = 'R-CORR-010' in rules
+            checks['key_reuse'] = any(f['rule_id'] == 'R-CORR-012' and f.get('subject', {}).get('id') == f'{headers}:50' for f in view['findings'])
+        # Withheld log 000002 contains these updates, so the credit union cannot observe them.
+        if not subject.startswith('02'):
+            checks['minimal_updates_retained'] = all(
+                len(next(r for r in analysis['correlation']['records'] if r['record']['id'] == f'{headers}:{key}')['log_event_refs']) >= 2
+                and not any(f['result'] == 'Conflicting' for f in by_id[f'{headers}:{key}']['fields'])
+                for key in range(301, 311)
+            )
+        if subject.startswith('01'):
+            checks['financial_rewrites_11_20'] = all_fields(headers, range(11, 21), 'amount_minor', 'Conflicting')
+            checks['contact_takeovers_31_40'] = all_fields(people, range(31, 41), 'email', 'Conflicting')
+            checks['role_rewrites_8_9'] = all_fields(staff, (8, 9), 'role', 'Conflicting')
+            checks['hidden_deletions_81_90'] = all_fields(ledger, range(81, 91), 'record presence', 'Conflicting')
+            checks['fabricated_row_900001'] = all_fields(headers, (900001,), 'record presence', 'Conflicting')
+            checks['discontinuity_71'] = histories[f'{headers}:71']['before_image_mismatch']
+        elif subject.startswith('02'):
+            checks['withheld_key_change_not_invented'] = 'R-CORR-010' not in rules
+            checks['withheld_key_reuse_not_invented'] = 'R-CORR-012' not in rules
+            checks['missing_log_named'] = any('mysql-bin.000002' in g['missing_files'] for g in grouped['coverage']['gaps'])
+            checks['gap_explains_financial_differences'] = all_fields(headers, range(11, 21), 'amount_minor', 'Unresolved')
+            checks['fabricated_row_conservative'] = all_fields(headers, (900001,), 'record presence', 'Unresolved')
+        elif subject.startswith('03'):
+            checks['truncation_keeps_earlier_differences_unresolved'] = all_fields(headers, range(11, 21), 'amount_minor', 'Unresolved')
+            checks['final_transaction_incomplete'] = grouped['transactions'][-1]['status'] == 'incomplete'
+            checks['unterminated_changes_not_applied'] = all(
+                histories[f'{headers}:{key}']['final_log_state']['values']['status'] != 'held'
+                for key in range(81, 86)
+            ) and histories[f'{staff}:25']['final_log_state']['values']['role'] != 'administrator'
+            checks['truncated_coverage_visible'] = 'R-COV-003' in rules and 'R-GRP-004' in rules
+            checks['cleanup_not_observed_rollback'] = all(t['status'] != 'rolled_back' for t in grouped['transactions'])
+        elif subject.startswith('04'):
+            checks['damaged_tablespace_visible'] = any(r['status'] == 'damaged' for r in view['tables']['integrity_results'])
+            damaged_rows = [r for r in by_id.values() if r['record']['table'].split('.')[-1] == ledger]
+            checks['damaged_presence_conservative'] = bool(damaged_rows) and all(f['result'] == 'Unresolved' for r in damaged_rows for f in r['fields'] if f['field'] == 'record presence')
+            checks['damaged_values_conservative'] = bool(damaged_rows) and all(f['result'] in ('Unresolved', 'Unsupported') for r in damaged_rows for f in r['fields'])
+        elif subject.startswith('05'):
+            checks['missing_index_visible'] = 'R-COV-001' in rules
+            checks['unavailable_invoice_schema_visible'] = any(w['code'] == 'SCHEMA_NOT_FOUND' and w['context'].get('table') == ledger for w in view['tables']['warnings'])
+            checks['no_invoice_physical_values_invented'] = not any(r['table_name'] == ledger for r in view['tables']['physical_records'])
+    return checks
 
 
 def call(runtime, command, **payload):
@@ -50,6 +128,7 @@ def main():
         subjects = [p for p in subjects if p.parent.name == args.subject]
         if not subjects:
             parser.error("No matching generated subject")
+    failures = []
     for manifest in subjects:
         subject = manifest.parent
         print(f"Validating app: {subject.name}", flush=True)
@@ -76,27 +155,41 @@ def main():
                     print(f"  {stage.get('stage', '')}: {stage.get('status', '')}", flush=True)
             view = call(runtime, "get_case_data", case_id=case_id)
             run = view["run"]
-            classifications = Counter()
-            collect(view["analysis"].get("reconciliation", {}), "result", classifications)
+            if not run['complete']:
+                raise RuntimeError('Incomplete run: existing observed reports left unchanged')
+            reconciliation = view['analysis']['reconciliation']
+            records = Counter(r['rollup'] for r in reconciliation['records'])
+            fields = Counter(r['result'] for r in reconciliation['rows'])
+            checks = acceptance(subject.name, view)
             rules = Counter(f["rule_id"] for f in view["findings"])
             elapsed = round(time.monotonic()-started, 2) if not args.report_existing else None
             summary = {"complete": run["complete"], "elapsed_seconds": elapsed,
+                       "pipeline_seconds": pipeline_seconds(run['stages']),
                        "include_deleted": False, "stages": run["stages"],
                        "physical_rows": len(view["tables"]["physical_records"]),
-                       "classification_occurrences": dict(classifications), "finding_rule_counts": dict(sorted(rules.items())),
-                       "note": "Counts include nested field/record results. Actual app observations; consult EXPECTED_FINDINGS.md for acceptance criteria."}
+                       "engine_revision": ENGINE_REVISION,
+                       "record_counts": dict(records), "field_counts": dict(fields),
+                       "acceptance_checks": checks, "acceptance_passed": all(checks.values()),
+                       "finding_rule_counts": dict(sorted(rules.items())),
+                       "note": "Distinct record rollups and field rows are counted separately. Acceptance checks use exact affected keys."}
             (subject / "APP_VALIDATION.json").write_text(json.dumps(summary, indent=2, default=_json_default)+"\n", encoding="utf-8")
             timing = f"Elapsed: {elapsed} seconds." if elapsed is not None else "Report recovered from the stored validation case; stage timestamps are in APP_VALIDATION.json."
             text = f"# Actual app validation: {subject.name}\n\nPipeline complete: **{run['complete']}**. Deleted-row extraction: off. Physical rows extracted: {summary['physical_rows']:,}. {timing}\n\n"
             text += "These observations are from the current backend and installed tools, not assumed expected results. A stopped pipeline or a clean-control warning is an app/tool limitation to investigate; do not change fixture ground truth to conceal it.\n\n"
-            text += "Classification occurrences (nested record/field results):\n\n```json\n" + json.dumps(dict(classifications), indent=2) + "\n```\n\nFinding rules:\n\n"
+            text += f"Engine revision: {ENGINE_REVISION}. Acceptance passed: **{all(checks.values())}**.\n\n"
+            text += "Record counts:\n\n```json\n" + json.dumps(dict(records), indent=2) + "\n```\n\nField counts:\n\n```json\n" + json.dumps(dict(fields), indent=2) + "\n```\n\n"
+            text += "Acceptance assertions:\n\n" + ''.join(f"- {'PASS' if passed else 'FAIL'}: {name}\n" for name, passed in checks.items()) + "\nFinding rules:\n\n"
             text += "| Rule | Count |\n|---|---:|\n" + "".join(f"| {r} | {c} |\n" for r,c in sorted(rules.items()))
             if not run["complete"]:
                 text += "\nStopped pipeline details are in `APP_VALIDATION.json`.\n"
             (subject / "APP_VALIDATION.md").write_text(text, encoding="utf-8")
-            print(f"  Complete={run['complete']}; classifications={dict(classifications)}", flush=True)
+            print(f"  Complete={run['complete']}; records={dict(records)}; acceptance={checks}", flush=True)
+            if not all(checks.values()):
+                failures.append((subject.name, [name for name, passed in checks.items() if not passed]))
         finally:
             runtime.close()
+    if failures:
+        raise RuntimeError(f'Dataset acceptance failed: {failures}')
 
 
 if __name__ == "__main__":

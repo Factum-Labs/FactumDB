@@ -13,7 +13,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import { mockIPC, clearMocks } from '@tauri-apps/api/mocks'
 import { useApp } from '../src/store'
-import { request, display, type CaseData } from '../src/lib/backend'
+import { request, display, type CaseData, type Row } from '../src/lib/backend'
 import { CasesScreen, IntakeScreen, PipelineScreen, TimelineScreen, RecordHistoryScreen, ReconciliationScreen, GapsScreen, ProvenanceScreen, ReportScreen, SettingsScreen } from '../src/screens/ConnectedScreens'
 
 const prefix = join(tmpdir(), 'factumdb-ui-check-')
@@ -107,6 +107,21 @@ try {
   await useApp.getState().openCase(caseId)
   assert.equal(useApp.getState().data!.case.case_name, 'UI integration')
   const seeded = await request<CaseData>('seed_test_results', { case_id: caseId })
+  assert.equal(seeded.tables.analysis_results.length, 0)
+  assert.equal(seeded.analysis.reconstruction.details_deferred, true)
+  // Server rendering has no effects. Fetch selected details through the same
+  // IPC used by the screens, then render their loaded states.
+  const historySummary = (seeded.analysis.reconstruction.histories as Row[])[0]
+  const transactionSummary = (seeded.analysis.grouping.transactions as Row[])[0]
+  const history = await request<{ detail: Row; findings: Row[] }>('get_analysis_detail', {
+    case_id: caseId, kind: 'history', identity: (historySummary.record as Row).id,
+  })
+  const transaction = await request<{ detail: Row }>('get_analysis_detail', {
+    case_id: caseId, kind: 'transaction', identity: transactionSummary.id,
+  })
+  seeded.analysis.reconstruction = { ...seeded.analysis.reconstruction, histories: [history.detail], details_deferred: false }
+  seeded.analysis.grouping = { ...seeded.analysis.grouping, transactions: [transaction.detail], details_deferred: false }
+  seeded.findings.push(...history.findings)
   useApp.setState({ data: seeded, pipelineComplete: true, error: null })
   // SSR uses the hydration snapshot; render the state just returned by Python.
   React.useSyncExternalStore = (subscribe, getSnapshot) => originalSnapshotHook(subscribe, getSnapshot, getSnapshot)

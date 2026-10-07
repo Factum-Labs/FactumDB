@@ -21,7 +21,7 @@ from adapters.persistence._timestamps import from_text, to_text
 from core.application.ports.case_repository_port import CaseRepositoryPort
 from core.domain.models.case import Case
 
-_COLUMNS = "case_id, case_name, examiner, workspace_path, created_at"
+_COLUMNS = "case_id, case_name, examiner, workspace_path, created_at, engine_revision, reanalysis_required"
 
 
 class SqliteCaseRepository(CaseRepositoryPort):
@@ -39,13 +39,17 @@ class SqliteCaseRepository(CaseRepositoryPort):
         same case does not crash. The row is case metadata, not evidence.
         """
         self._connection.execute(
-            f"INSERT OR REPLACE INTO cases ({_COLUMNS}) VALUES (?, ?, ?, ?, ?)",
+            f"INSERT INTO cases ({_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(case_id) DO UPDATE SET case_name=excluded.case_name, "
+            "examiner=excluded.examiner, workspace_path=excluded.workspace_path, created_at=excluded.created_at",
             (
                 case.id,
                 case.name,
                 case.examiner,
                 case.workspace_path,
                 to_text(case.created_at),
+                case.engine_revision,
+                int(case.reanalysis_required),
             ),
         )
         self._connection.commit()
@@ -74,4 +78,6 @@ def _row_to_case(row) -> Case:
         row["examiner"],
         from_text(row["created_at"]),
         row["workspace_path"],
+        row["engine_revision"],
+        bool(row["reanalysis_required"]),
     )

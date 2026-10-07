@@ -4,6 +4,7 @@ export type Json = null | boolean | number | string | Json[] | { [key: string]: 
 export type Row = { [key: string]: Json }
 export interface CaseSummary {
   id: string; name: string; examiner: string; workspace: string; opened: string; files: number; status: string
+  engine_revision?: number; reanalysis_required?: boolean
 }
 export interface Attempt {
   number: number; status: string; started_at: string; finished_at: string | null
@@ -14,7 +15,9 @@ export interface PipelineRun {
   stages: { stage: string; status: string; attempts: Attempt[] }[]
 }
 export interface CaseData {
-  case: { case_id: string; case_name: string; examiner: string; workspace_path: string; created_at: string }
+  table_counts?: Record<string, number>
+  engine_revision?: number; analysis_format_version?: number
+  case: { case_id: string; case_name: string; examiner: string; examiner_notes?: string; workspace_path: string; created_at: string; engine_revision?: number; reanalysis_required?: boolean }
   tables: Record<string, Row[]>
   analysis: Record<string, Row>
   findings: Row[]

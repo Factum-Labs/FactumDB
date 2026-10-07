@@ -54,6 +54,7 @@ from core.domain.models.values import Value
 from core.domain.ordering import record_sort_key
 from core.domain.ports import EvidenceContext, PhysicalRecordSource, SchemaCatalog
 from core.domain.rules import rule
+from core.domain.services.physical_index import PhysicalIndex
 
 
 class RecordCorrelationService:
@@ -72,6 +73,8 @@ class RecordCorrelationService:
     # ── Entry point ──────────────────────────────────────────────────────────
 
     def correlate(self, grouping: GroupingResult) -> CorrelationResult:
+        self._physical_index = PhysicalIndex(self._schemas, self._physical)
+        self._physical_tables = self._evidence.tables_with_physical_evidence()
         findings: list[Finding] = []
         events = self._all_events(grouping)
 
@@ -112,10 +115,14 @@ class RecordCorrelationService:
             records=tuple(records),
             edges=edges,
             event_correlations=tuple(
-                sorted(event_results, key=lambda c: (c.ref[0], c.ref[1]))
+                sorted(event_results, key=lambda c: c.ref)
             ),
             unsupported_tables=tuple(sorted(unsupported, key=lambda u: u.qualified_name)),
             findings=tuple(findings),
+            uncertain_tables=tuple(sorted({
+                (unidentified.database, unidentified.table) for result in event_results
+                if result.record_id is None and (unidentified := grouping.event_for(result.ref)) is not None
+            })),
         )
 
     # ── Table-level gates ────────────────────────────────────────────────────
@@ -160,6 +167,9 @@ class RecordCorrelationService:
         # UPDATE keys off its after-image so a key change lands on the new
         # identity; the before-image is picked up separately as an alias.
         image = event.before if IDENTITY_IMAGE[event.event_type] == "before" else event.after
+        if event.event_type == "UPDATE":
+            # Only derive identity. Keep the sparse images themselves unchanged.
+            image = {**(event.before or {}), **(event.after or {})}
         key = self._key_from_image(event, schema, image, findings)
         if key is None:
             results.append(
@@ -201,10 +211,11 @@ class RecordCorrelationService:
             findings.append(
                 self._finding(
                     "R-CORR-003",
-                    SubjectRef(SubjectKind.EVENT, f"{event.source_file}:{event.log_position}"),
+                    SubjectRef(SubjectKind.EVENT, f"{event.source_file}:{event.log_position}#{event.row_index}"),
                     {
                         "source_file": event.source_file,
                         "log_position": str(event.log_position),
+                        "row_index": str(event.row_index),
                         "reason": f"{exc.column}: {exc.reason}",
                     },
                     (event.provenance,),
@@ -397,7 +408,7 @@ class RecordCorrelationService:
 
         records: list[RecordCorrelation] = []
         for key, key_events in by_key.items():
-            ordered = sorted(key_events, key=lambda e: (e.source_file, e.log_position))
+            ordered = sorted(key_events, key=lambda e: e.ref)
             record = RecordRef.from_key(key)
             record_findings: list[Finding] = []
 
@@ -523,15 +534,7 @@ class RecordCorrelationService:
         )
 
     def _candidates_for(self, key: RecordKey) -> list[PhysicalRecord]:
-        matches: list[PhysicalRecord] = []
-        for record in self._physical.records_for(key.database, key.table):
-            try:
-                values = tuple(render_key_value(c, record.values[c]) for c in key.columns)
-            except (UnrenderableKey, KeyError):
-                continue
-            if values == key.values:
-                matches.append(record)
-        return matches
+        return list(self._physical_index.candidates(key))
 
     def _physical_only(
         self,
@@ -547,7 +550,7 @@ class RecordCorrelationService:
             schema = self._schemas.schema_for(database, table)
             if schema is None or not schema.primary_key_columns():
                 continue
-            if (database, table) not in self._evidence.tables_with_physical_evidence():
+            if (database, table) not in self._physical_tables:
                 continue
             for physical in self._physical.records_for(database, table):
                 key = self._key_from_physical(physical, schema)
@@ -562,7 +565,7 @@ class RecordCorrelationService:
                     (physical.provenance,),
                 )
                 findings.append(finding)
-                extra.append(
+                extra.append(self._match_physical(
                     RecordCorrelation(
                         record=record,
                         method=MatchMethod.PHYSICAL_ONLY,
@@ -570,8 +573,8 @@ class RecordCorrelationService:
                         physical_candidates=(self._physical_ref(physical),),
                         findings=(finding,),
                         provenance=(physical.provenance,) if physical.provenance else (),
-                    )
-                )
+                    ), key, findings,
+                ))
         return extra
 
     @staticmethod
@@ -610,7 +613,7 @@ class RecordCorrelationService:
         missing. Conflating those would turn "we were not given the file" into a
         conflict, which is precisely the false claim the tool exists to avoid.
         """
-        if (database, table) in self._evidence.tables_with_physical_evidence():
+        if (database, table) in self._physical_tables:
             return True
         qualified = f"{database}.{table}"
         if not any(
@@ -660,14 +663,7 @@ class RecordCorrelationService:
 
     @staticmethod
     def _event_at(ref: EventRef, grouping: GroupingResult) -> BinlogEvent | None:
-        for transaction in grouping.transactions:
-            for grouped in transaction.events:
-                if grouped.ref == ref:
-                    return grouped.event
-        for ungrouped in grouping.ungrouped_events:
-            if ungrouped.ref == ref:
-                return ungrouped.event
-        return None
+        return grouping.event_for(ref)
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -685,7 +681,7 @@ class RecordCorrelationService:
 
     def _tables_in_play(self, events: Sequence[BinlogEvent]) -> list[tuple[str, str]]:
         tables = {(e.database, e.table) for e in events}
-        tables |= set(self._evidence.tables_with_physical_evidence())
+        tables |= set(self._physical_tables)
         return sorted(tables)
 
     @staticmethod

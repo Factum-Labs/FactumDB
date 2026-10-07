@@ -21,7 +21,8 @@
       "event_refs": [
         [
           "binlog.000018",
-          100
+          100,
+          0
         ]
       ],
       "event_type": "INSERT",
@@ -32,7 +33,8 @@
       "event_refs": [
         [
           "binlog.000018",
-          200
+          200,
+          0
         ]
       ],
       "event_type": "UPDATE",
@@ -43,7 +45,8 @@
       "event_refs": [
         [
           "binlog.000018",
-          300
+          300,
+          0
         ]
       ],
       "event_type": "DELETE",
@@ -78,24 +81,29 @@
         "derived_from": {
           "account_id": [
             "binlog.000018",
-            200
+            200,
+            0
           ],
           "balance": [
             "binlog.000018",
-            200
+            200,
+            0
           ],
           "owner": [
             "binlog.000018",
-            200
+            200,
+            0
           ],
           "status": [
             "binlog.000018",
-            200
+            200,
+            0
           ]
         },
         "last_ref": [
           "binlog.000018",
-          300
+          300,
+          0
         ],
         "presence": "absent",
         "values": {
@@ -116,6 +124,7 @@
             {
               "evidence_id": "ev_b7785a0c",
               "log_position": 100,
+              "row_index": 0,
               "source_file": "binlog.000018",
               "tool_name": "mysqlbinlog",
               "tool_run_id": "run_3f21c8de"
@@ -140,6 +149,7 @@
             {
               "evidence_id": "ev_b7785a0c",
               "log_position": 100,
+              "row_index": 0,
               "source_file": "binlog.000018",
               "tool_name": "mysqlbinlog",
               "tool_run_id": "run_3f21c8de"
@@ -164,6 +174,7 @@
             {
               "evidence_id": "ev_b7785a0c",
               "log_position": 200,
+              "row_index": 0,
               "source_file": "binlog.000018",
               "tool_name": "mysqlbinlog",
               "tool_run_id": "run_3f21c8de"
@@ -188,6 +199,7 @@
             {
               "evidence_id": "ev_b7785a0c",
               "log_position": 300,
+              "row_index": 0,
               "source_file": "binlog.000018",
               "tool_name": "mysqlbinlog",
               "tool_run_id": "run_3f21c8de"
@@ -210,6 +222,7 @@
             {
               "evidence_id": "ev_b7785a0c",
               "log_position": null,
+              "row_index": null,
               "source_file": "accounts.ibd",
               "tool_name": "ibd2sql",
               "tool_run_id": "run_3f21c8de"
@@ -261,24 +274,29 @@
         "derived_from": {
           "account_id": [
             "binlog.000018",
-            200
+            200,
+            0
           ],
           "balance": [
             "binlog.000018",
-            200
+            200,
+            0
           ],
           "owner": [
             "binlog.000018",
-            200
+            200,
+            0
           ],
           "status": [
             "binlog.000018",
-            200
+            200,
+            0
           ]
         },
         "last_ref": [
           "binlog.000018",
-          300
+          300,
+          0
         ],
         "presence": "absent",
         "values": {
@@ -303,6 +321,7 @@
                 {
                   "evidence_id": "ev_b7785a0c",
                   "log_position": 100,
+                  "row_index": 0,
                   "source_file": "binlog.000018",
                   "tool_name": "mysqlbinlog",
                   "tool_run_id": "run_3f21c8de"
@@ -323,13 +342,15 @@
           "provenance": {
             "evidence_id": "ev_b7785a0c",
             "log_position": 100,
+            "row_index": 0,
             "source_file": "binlog.000018",
             "tool_name": "mysqlbinlog",
             "tool_run_id": "run_3f21c8de"
           },
           "ref": [
             "binlog.000018",
-            100
+            100,
+            0
           ],
           "rule_id": "R-HIST-002",
           "timestamp": "2026-08-15T19:06:25Z",
@@ -385,6 +406,7 @@
                 {
                   "evidence_id": "ev_b7785a0c",
                   "log_position": 100,
+                  "row_index": 0,
                   "source_file": "binlog.000018",
                   "tool_name": "mysqlbinlog",
                   "tool_run_id": "run_3f21c8de"
@@ -405,13 +427,15 @@
           "provenance": {
             "evidence_id": "ev_b7785a0c",
             "log_position": 100,
+            "row_index": 0,
             "source_file": "binlog.000018",
             "tool_name": "mysqlbinlog",
             "tool_run_id": "run_3f21c8de"
           },
           "ref": [
             "binlog.000018",
-            100
+            100,
+            0
           ],
           "rule_id": "R-HIST-003",
           "timestamp": "2026-08-15T19:06:25Z",
@@ -441,6 +465,7 @@
                 {
                   "evidence_id": "ev_b7785a0c",
                   "log_position": 200,
+                  "row_index": 0,
                   "source_file": "binlog.000018",
                   "tool_name": "mysqlbinlog",
                   "tool_run_id": "run_3f21c8de"
@@ -461,13 +486,15 @@
           "provenance": {
             "evidence_id": "ev_b7785a0c",
             "log_position": 200,
+            "row_index": 0,
             "source_file": "binlog.000018",
             "tool_name": "mysqlbinlog",
             "tool_run_id": "run_3f21c8de"
           },
           "ref": [
             "binlog.000018",
-            200
+            200,
+            0
           ],
           "rule_id": "R-HIST-003",
           "timestamp": "2026-08-15T19:06:25Z",
@@ -490,6 +517,7 @@
                 {
                   "evidence_id": "ev_b7785a0c",
                   "log_position": 300,
+                  "row_index": 0,
                   "source_file": "binlog.000018",
                   "tool_name": "mysqlbinlog",
                   "tool_run_id": "run_3f21c8de"
@@ -510,13 +538,15 @@
           "provenance": {
             "evidence_id": "ev_b7785a0c",
             "log_position": 300,
+            "row_index": 0,
             "source_file": "binlog.000018",
             "tool_name": "mysqlbinlog",
             "tool_run_id": "run_3f21c8de"
           },
           "ref": [
             "binlog.000018",
-            300
+            300,
+            0
           ],
           "rule_id": "R-HIST-004",
           "timestamp": "2026-08-15T19:06:25Z",
@@ -570,6 +600,7 @@
                 {
                   "evidence_id": "ev_b7785a0c",
                   "log_position": null,
+                  "row_index": null,
                   "source_file": "accounts.ibd",
                   "tool_name": "ibd2sql",
                   "tool_run_id": "run_3f21c8de"
@@ -590,6 +621,7 @@
           "provenance": {
             "evidence_id": "ev_b7785a0c",
             "log_position": null,
+            "row_index": null,
             "source_file": "accounts.ibd",
             "tool_name": "ibd2sql",
             "tool_run_id": "run_3f21c8de"
@@ -613,6 +645,7 @@
           "findings": [
             {
               "context": {
+                "field": "record presence",
                 "log_presence": "absent",
                 "page_no": "4",
                 "phys_presence": "absent",
@@ -637,6 +670,7 @@
               {
                 "evidence_id": "ev_b7785a0c",
                 "log_position": 100,
+                "row_index": 0,
                 "source_file": "binlog.000018",
                 "tool_name": "mysqlbinlog",
                 "tool_run_id": "run_3f21c8de"
@@ -644,6 +678,7 @@
               {
                 "evidence_id": "ev_b7785a0c",
                 "log_position": 200,
+                "row_index": 0,
                 "source_file": "binlog.000018",
                 "tool_name": "mysqlbinlog",
                 "tool_run_id": "run_3f21c8de"
@@ -651,6 +686,7 @@
               {
                 "evidence_id": "ev_b7785a0c",
                 "log_position": 300,
+                "row_index": 0,
                 "source_file": "binlog.000018",
                 "tool_name": "mysqlbinlog",
                 "tool_run_id": "run_3f21c8de"
@@ -659,6 +695,7 @@
             "physical": {
               "evidence_id": "ev_b7785a0c",
               "log_position": null,
+              "row_index": null,
               "source_file": "accounts.ibd",
               "tool_name": "ibd2sql",
               "tool_run_id": "run_3f21c8de"
@@ -699,6 +736,7 @@
               {
                 "evidence_id": "ev_b7785a0c",
                 "log_position": 200,
+                "row_index": 0,
                 "source_file": "binlog.000018",
                 "tool_name": "mysqlbinlog",
                 "tool_run_id": "run_3f21c8de"
@@ -707,6 +745,7 @@
             "physical": {
               "evidence_id": "ev_b7785a0c",
               "log_position": null,
+              "row_index": null,
               "source_file": "accounts.ibd",
               "tool_name": "ibd2sql",
               "tool_run_id": "run_3f21c8de"
@@ -747,6 +786,7 @@
               {
                 "evidence_id": "ev_b7785a0c",
                 "log_position": 200,
+                "row_index": 0,
                 "source_file": "binlog.000018",
                 "tool_name": "mysqlbinlog",
                 "tool_run_id": "run_3f21c8de"
@@ -755,6 +795,7 @@
             "physical": {
               "evidence_id": "ev_b7785a0c",
               "log_position": null,
+              "row_index": null,
               "source_file": "accounts.ibd",
               "tool_name": "ibd2sql",
               "tool_run_id": "run_3f21c8de"
@@ -795,6 +836,7 @@
               {
                 "evidence_id": "ev_b7785a0c",
                 "log_position": 200,
+                "row_index": 0,
                 "source_file": "binlog.000018",
                 "tool_name": "mysqlbinlog",
                 "tool_run_id": "run_3f21c8de"
@@ -803,6 +845,7 @@
             "physical": {
               "evidence_id": "ev_b7785a0c",
               "log_position": null,
+              "row_index": null,
               "source_file": "accounts.ibd",
               "tool_name": "ibd2sql",
               "tool_run_id": "run_3f21c8de"
@@ -843,6 +886,7 @@
               {
                 "evidence_id": "ev_b7785a0c",
                 "log_position": 200,
+                "row_index": 0,
                 "source_file": "binlog.000018",
                 "tool_name": "mysqlbinlog",
                 "tool_run_id": "run_3f21c8de"
@@ -851,6 +895,7 @@
             "physical": {
               "evidence_id": "ev_b7785a0c",
               "log_position": null,
+              "row_index": null,
               "source_file": "accounts.ibd",
               "tool_name": "ibd2sql",
               "tool_run_id": "run_3f21c8de"
@@ -907,15 +952,18 @@
       "log_event_refs": [
         [
           "binlog.000018",
-          100
+          100,
+          0
         ],
         [
           "binlog.000018",
-          200
+          200,
+          0
         ],
         [
           "binlog.000018",
-          300
+          300,
+          0
         ]
       ],
       "method": "primary_key_exact",
@@ -927,6 +975,7 @@
         "provenance": {
           "evidence_id": "ev_b7785a0c",
           "log_position": null,
+          "row_index": null,
           "source_file": "accounts.ibd",
           "tool_name": "ibd2sql",
           "tool_run_id": "run_3f21c8de"
@@ -942,6 +991,7 @@
           "provenance": {
             "evidence_id": "ev_b7785a0c",
             "log_position": null,
+            "row_index": null,
             "source_file": "accounts.ibd",
             "tool_name": "ibd2sql",
             "tool_run_id": "run_3f21c8de"
@@ -953,6 +1003,7 @@
         {
           "evidence_id": "ev_b7785a0c",
           "log_position": 100,
+          "row_index": 0,
           "source_file": "binlog.000018",
           "tool_name": "mysqlbinlog",
           "tool_run_id": "run_3f21c8de"
@@ -960,6 +1011,7 @@
         {
           "evidence_id": "ev_b7785a0c",
           "log_position": 200,
+          "row_index": 0,
           "source_file": "binlog.000018",
           "tool_name": "mysqlbinlog",
           "tool_run_id": "run_3f21c8de"
@@ -967,6 +1019,7 @@
         {
           "evidence_id": "ev_b7785a0c",
           "log_position": 300,
+          "row_index": 0,
           "source_file": "binlog.000018",
           "tool_name": "mysqlbinlog",
           "tool_run_id": "run_3f21c8de"
@@ -1028,11 +1081,13 @@
             "provenance": {
               "evidence_id": "ev_b7785a0c",
               "log_position": 100,
+              "row_index": 0,
               "source_file": "binlog.000018",
               "tool_name": "mysqlbinlog",
               "tool_run_id": "run_3f21c8de"
             },
             "raw_timestamp": "260816  0:36:25",
+            "row_index": 0,
             "source_file": "binlog.000018",
             "table": "accounts",
             "thread_id": 13,
@@ -1042,6 +1097,7 @@
           "provenance": {
             "evidence_id": "ev_b7785a0c",
             "log_position": 100,
+            "row_index": 0,
             "source_file": "binlog.000018",
             "tool_name": "mysqlbinlog",
             "tool_run_id": "run_3f21c8de"
@@ -1059,6 +1115,7 @@
             {
               "evidence_id": "ev_b7785a0c",
               "log_position": 90,
+              "row_index": null,
               "source_file": "binlog.000018",
               "tool_name": "mysqlbinlog",
               "tool_run_id": "run_3f21c8de"
@@ -1079,6 +1136,7 @@
         {
           "evidence_id": "ev_b7785a0c",
           "log_position": 90,
+          "row_index": null,
           "source_file": "binlog.000018",
           "tool_name": "mysqlbinlog",
           "tool_run_id": "run_3f21c8de"
@@ -1118,11 +1176,13 @@
             "provenance": {
               "evidence_id": "ev_b7785a0c",
               "log_position": 200,
+              "row_index": 0,
               "source_file": "binlog.000018",
               "tool_name": "mysqlbinlog",
               "tool_run_id": "run_3f21c8de"
             },
             "raw_timestamp": "260816  0:36:25",
+            "row_index": 0,
             "source_file": "binlog.000018",
             "table": "accounts",
             "thread_id": 13,
@@ -1132,6 +1192,7 @@
           "provenance": {
             "evidence_id": "ev_b7785a0c",
             "log_position": 200,
+            "row_index": 0,
             "source_file": "binlog.000018",
             "tool_name": "mysqlbinlog",
             "tool_run_id": "run_3f21c8de"
@@ -1149,6 +1210,7 @@
             {
               "evidence_id": "ev_b7785a0c",
               "log_position": 190,
+              "row_index": null,
               "source_file": "binlog.000018",
               "tool_name": "mysqlbinlog",
               "tool_run_id": "run_3f21c8de"
@@ -1169,6 +1231,7 @@
         {
           "evidence_id": "ev_b7785a0c",
           "log_position": 190,
+          "row_index": null,
           "source_file": "binlog.000018",
           "tool_name": "mysqlbinlog",
           "tool_run_id": "run_3f21c8de"
@@ -1203,11 +1266,13 @@
             "provenance": {
               "evidence_id": "ev_b7785a0c",
               "log_position": 300,
+              "row_index": 0,
               "source_file": "binlog.000018",
               "tool_name": "mysqlbinlog",
               "tool_run_id": "run_3f21c8de"
             },
             "raw_timestamp": "260816  0:36:25",
+            "row_index": 0,
             "source_file": "binlog.000018",
             "table": "accounts",
             "thread_id": 13,
@@ -1217,6 +1282,7 @@
           "provenance": {
             "evidence_id": "ev_b7785a0c",
             "log_position": 300,
+            "row_index": 0,
             "source_file": "binlog.000018",
             "tool_name": "mysqlbinlog",
             "tool_run_id": "run_3f21c8de"
@@ -1234,6 +1300,7 @@
             {
               "evidence_id": "ev_b7785a0c",
               "log_position": 290,
+              "row_index": null,
               "source_file": "binlog.000018",
               "tool_name": "mysqlbinlog",
               "tool_run_id": "run_3f21c8de"
@@ -1254,6 +1321,7 @@
         {
           "evidence_id": "ev_b7785a0c",
           "log_position": 290,
+          "row_index": null,
           "source_file": "binlog.000018",
           "tool_name": "mysqlbinlog",
           "tool_run_id": "run_3f21c8de"

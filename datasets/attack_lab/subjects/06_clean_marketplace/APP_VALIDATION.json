@@ -1,6 +1,6 @@
 {
   "complete": true,
-  "elapsed_seconds": null,
+  "elapsed_seconds": 85.77,
   "include_deleted": false,
   "stages": [
     {
@@ -10,8 +10,8 @@
         {
           "number": 1,
           "status": "succeeded",
-          "started_at": "2026-10-07T16:59:00.347730+00:00",
-          "finished_at": "2026-10-07T16:59:00.419706+00:00",
+          "started_at": "2026-10-07T18:16:25.628695+00:00",
+          "finished_at": "2026-10-07T18:16:25.701678+00:00",
           "item_count": 9,
           "error_code": null,
           "error_message": null,
@@ -26,8 +26,8 @@
         {
           "number": 1,
           "status": "succeeded",
-          "started_at": "2026-10-07T16:59:00.422570+00:00",
-          "finished_at": "2026-10-07T16:59:00.786042+00:00",
+          "started_at": "2026-10-07T18:16:25.706681+00:00",
+          "finished_at": "2026-10-07T18:16:26.049741+00:00",
           "item_count": 5,
           "error_code": null,
           "error_message": null,
@@ -42,8 +42,8 @@
         {
           "number": 1,
           "status": "succeeded",
-          "started_at": "2026-10-07T16:59:00.788547+00:00",
-          "finished_at": "2026-10-07T16:59:01.030929+00:00",
+          "started_at": "2026-10-07T18:16:26.053746+00:00",
+          "finished_at": "2026-10-07T18:16:26.249752+00:00",
           "item_count": 5,
           "error_code": null,
           "error_message": null,
@@ -58,8 +58,8 @@
         {
           "number": 1,
           "status": "succeeded",
-          "started_at": "2026-10-07T16:59:01.034362+00:00",
-          "finished_at": "2026-10-07T16:59:02.911899+00:00",
+          "started_at": "2026-10-07T18:16:26.253407+00:00",
+          "finished_at": "2026-10-07T18:16:28.104477+00:00",
           "item_count": 15500,
           "error_code": null,
           "error_message": null,
@@ -74,8 +74,8 @@
         {
           "number": 1,
           "status": "succeeded",
-          "started_at": "2026-10-07T16:59:02.916870+00:00",
-          "finished_at": "2026-10-07T16:59:04.417075+00:00",
+          "started_at": "2026-10-07T18:16:28.110479+00:00",
+          "finished_at": "2026-10-07T18:16:30.660479+00:00",
           "item_count": 15613,
           "error_code": null,
           "error_message": null,
@@ -90,8 +90,8 @@
         {
           "number": 1,
           "status": "succeeded",
-          "started_at": "2026-10-07T16:59:04.420048+00:00",
-          "finished_at": "2026-10-07T16:59:04.818573+00:00",
+          "started_at": "2026-10-07T18:16:30.665586+00:00",
+          "finished_at": "2026-10-07T18:16:31.061829+00:00",
           "item_count": 31118,
           "error_code": null,
           "error_message": null,
@@ -106,8 +106,8 @@
         {
           "number": 1,
           "status": "succeeded",
-          "started_at": "2026-10-07T16:59:04.822579+00:00",
-          "finished_at": "2026-10-07T16:59:45.956925+00:00",
+          "started_at": "2026-10-07T18:16:31.068846+00:00",
+          "finished_at": "2026-10-07T18:16:32.637940+00:00",
           "item_count": 63,
           "error_code": null,
           "error_message": null,
@@ -122,8 +122,8 @@
         {
           "number": 1,
           "status": "succeeded",
-          "started_at": "2026-10-07T16:59:45.960925+00:00",
-          "finished_at": "2026-10-07T16:59:48.832753+00:00",
+          "started_at": "2026-10-07T18:16:32.648515+00:00",
+          "finished_at": "2026-10-07T18:16:37.207874+00:00",
           "item_count": 15500,
           "error_code": null,
           "error_message": null,
@@ -138,8 +138,8 @@
         {
           "number": 1,
           "status": "succeeded",
-          "started_at": "2026-10-07T16:59:48.838753+00:00",
-          "finished_at": "2026-10-07T17:02:07.911556+00:00",
+          "started_at": "2026-10-07T18:16:37.216221+00:00",
+          "finished_at": "2026-10-07T18:16:52.285476+00:00",
           "item_count": 15500,
           "error_code": null,
           "error_message": null,
@@ -154,8 +154,8 @@
         {
           "number": 1,
           "status": "succeeded",
-          "started_at": "2026-10-07T17:02:07.925156+00:00",
-          "finished_at": "2026-10-07T17:06:39.623596+00:00",
+          "started_at": "2026-10-07T18:16:52.296173+00:00",
+          "finished_at": "2026-10-07T18:17:30.994939+00:00",
           "item_count": 108000,
           "error_code": null,
           "error_message": null,
@@ -165,24 +165,30 @@
     }
   ],
   "physical_rows": 15500,
-  "classification_occurrences": {
-    "Exact": 1008,
-    "Unresolved": 245992
+  "engine_revision": 2,
+  "record_counts": {
+    "Exact": 15500
   },
+  "field_counts": {
+    "Exact": 108000
+  },
+  "acceptance_checks": {
+    "all_decoded_rows_accounted_for": true,
+    "no_false_duplicate_rows": true,
+    "15500_live_records_exact": true,
+    "no_unexpected_warnings": true
+  },
+  "acceptance_passed": true,
   "finding_rule_counts": {
-    "R-CORR-031": 15437,
     "R-GRP-001": 63,
-    "R-GRP-013": 63,
-    "R-HIST-002": 63,
-    "R-HIST-003": 63,
+    "R-HIST-002": 15500,
+    "R-HIST-003": 15550,
     "R-HIST-012": 15500,
-    "R-RECON-001": 377,
-    "R-RECON-005": 92122,
-    "R-RECON-006": 15437,
-    "R-RECON-011": 1,
-    "R-RECON-020": 63,
-    "R-ROLL-002": 63,
-    "R-ROLL-005": 15437
+    "R-RECON-001": 92150,
+    "R-RECON-011": 350,
+    "R-RECON-020": 15500,
+    "R-ROLL-002": 15500
   },
-  "note": "Counts include nested field/record results. Actual app observations; consult EXPECTED_FINDINGS.md for acceptance criteria."
+  "note": "Distinct record rollups and field rows are counted separately. Acceptance checks use exact affected keys.",
+  "pipeline_seconds": 65.31
 }

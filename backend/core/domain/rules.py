@@ -374,10 +374,11 @@ _DEFINITIONS: tuple[RuleDefinition, ...] = (
     _r(
         "R-GRP-013",
         "grouping",
-        "Duplicate event position",
-        "Two decoded events share a source file and log position, which cannot "
-        "happen in one log. The first is used and both are reported.",
-        "Duplicate event at {source_file}:{log_position}",
+        "Duplicate row reference",
+        "Two decoded rows share a source file, log position and row index. "
+        "The first is used and the repeated row reference is reported. Multiple "
+        "rows at one position with different indices are legitimate.",
+        "Duplicate row at {source_file}:{log_position}#{row_index}",
         Severity.WARNING,
     ),
     # ── Transaction ids ──────────────────────────────────────────────────────
@@ -567,7 +568,9 @@ _DEFINITIONS: tuple[RuleDefinition, ...] = (
         "correlation",
         "Physical record with no log events",
         "The row exists in the tablespace but no observed event produced it. With "
-        "complete log coverage that is a conflict; with a gap it is unresolved.",
+        "coverage from an observed table creation and a healthy extracted "
+        "tablespace that is a presence conflict; an inventory alone does not "
+        "prove coverage of this table's lifetime. Without proof it is unresolved.",
         "{record} exists physically with no observed events",
         Severity.NOTICE,
     ),
@@ -826,7 +829,9 @@ _DEFINITIONS: tuple[RuleDefinition, ...] = (
         "reconciliation",
         "Record presence conflicts",
         "The log says the record should exist and the tablespace does not hold it "
-        "(or the reverse), with complete log coverage.",
+        "(or the reverse), with sufficient log coverage, no ambiguity and a "
+        "healthy successfully extracted tablespace. A physical-only row requires "
+        "coverage from an observed CREATE TABLE; column values are never invented.",
         "{record}: log says {log_presence}, tablespace says {phys_presence}",
         Severity.WARNING,
         ReconResult.CONFLICTING,

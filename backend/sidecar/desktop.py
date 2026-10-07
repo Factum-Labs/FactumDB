@@ -25,7 +25,7 @@ from sidecar.commands import COMMAND_FIELDS, _validate
 from sidecar.composition import PipelineDependencies, build_application_services, build_tool_adapters
 from sidecar.main import build_router
 from sidecar.protocol import CommandRouter, SidecarRequest, serve
-from sidecar.views import case_view
+from sidecar.views import case_view, analysis_detail
 
 
 class DesktopRuntime:
@@ -120,7 +120,9 @@ class DesktopRuntime:
                 "id": case.id, "name": case.name, "examiner": case.examiner,
                 "workspace": case.workspace_path, "opened": case.created_at.isoformat(),
                 "files": len(stores.evidence.list_for_case(case.id)),
-                "status": "Analysed" if run and run.complete else (
+                "engine_revision": case.engine_revision,
+                "reanalysis_required": case.reanalysis_required,
+                "status": "Needs reanalysis" if case.reanalysis_required else "Analysed" if run and run.complete else (
                     "Stopped" if run and run.stopped else "Pending" if run else "Registered"
                 ),
             })
@@ -138,6 +140,15 @@ class DesktopRuntime:
         case_id = _validate(payload, ("case_id",))["case_id"]
         connection, stores, pipelines = self.session(case_id)
         return case_view(case_id, connection, stores, pipelines)
+
+    def analysis_detail(self, payload):
+        kind = payload.get("kind")
+        if kind not in {"history", "transaction", "comparison"}:
+            raise ValueError("Unsupported analysis detail kind")
+        fields = ("case_id", "kind", "identity", "field") if kind == "comparison" else ("case_id", "kind", "identity")
+        values = _validate(payload, fields)
+        connection, _, _ = self.session(values["case_id"])
+        return analysis_detail(connection, **values)
 
     def application_command(self, command, payload):
         values = _validate(payload, COMMAND_FIELDS[command])
@@ -171,6 +182,16 @@ class DesktopRuntime:
             if command == "register_evidence":
                 pipelines.invalidate_case(case_id)
         return response.result
+
+    def save_case_notes(self, payload):
+        if set(payload) != {"case_id", "notes"} or not isinstance(payload.get("notes"), str):
+            raise ValueError("case notes require case_id and a notes string")
+        case_id = _validate({"case_id": payload["case_id"]}, ("case_id",))["case_id"]
+        connection, _, _ = self.session(case_id)
+        with connection:
+            connection.execute("UPDATE cases SET examiner_notes = ? WHERE case_id = ?",
+                               (payload["notes"], case_id))
+        return self.case_data({"case_id": case_id})
 
     def configure(self, payload):
         if set(payload) != set(self.settings):
@@ -238,6 +259,8 @@ class DesktopRuntime:
         router.register("create_case", self.create_case)
         router.register("list_cases", self.list_cases)
         router.register("get_case_data", self.case_data)
+        router.register("get_analysis_detail", self.analysis_detail)
+        router.register("save_case_notes", self.save_case_notes)
         router.register("get_settings", self.get_settings)
         router.register("configure_settings", self.configure)
         router.register("export_case", self.export)

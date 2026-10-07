@@ -343,8 +343,8 @@ def test_the_two_unclaimed_rules_never_both_fire_for_one_event() -> None:
     }
     orphan_refs = {u.ref for u in result.ungrouped_events}
     assert synthesised_refs & orphan_refs == set()
-    assert synthesised_refs == {("binlog.000018", 40)}
-    assert orphan_refs == {("binlog.000018", 500)}
+    assert synthesised_refs == {("binlog.000018", 40, 0)}
+    assert orphan_refs == {("binlog.000018", 500, 0)}
 
 
 # ── Evidence integrity ───────────────────────────────────────────────────────

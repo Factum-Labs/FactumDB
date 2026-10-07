@@ -8,6 +8,7 @@ event at a single position, and the original schema lost all but one of them.
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -36,7 +37,7 @@ def stored(evidence, tool_runs, case_id) -> tuple:
 def an_event(account_id: int, *, event_type: str = "UPDATE",
              before: dict | None = None, after: dict | None = None,
              position: int = 1600, source_file: str = "mysql-bin.000006",
-             when: datetime = WHEN, table: str = "accounts") -> BinlogEvent:
+             when: datetime = WHEN, table: str = "accounts", row_index: int = 0) -> BinlogEvent:
     return BinlogEvent(
         event_type=event_type,
         database="finance",
@@ -51,6 +52,7 @@ def an_event(account_id: int, *, event_type: str = "UPDATE",
         source_file=source_file,
         gtid="cb4d5c8e-9325-11f1-9975-00155dc1157f:10",
         thread_id=13,
+        row_index=row_index,
     )
 
 
@@ -65,9 +67,9 @@ def test_every_row_of_a_multi_row_event_is_kept(binlog, stored) -> None:
     REPLACE, let it silently overwrite the first.
     """
     evidence_id, run_id = stored
-    binlog.save_many([an_event(101), an_event(103)], evidence_id, run_id)
+    binlog.save_many([an_event(101), an_event(103, row_index=1)], evidence_id, run_id)
 
-    stored_rows = binlog.rows_in_event(evidence_id, ("mysql-bin.000006", 1600))
+    stored_rows = binlog.rows_in_event(evidence_id, ("mysql-bin.000006", 1600, 0))
 
     assert [e.after["account_id"] for e in stored_rows] == [101, 103]
 
@@ -76,81 +78,23 @@ def test_rows_keep_the_order_they_had_in_the_event(binlog, stored) -> None:
     """The order of row images is the order MySQL applied them in."""
     evidence_id, run_id = stored
     binlog.save_many(
-        [an_event(105), an_event(101), an_event(103)], evidence_id, run_id
+        [an_event(105), an_event(101, row_index=1), an_event(103, row_index=2)], evidence_id, run_id
     )
 
-    stored_rows = binlog.rows_in_event(evidence_id, ("mysql-bin.000006", 1600))
+    stored_rows = binlog.rows_in_event(evidence_id, ("mysql-bin.000006", 1600, 0))
 
     assert [e.after["account_id"] for e in stored_rows] == [105, 101, 103]
 
 
-def test_find_by_ref_returns_the_first_row_of_a_multi_row_event(binlog, stored) -> None:
-    """EventRef has no row index yet, so a lookup by ref can only name one row.
-
-    This pins the current behaviour so it cannot change unnoticed. Once
-    EventRef carries a row index this test should be replaced.
-    """
+def test_find_by_ref_names_each_row_of_a_multi_row_event(binlog, stored) -> None:
     evidence_id, run_id = stored
-    binlog.save_many([an_event(101), an_event(103)], evidence_id, run_id)
+    binlog.save_many([an_event(101), an_event(103, row_index=1)], evidence_id, run_id)
+    for index, account_id in enumerate((101, 103)):
+        event = binlog.find_by_ref(evidence_id, ("mysql-bin.000006", 1600, index))
+        assert event.after["account_id"] == account_id
+        assert event.ref == ("mysql-bin.000006", 1600, index)
+        assert event.provenance.row_index == index
 
-    found = binlog.find_by_ref(evidence_id, ("mysql-bin.000006", 1600))
-
-    assert found.after["account_id"] == 101
-
-
-def test_the_adapter_and_the_repository_agree_end_to_end(binlog, stored) -> None:
-    """Real mysqlbinlog-format text for one two-row UPDATE, through both halves.
-
-    Before the fix, the adapter emitted two events at position 1600 and the
-    repository could store only one of them.
-    """
-    evidence_id, run_id = stored
-    schema = Schema(
-        database="finance",
-        table="accounts",
-        columns=(
-            Column("account_id", 1, "int", False, True),
-            Column("status", 2, "varchar(20)", True, False),
-        ),
-        mysql_version_id=80410,
-    )
-    text = """\
-# original_commit_timestamp=1788532598761046 (2026-09-23 12:00:00.000000 +0530)
-SET @@SESSION.GTID_NEXT= 'cb4d5c8e-9325-11f1-9975-00155dc1157f:20'/*!*/;
-#260923 12:00:00 server id 1  end_log_pos 1400 CRC32 0x1 \tQuery\tthread_id=8
-BEGIN
-#260923 12:00:00 server id 1  end_log_pos 1450 CRC32 0x2 \tTable_map: `finance`.`accounts` mapped to number 89
-#260923 12:00:00 server id 1  end_log_pos 1600 CRC32 0x3 \tUpdate_rows: table id 89 flags: STMT_END_F
-### UPDATE `finance`.`accounts`
-### WHERE
-###   @1=101 /* INT meta=0 nullable=0 is_null=0 */
-###   @2='active' /* VARSTRING(80) meta=80 nullable=1 is_null=0 */
-### SET
-###   @1=101 /* INT meta=0 nullable=0 is_null=0 */
-###   @2='frozen' /* VARSTRING(80) meta=80 nullable=1 is_null=0 */
-### UPDATE `finance`.`accounts`
-### WHERE
-###   @1=103 /* INT meta=0 nullable=0 is_null=0 */
-###   @2='active' /* VARSTRING(80) meta=80 nullable=1 is_null=0 */
-### SET
-###   @1=103 /* INT meta=0 nullable=0 is_null=0 */
-###   @2='frozen' /* VARSTRING(80) meta=80 nullable=1 is_null=0 */
-#260923 12:00:00 server id 1  end_log_pos 1631 CRC32 0x4 \tXid = 50
-COMMIT/*!*/;
-"""
-    events, _, _ = MysqlBinlogAdapter.parse(
-        text, "mysql-bin.000024", lambda d, t: schema
-    )
-    binlog.save_many(events, evidence_id, run_id)
-
-    stored_rows = binlog.rows_in_event(evidence_id, ("mysql-bin.000024", 1600))
-
-    assert len(events) == 2
-    assert [(e.before["status"], e.after["status"]) for e in stored_rows] == [
-        ("active", "frozen"),
-        ("active", "frozen"),
-    ]
-    assert {e.after["account_id"] for e in stored_rows} == {101, 103}
 
 
 # ── Round-tripping ───────────────────────────────────────────────────────────
@@ -165,7 +109,7 @@ def test_an_update_round_trips(binlog, stored) -> None:
     )
     binlog.save_many([event], evidence_id, run_id)
 
-    assert binlog.events() == [event]
+    assert [replace(e, provenance=None) for e in binlog.events()] == [event]
 
 
 def test_insert_has_no_before_and_delete_has_no_after(binlog, stored) -> None:
@@ -222,7 +166,7 @@ def test_the_same_position_in_two_files_is_two_events(binlog, stored) -> None:
 
 def test_decoding_a_file_again_replaces_its_events(binlog, stored) -> None:
     evidence_id, run_id = stored
-    batch = [an_event(101), an_event(103)]
+    batch = [an_event(101), an_event(103, row_index=1)]
     binlog.save_many(batch, evidence_id, run_id)
     binlog.save_many(batch, evidence_id, run_id)
 
@@ -279,7 +223,15 @@ def test_list_by_table_filters_in_sql(binlog, stored) -> None:
 
 def test_unknown_ref_returns_none(binlog, stored) -> None:
     evidence_id, _ = stored
-    assert binlog.find_by_ref(evidence_id, ("mysql-bin.000099", 4)) is None
+    assert binlog.find_by_ref(evidence_id, ("mysql-bin.000099", 4, 0)) is None
+
+
+def test_row_provenance_lookup_uses_sqlite_index(connection):
+    plan = connection.execute(
+        'EXPLAIN QUERY PLAN SELECT tool_run_id FROM binlog_events WHERE source_file=? AND log_position=? AND row_index=?',
+        ('mysql-bin.000006', 1600, 1),
+    ).fetchall()
+    assert any('idx_binlog_row_ref' in r['detail'] for r in plan)
 
 
 # ── Referential integrity ────────────────────────────────────────────────────
@@ -289,3 +241,60 @@ def test_events_need_a_real_tool_run(binlog, stored) -> None:
     evidence_id, _ = stored
     with pytest.raises(sqlite3.IntegrityError):
         binlog.save_many([an_event(101)], evidence_id, "no-such-run")
+
+
+def test_the_adapter_and_the_repository_agree_end_to_end(binlog, stored) -> None:
+    """Real mysqlbinlog-format text for one two-row UPDATE, through both halves.
+
+    Before the fix, the adapter emitted two events at position 1600 and the
+    repository could store only one of them.
+    """
+    evidence_id, run_id = stored
+    schema = Schema(
+        database="finance",
+        table="accounts",
+        columns=(
+            Column("account_id", 1, "int", False, True),
+            Column("status", 2, "varchar(20)", True, False),
+        ),
+        mysql_version_id=80410,
+    )
+    text = """\
+# original_commit_timestamp=1788532598761046 (2026-09-23 12:00:00.000000 +0530)
+SET @@SESSION.GTID_NEXT= 'cb4d5c8e-9325-11f1-9975-00155dc1157f:20'/*!*/;
+#260923 12:00:00 server id 1  end_log_pos 1400 CRC32 0x1 \tQuery\tthread_id=8
+BEGIN
+#260923 12:00:00 server id 1  end_log_pos 1450 CRC32 0x2 \tTable_map: `finance`.`accounts` mapped to number 89
+#260923 12:00:00 server id 1  end_log_pos 1600 CRC32 0x3 \tUpdate_rows: table id 89 flags: STMT_END_F
+### UPDATE `finance`.`accounts`
+### WHERE
+###   @1=101 /* INT meta=0 nullable=0 is_null=0 */
+###   @2='active' /* VARSTRING(80) meta=80 nullable=1 is_null=0 */
+### SET
+###   @1=101 /* INT meta=0 nullable=0 is_null=0 */
+###   @2='frozen' /* VARSTRING(80) meta=80 nullable=1 is_null=0 */
+### UPDATE `finance`.`accounts`
+### WHERE
+###   @1=103 /* INT meta=0 nullable=0 is_null=0 */
+###   @2='active' /* VARSTRING(80) meta=80 nullable=1 is_null=0 */
+### SET
+###   @1=103 /* INT meta=0 nullable=0 is_null=0 */
+###   @2='frozen' /* VARSTRING(80) meta=80 nullable=1 is_null=0 */
+#260923 12:00:00 server id 1  end_log_pos 1631 CRC32 0x4 \tXid = 50
+COMMIT/*!*/;
+"""
+    events, _, _ = MysqlBinlogAdapter.parse(
+        text, "mysql-bin.000024", lambda d, t: schema
+    )
+    binlog.save_many(events, evidence_id, run_id)
+
+    stored_rows = binlog.rows_in_event(evidence_id, ("mysql-bin.000024", 1600, 0))
+
+    assert len(events) == 2
+    assert [(e.before["status"], e.after["status"]) for e in stored_rows] == [
+        ("active", "frozen"),
+        ("active", "frozen"),
+    ]
+    assert {e.after["account_id"] for e in stored_rows} == {101, 103}
+
+    assert [e.row_index for e in stored_rows] == [0, 1]

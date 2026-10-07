@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useApp } from '../store'
-import { display, object, pickEvidence, pickExportPath, request, rows, type Json, type Row, type ToolSettings } from '../lib/backend'
+import { display, object, pickExportPath, request, rows, type Json, type Row, type ToolSettings } from '../lib/backend'
 import { Badge } from '../components/Badge'
 import { CorrelationGraph } from '../components/CorrelationGraph'
 import { buildFlaggedGroups } from '../lib/correlation'
+import { useAnalysisDetail } from '../lib/useAnalysisDetail'
 import { RESULT_TONE, type CorrelationEdge, type ReconResult, type ReconRow, type RecordRef, type Transaction, type TxStatus, type EventType } from '../data/types'
 
 const panel = 'rounded-md border border-line bg-panel p-4'
@@ -77,105 +78,13 @@ export function CasesScreen() {
   </div>
 }
 
-export function IntakeScreen() {
-  const data = useApp(s => s.data)
-  const busy = useApp(s => s.busy)
-  const [path, setPath] = useState('')
-  const [selected, setSelected] = useState<Row | null>(null)
-  if (!data) return <Empty>Open or create a case to register evidence.</Empty>
-  const active = !!data.run && !data.run.stopped
-  const register = async (event: FormEvent) => {
-    event.preventDefault()
-    if (await useApp.getState().registerEvidence([path])) setPath('')
-  }
-  const browse = async () => {
-    try {
-      const paths = await pickEvidence()
-      if (paths.length) await useApp.getState().registerEvidence(paths)
-    } catch (error) { useApp.getState().setError(error) }
-  }
-  const evidence = data.tables.evidence_files ?? []
-  const detail = evidence.find(e => e.evidence_id === selected?.evidence_id)
-  return <div className="space-y-4">
-    <div className={panel}><p className="text-sm font-semibold">{data.case.case_name} · {data.case.examiner}</p>
-      <p className="mt-1 break-all font-mono text-xs text-muted">{data.case.workspace_path}</p>
-      <p className="mt-3 text-xs text-muted">Register .ibd tablespaces, binary logs and binlog indexes. Originals are hashed; analysis uses verified working copies.</p></div>
-    <form onSubmit={register} className={panel + ' flex items-center gap-3'}>
-      <label className="flex flex-1 flex-col gap-1 text-xs">Evidence file path<input required disabled={busy || active} className={input} value={path} onChange={e => setPath(e.target.value)} placeholder="Absolute path to an evidence file" /></label>
-      <Button type="submit" disabled={active || !path.trim()}>Register file</Button>
-      <Button onClick={() => { void browse() }} disabled={active}>Browse files</Button>
-      <Button onClick={() => useApp.getState().go('pipeline')} disabled={!evidence.length}>Open pipeline</Button>
-    </form>
-    {active && <Empty>Finish or cancel the active pipeline before registering additional evidence.</Empty>}
-    <Table data={evidence} columns={[['filename', 'File'], ['kind', 'Type'], ['size_bytes', 'Bytes'], ['verification_status', 'Verification'], ['source_sha256', 'Original SHA-256']]} onSelect={setSelected} />
-    {detail && <div className="space-y-2"><Button disabled={active || detail.verification_status === 'verified'} onClick={() => { void useApp.getState().verifyEvidence(String(detail.evidence_id)) }}>Verify working copy</Button><Detail value={detail} title="Evidence paths and hashes" /></div>}
-  </div>
-}
+export { IntakeScreen } from './IntakeScreen'
 
-const STAGES = ['verify_evidence', 'validate_pages', 'extract_schema', 'extract_physical_rows', 'decode_binary_logs', 'normalize_evidence', 'group_transactions', 'correlate_records', 'reconstruct_state', 'reconcile_records']
-export function PipelineScreen() {
-  const state = useApp()
-  const run = state.data?.run
-  if (!state.data) return <Empty>Open or create a case first.</Empty>
-  const failed = run?.stages.find(s => s.status === 'failed')
-  const hasEvidence = state.data.tables.evidence_files?.some(e => e.kind === 'ibd' || e.kind === 'binlog')
-  return <div className="space-y-4">
-    <div className={panel + ' flex flex-wrap items-center gap-3'}>
-      <Button disabled={!!run?.stopped || !hasEvidence} onClick={() => { void state.runStage() }}>Run next stage</Button>
-      <Button disabled={!!run?.stopped || !hasEvidence} onClick={() => { void state.runAllStages() }}>Run all stages</Button>
-      {failed && <Button disabled={failed.stage === 'verify_evidence'} onClick={() => { void state.retryPipeline() }}>Retry failed stage</Button>}
-      {run?.stopped && <Button onClick={() => { void state.resetPipeline() }}>Start new analysis</Button>}
-      {run && !run.stopped && <button disabled={state.cancelRequested} className="rounded border border-line px-3 py-1.5 text-xs" onClick={() => { void state.cancelPipeline() }}>{state.cancelRequested ? 'Cancellation requested' : 'Cancel at stage boundary'}</button>}
-      <span className="text-xs text-muted">{state.stagesDone}/{STAGES.length} completed · {run?.complete ? 'Complete' : state.busy ? 'Processing' : run?.stopped ? 'Stopped' : 'Ready'}</span>
-    </div>
-    {!hasEvidence && <Empty>Register at least one .ibd or binary log file before analysis. An index alone is insufficient.</Empty>}
-    {(run?.stages ?? STAGES.map(stage => ({ stage, status: 'pending', attempts: [] }))).map((stage, index) => {
-      const attempt = stage.attempts.at(-1)
-      const running = state.runningStage === index
-      return <div key={stage.stage} className={panel + (running ? ' border-accent' : '')}>
-        <div className="flex items-center gap-3 text-sm"><span className="font-mono text-dim">{String(index + 1).padStart(2, '0')}</span><span className="font-medium">{stage.stage.replaceAll('_', ' ')}</span>
-          <span className="ml-auto text-xs">{running ? 'running' : stage.status}</span></div>
-        {attempt && <p className="mt-2 text-xs text-muted">Attempt {attempt.number} · {attempt.item_count} items · {attempt.finished_at ?? attempt.started_at}</p>}
-        {attempt?.skip_reason && <p className="mt-2 text-xs">{attempt.skip_reason}</p>}
-        {attempt?.error_message && <p role="alert" className="mt-2 text-xs text-red-700">{attempt.error_code}: {attempt.error_message}</p>}
-        {stage.attempts.length > 1 && <Detail value={stage.attempts as unknown as Json} title="Previous attempts" />}
-      </div>
-    })}
-  </div>
-}
+export { PipelineScreen } from './PipelineScreen'
 
-export function TimelineScreen() {
-  const data = useApp(s => s.data)
-  const selected = useApp(s => s.selectedTx)
-  const transactions = rows(data?.analysis.grouping?.transactions)
-  const current = transactions.find(t => t.id === selected) ?? transactions[0]
-  const events = rows(current?.events).map(e => ({ ...object(e.event), order: e.order, provenance: e.provenance }))
-  return <div className="space-y-4">
-    <Table data={transactions} columns={[['id', 'Transaction'], ['status', 'Status'], ['source_file', 'Binlog'], ['start_position', 'Start'], ['commit_timestamp', 'Committed'], ['synthesised', 'Synthesised']]} onSelect={r => useApp.getState().selectTx(String(r.id))} selected={r => r.id === current?.id} />
-    {current && <><h3 className="text-sm font-semibold">Events in {display(current.id)}</h3>
-      {current.synthesised === true && <Empty>Synthesised grouping: the evidence does not establish these events as one transaction.</Empty>}
-      <Table data={events} columns={[['order', 'Order'], ['event_type', 'Operation'], ['table', 'Table'], ['source_file', 'Log'], ['log_position', 'Position'], ['before', 'Before'], ['after', 'After']]} />
-      <ProvenanceLinks value={current.provenance} />
-      <Detail value={current} title="Transaction outcome, event images and provenance" /></>}
-  </div>
-}
+export { TimelineScreen } from './TimelineScreen'
 
-export function RecordHistoryScreen() {
-  const data = useApp(s => s.data)
-  const selected = useApp(s => s.selectedRecord)
-  const histories = rows(data?.analysis.reconstruction?.histories)
-  const current = histories.find(h => object(h.record).id === selected) ?? histories[0]
-  const options = histories.map(h => ({ ...object(h.record), method: h.method }))
-  return <div className="space-y-4">
-    <Table data={options} columns={[['id', 'Record'], ['database', 'Database'], ['table', 'Table'], ['key', 'Primary key'], ['method', 'Correlation']]} onSelect={r => useApp.getState().selectRecord(String(r.id))} selected={r => r.id === object(current?.record).id} />
-    {current && <><div className="grid grid-cols-3 gap-3">{[['earliest_state', 'Earliest observed state'], ['final_log_state', 'Committed log state'], ['speculative_state', 'Speculative state']].map(([key, label]) =>
-      <div key={key} className={panel}><h3 className="mb-2 text-xs font-semibold">{label}</h3><p className="mb-2 text-xs">{display(object(current[key]).presence)}</p>
-        {Object.entries(object(object(current[key]).values)).map(([field, value]) => <p key={field} className="mb-1 break-all font-mono text-xs">{field}: {display(value)}</p>)}</div>)}</div>
-      <Table data={rows(current.steps)} columns={[['index', 'Order'], ['kind', 'Observation'], ['durable', 'Durable'], ['transaction_id', 'Transaction'], ['rule_id', 'Rule'], ['changes', 'Changes'], ['ref', 'Log position']]}
-        onSelect={r => { if (r.transaction_id) useApp.getState().openTransaction(String(r.transaction_id)) }} />
-      <Detail value={current} title="History findings and evidence provenance" /></>}
-  </div>
-}
+export { RecordHistoryScreen } from './RecordHistoryScreen'
 
 function graphData(data: ReturnType<typeof useApp.getState>['data']) {
   const recordRefs: RecordRef[] = rows(data?.analysis.correlation?.records).map(c => {
@@ -185,7 +94,7 @@ function graphData(data: ReturnType<typeof useApp.getState>['data']) {
   const status: Record<string, TxStatus> = { committed: 'Committed', rolled_back: 'Rolled back', incomplete: 'Incomplete' }
   const transactions: Transaction[] = rows(data?.analysis.grouping?.transactions).map((t, order) => ({
     order,
-    id: String(t.id), status: status[String(t.status)] ?? 'Incomplete', summary: rows(t.events).length + ' events',
+    id: String(t.id), status: status[String(t.status)] ?? 'Incomplete', summary: (t.event_count ?? rows(t.events).length) + ' events',
     when: display(t.commit_timestamp), binlogFile: String(t.source_file), binlogPos: Number(t.start_position),
   }))
   const edges: CorrelationEdge[] = rows(data?.analysis.correlation?.edges).map(e => ({ txId: String(e.tx_id), recordId: String(e.record_id), eventType: String(e.event_type) as EventType }))
@@ -196,6 +105,8 @@ export function ReconciliationScreen() {
   const data = useApp(s => s.data)
   const [filter, setFilter] = useState('')
   const [detail, setDetail] = useState<Row | null>(null)
+  const loaded = useAnalysisDetail(data?.case.case_id, 'comparison', detail ?? undefined, data?.analysis.reconciliation?.details_deferred === true, detail ? String(detail.field) : undefined)
+  useEffect(() => { setDetail(null) }, [data?.case.case_id, data?.run?.run_id])
   const expanded = useApp(s => s.expandedGroups)
   const groups = useMemo(() => graphData(data), [data])
   const all = rows(data?.analysis.reconciliation?.rows)
@@ -204,7 +115,7 @@ export function ReconciliationScreen() {
     <div className="grid grid-cols-6 gap-2">{counts.map(([result, count]) => <div key={result} className={panel}><p className="font-mono text-xl">{count}</p><Badge tone={RESULT_TONE[result as ReconResult]}>{result}</Badge></div>)}</div>
     <label className="flex items-center gap-2 text-xs">Filter result<select className={input} value={filter} onChange={e => setFilter(e.target.value)}><option value="">All results</option>{counts.map(([r]) => <option key={r}>{r}</option>)}</select></label>
     <Table data={all.filter(r => !filter || r.result === filter)} columns={[['record_id', 'Record'], ['field', 'Field'], ['log_display', 'Log-derived'], ['phys_display', 'Physical'], ['result', 'Result'], ['rule_id', 'Rule']]} onSelect={setDetail} />
-    {detail && <div className="space-y-2"><Button onClick={() => useApp.getState().openRecord(String(detail.record_id))}>Open record history</Button><ProvenanceLinks value={detail.provenance} /><Detail value={detail} title="Comparison values, rule and source provenance" /></div>}
+    {detail && <div className="space-y-2"><Button onClick={() => useApp.getState().openRecord(String(detail.record_id))}>Open record history</Button>{loaded.detail ? <><ProvenanceLinks value={loaded.detail.provenance} /><Detail value={loaded.detail} title="Comparison values, rule and source provenance" /></> : <p role="status" className="text-sm text-muted">{loaded.error ?? 'Loading comparison…'}</p>}</div>}
     {groups.map(group => <div key={group.id} className="space-y-2"><Button onClick={() => useApp.getState().toggleGroup(group.id)}>{expanded.includes(group.id) ? 'Hide' : 'Show'} correlation graph · {group.records.length} records</Button>{expanded.includes(group.id) && <CorrelationGraph group={group} />}</div>)}
     {data?.analysis.reconciliation?.coverage && <Detail value={data.analysis.reconciliation.coverage} title="Coverage and limits" />}
   </div>
@@ -266,7 +177,7 @@ export function ReportScreen() {
       <Button disabled={!state.pipelineComplete} onClick={() => { void choose() }}>Choose destination</Button>
       <Button type="submit" disabled={!state.pipelineComplete || !path.trim()}>Export</Button>
     </form>
-    {state.data && <div className={panel + ' text-xs'}>{Object.entries(state.data.tables).map(([table, values]) => <p key={table} className="mb-1">{table.replaceAll('_', ' ')}: {values.length}</p>)}</div>}
+    {state.data && <div className={panel + ' text-xs'}>{Object.entries(state.data.tables).map(([table, values]) => <p key={table} className="mb-1">{table.replaceAll('_', ' ')}: {state.data?.table_counts?.[table] ?? values.length}</p>)}</div>}
   </div>
 }
 

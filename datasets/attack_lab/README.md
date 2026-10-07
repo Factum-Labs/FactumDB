@@ -7,6 +7,11 @@ to create its baseline and activity. These are not text files renamed as binary
 evidence. Generated with MySQL Community Server **8.0.43**, ROW logging, normally
 FULL row images, CRC32 event checksums, 16 KiB pages and UTC server time.
 
+These are simplified business regression fixtures. See the
+[validity and realism audit](REALISM_AUDIT.md) for checks of all six subjects,
+independent reproductions using foreign keys and conventional types, and limits
+on production realism and attack interpretation.
+
 | Subject | Business | Seeded rows | Tablespaces | Binlogs | Additional evidence issue |
 |---|---|---:|---:|---:|---|
 | [01_marketplace_fraud](subjects/01_marketplace_fraud/EXPECTED_FINDINGS.md) | Harbor Market | 16,300 | 7 | 3 | Complete acquisition; hidden writes should conflict |
@@ -45,21 +50,19 @@ Only use `ibd/` and `binlog/` as forensic input. SQL, Markdown and manifests are
 reference material. The `.ibd` files are intended for offline extraction; they are
 not a complete restorable MySQL server backup.
 
-### Current app limitation found by this lab
+### Backend repair validation
 
-The clean control completed all ten backend stages and extracted all 15,500
-physical rows, but the current engine reports only 63 records as fully agreeing
-and 15,437 as unresolved. `R-GRP-013` flags legitimate multiple row images at one
-binlog position: `TransactionGroupingService._index_events` keys rows only by
-`(source_file, log_position)` and retains only the first image. Multi-row inserts
-are normal MySQL activity, not corrupt evidence. The generator uses batches of
-250 rows, so this defect affects the attack subjects too and can hide their
-expected findings. See the clean subject's `APP_VALIDATION.md` for actual counts.
+Engine revision 2 fixes the multi-row identity, truncated-transaction, MINIMAL
+update, type-normalization and presence-comparison failures. Full desktop backend
+runs with installed tools now pass all six subjects' acceptance assertions. The
+clean control accounts for all 15,550 decoded row changes and reconciles all
+15,500 live records Exact, with no unexpected warnings.
 
-The clean acquisition has no missing logs, damaged pages, unsupported columns or
-injected attacks. Its expected checklist remains the acceptance target; the
-observed unresolved classifications are a useful failing control for the app.
-Do not interpret these classifications as errors in the source database.
+See [the repair validation report](REPAIR_VALIDATION.md) and each subject's
+`APP_VALIDATION.md` for separate record/field counts and exact-key checks. Older
+backend-limitation notes in the original expected-findings files describe the
+pre-repair engine. Original SQL, ground truth, evidence bytes and hashes have
+been preserved. Existing application cases require reanalysis after upgrading.
 
 ## Coverage and interpretation
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass, is_dataclass, replace
+from dataclasses import asdict, dataclass, fields, is_dataclass, replace
 from typing import TextIO
 
 
@@ -42,7 +42,9 @@ class SidecarResponse:
     error_message: str | None = None
 
     def to_json(self) -> str:
-        value = asdict(self)
+        # asdict deep-copies the complete result, even when it is already JSON
+        # data. A desktop projection can contain many thousands of rows.
+        value = {field.name: getattr(self, field.name) for field in fields(self)}
         return json.dumps(value, sort_keys=True, separators=(",", ":"), default=_json_default)
 
 

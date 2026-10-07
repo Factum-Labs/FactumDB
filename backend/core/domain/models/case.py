@@ -14,6 +14,8 @@ class Case:
     examiner: str
     created_at: datetime
     workspace_path: str
+    engine_revision: int = 2
+    reanalysis_required: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "id", _required(self.id, "case id"))

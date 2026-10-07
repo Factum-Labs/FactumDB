@@ -20,6 +20,7 @@ executable copy of docs/sqlite-schema.md, and is the one the code runs.
 
 import sqlite3
 from pathlib import Path
+from core.engine import ENGINE_REVISION
 
 SCHEMA_FILE = Path(__file__).with_name("schema.sql")
 
@@ -49,6 +50,31 @@ def initialise(connection):
     executescript, so running this on an existing database is safe.
     """
     connection.executescript(SCHEMA_FILE.read_text())
+    columns = {r[1] for r in connection.execute("PRAGMA table_info(cases)")}
+    if "examiner_notes" not in columns:
+        connection.execute("ALTER TABLE cases ADD COLUMN examiner_notes TEXT NOT NULL DEFAULT ''")
+    if "engine_revision" not in columns:
+        connection.execute("ALTER TABLE cases ADD COLUMN engine_revision INTEGER NOT NULL DEFAULT 1")
+        connection.execute("ALTER TABLE cases ADD COLUMN reanalysis_required INTEGER NOT NULL DEFAULT 0")
+    stale = [r[0] for r in connection.execute(
+        "SELECT case_id FROM cases WHERE engine_revision != ?", (ENGINE_REVISION,)
+    )]
+    pipeline_exists = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='pipeline_runs'"
+    ).fetchone()
+    if pipeline_exists:
+        pipeline_columns = {r[1] for r in connection.execute("PRAGMA table_info(pipeline_runs)")}
+        if "obsolete" not in pipeline_columns:
+            connection.execute("ALTER TABLE pipeline_runs ADD COLUMN obsolete INTEGER NOT NULL DEFAULT 0")
+    for case_id in stale:
+        connection.execute("DELETE FROM analysis_results WHERE case_id = ?", (case_id,))
+        connection.execute("DELETE FROM normalizations WHERE case_id = ?", (case_id,))
+        if pipeline_exists:
+            connection.execute("UPDATE pipeline_runs SET obsolete = 1 WHERE case_id = ?", (case_id,))
+        connection.execute(
+            "UPDATE cases SET engine_revision = ?, reanalysis_required = 1 WHERE case_id = ?",
+            (ENGINE_REVISION, case_id),
+        )
     connection.commit()
 
 

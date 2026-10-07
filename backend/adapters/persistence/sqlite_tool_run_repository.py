@@ -98,7 +98,7 @@ class SqliteToolRunRepository(ToolRunRepositoryPort):
         """Which tool run produced the event at this position.
 
         Part of the domain layer's EvidenceContext protocol. EventRef is
-        (source_file, log_position), and there is no direct key from that to a
+        (source_file, log_position, row_index), and there is no direct key from that to a
         tool run, so the lookup joins through binlog_events, which stores both
         the position and the run that produced it.
 
@@ -106,16 +106,16 @@ class SqliteToolRunRepository(ToolRunRepositoryPort):
         and "the event exists but no provenance was recorded". Either way
         there is nothing to show the examiner.
         """
-        source_file, log_position = ref
+        source_file, log_position, row_index = ref
         row = self._connection.execute(
             """
             SELECT t.tool_run_id, t.tool_name, t.evidence_id,
-                   e.source_file, e.log_position
+                   e.source_file, e.log_position, e.row_index
             FROM binlog_events e
             JOIN tool_runs t ON t.tool_run_id = e.tool_run_id
-            WHERE e.source_file = ? AND e.log_position = ?
+            WHERE e.source_file = ? AND e.log_position = ? AND e.row_index = ?
             """,
-            (source_file, log_position),
+            (source_file, log_position, row_index),
         ).fetchone()
 
         if row is None:
@@ -127,6 +127,7 @@ class SqliteToolRunRepository(ToolRunRepositoryPort):
             tool_run_id=row["tool_run_id"],
             source_file=row["source_file"],
             log_position=row["log_position"],
+            row_index=row["row_index"],
         )
 
 

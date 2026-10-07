@@ -280,7 +280,7 @@ def test_provenance_for_an_event(tool_runs, evidence, connection, case_id) -> No
     )
     connection.commit()
 
-    provenance = tool_runs.provenance_for(("mysql-bin.000006", 1112))
+    provenance = tool_runs.provenance_for(("mysql-bin.000006", 1112, 0))
 
     assert provenance is not None
     assert provenance.tool_run_id == "run-1"
@@ -290,4 +290,4 @@ def test_provenance_for_an_event(tool_runs, evidence, connection, case_id) -> No
 
 
 def test_provenance_for_an_unknown_event_is_none(tool_runs) -> None:
-    assert tool_runs.provenance_for(("mysql-bin.000099", 1)) is None
+    assert tool_runs.provenance_for(("mysql-bin.000099", 1, 0)) is None

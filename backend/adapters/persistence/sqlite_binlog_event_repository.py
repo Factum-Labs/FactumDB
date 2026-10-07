@@ -32,7 +32,7 @@ from adapters.persistence._values import from_json, to_json
 from core.application.ports.binlog_event_repository_port import (
     BinlogEventRepositoryPort,
 )
-from core.domain.models.canonical import BinlogEvent, EventRef
+from core.domain.models.canonical import BinlogEvent, EventRef, ProvenanceReference
 
 _COLUMNS = """
     event_id, evidence_id, tool_run_id, event_type, database_name,
@@ -65,11 +65,8 @@ class SqliteBinlogEventRepository(BinlogEventRepositoryPort):
             return
 
         rows = []
-        seen = {}
         for event in events:
-            key = (event.source_file, event.log_position)
-            row_index = seen.get(key, 0)
-            seen[key] = row_index + 1
+            row_index = event.row_index
             rows.append(
                 (
                     _event_id(evidence_id, event.source_file, event.log_position, row_index),
@@ -140,30 +137,23 @@ class SqliteBinlogEventRepository(BinlogEventRepositoryPort):
         return [_row_to_event(r) for r in rows]
 
     def find_by_ref(self, evidence_id: str, ref: EventRef) -> Optional[BinlogEvent]:
-        """One event by (source_file, log_position), or None.
-
-        EventRef does not carry a row index yet, so when one event held
-        several rows this returns the first of them. That is a known limit,
-        raised with the team: until EventRef can name a single row, a lookup
-        by ref cannot tell the rows of a multi-row event apart.
-        """
-        source_file, log_position = ref
+        """One row by (source_file, log_position, row_index), or None."""
+        source_file, log_position = ref[:2]
         row = self._connection.execute(
             f"SELECT {_COLUMNS} FROM binlog_events "
             "WHERE evidence_id = ? AND source_file = ? AND log_position = ? "
-            "ORDER BY row_index LIMIT 1",
-            (evidence_id, source_file, log_position),
+            "AND row_index = ?",
+            (evidence_id, source_file, log_position, ref[2]),
         ).fetchone()
         return _row_to_event(row) if row is not None else None
 
     def rows_in_event(self, evidence_id: str, ref: EventRef) -> Sequence[BinlogEvent]:
         """Every row image that one binlog event carried, in order.
 
-        Not part of the port. It exists because find_by_ref() can only return
-        one row, and anything that needs the whole of a multi-row event needs
-        a way to ask for all of it.
+        The row component is ignored deliberately: this convenience lookup
+        requests the entire event, whereas find_by_ref names one specific row.
         """
-        source_file, log_position = ref
+        source_file, log_position = ref[:2]
         rows = self._connection.execute(
             f"SELECT {_COLUMNS} FROM binlog_events "
             "WHERE evidence_id = ? AND source_file = ? AND log_position = ? "
@@ -191,4 +181,10 @@ def _row_to_event(row) -> BinlogEvent:
         source_file=row["source_file"],
         gtid=row["gtid"],
         thread_id=row["thread_id"],
+        row_index=row["row_index"],
+        provenance=ProvenanceReference(
+            evidence_id=row["evidence_id"], tool_name="mysqlbinlog",
+            tool_run_id=row["tool_run_id"], source_file=row["source_file"],
+            log_position=row["log_position"], row_index=row["row_index"],
+        ),
     )

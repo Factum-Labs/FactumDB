@@ -96,6 +96,27 @@ includes its reason and is not an error.
 
 ## Execution and limitations
 
+### Desktop case views
+
+The configured `sidecar.desktop` runtime provides `list_cases`, `get_case_data`
+(`case_id`), and `get_analysis_detail`. Case views are projections rather than
+complete exports: `table_counts` contains actual row counts; the large raw tables
+and `tables.analysis_results` are empty arrays. The `analysis` member contains
+transaction summaries with `event_count`, record summaries, history summaries
+with `step_count`, and all comparison rows' display fields. Each stage sets
+`details_deferred: true`. The gaps list contains non-informational findings.
+
+`get_analysis_detail` requires `case_id`, `kind`, and `identity`, where `kind` is
+`transaction`, `history`, or `comparison`. Comparison requests also require
+`field`. The response contains the complete saved `detail` and described
+`findings`; histories also include the observed binlog `events` for their steps.
+Details are scoped to the requested case. Full evidence, analysis, informational
+findings, exact tagged values, and provenance remain in JSON/CSV exports.
+
+This keeps opening cases and refreshing pipeline progress from transferring
+hundreds of megabytes of duplicated nested findings. Frontends should request
+details when a selection changes and discard responses for obsolete selections.
+
 The frontend should start the run, then request one stage at a time until the
 returned `stopped` flag is true. Between stages it can request cancellation. Send
 another `run_next_stage` to apply that request and mark pending stages cancelled.

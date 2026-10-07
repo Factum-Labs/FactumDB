@@ -168,7 +168,7 @@ class PipelineCompositionTests(unittest.TestCase):
         adapters = build_tool_adapters(lookup, ibd2sql_path="/tools/main.py")
         lookup.assert_not_called()
         with patch("adapters.tools.mysqlbinlog_adapter.MysqlBinlogAdapter.decode",
-                   return_value=([], [], [])) as decode:
+                   return_value=([], [], [], [])) as decode:
             for case in catalogs:
                 adapters.decoder_for_case(case).decode(case, "evidence-1", "/working/binlog.000018")
                 self.assertIs(decode.call_args.args[1], catalogs[case].schema_for)

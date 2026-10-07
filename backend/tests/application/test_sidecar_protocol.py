@@ -5,10 +5,19 @@ import json
 import unittest
 
 from sidecar.main import build_router
-from sidecar.protocol import CommandRouter, SidecarRequest, serve
+from sidecar.protocol import CommandRouter, SidecarRequest, SidecarResponse, serve
 
 
 class SidecarProtocolTests(unittest.TestCase):
+    def test_response_serialization_does_not_deep_copy_the_result(self) -> None:
+        class LargeProjection(dict):
+            def __deepcopy__(self, memo):
+                raise AssertionError("The transport copied the complete case projection")
+
+        result = LargeProjection(rows=[{"record_id": "accounts:1", "result": "Exact"}])
+        response = json.loads(SidecarResponse("req-1", True, result=result).to_json())
+        self.assertEqual(response["result"], result)
+
     def test_health_request_has_one_correlated_json_response(self) -> None:
         input_stream = io.StringIO(
             '{"request_id":"req-1","command":"health","payload":{}}\n'

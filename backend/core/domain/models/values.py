@@ -28,10 +28,17 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
+import re
 from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
     from core.domain.models.canonical import Column
+
+
+def base_type(declaration: str) -> str:
+    """Normalize a SQL declaration for capability checks, retaining it elsewhere."""
+    match = re.match(r"\s*([a-z]+)", declaration, re.IGNORECASE)
+    return match.group(1).lower() if match else declaration.strip().lower()
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,7 +155,7 @@ def compare(
     if (
         column is not None
         and supported_types is not None
-        and column.data_type.lower() not in supported_types
+        and base_type(column.data_type) not in supported_types
     ):
         return Comparison(False, None, R_UNSUPPORTED_TYPE)
 

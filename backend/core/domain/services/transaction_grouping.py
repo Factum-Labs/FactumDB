@@ -57,6 +57,13 @@ class TransactionGroupingService:
         findings: list[Finding] = []
         by_ref = self._index_events(events, findings)
 
+        self._by_position: dict[tuple[str, int], list[BinlogEvent]] = {}
+        self._by_file: dict[str, list[BinlogEvent]] = {}
+        for event in by_ref.values():
+            self._by_position.setdefault((event.source_file, event.log_position), []).append(event)
+            self._by_file.setdefault(event.source_file, []).append(event)
+        for rows in self._by_position.values():
+            rows.sort(key=lambda e: e.row_index)
         claimed: set[EventRef] = set()
         transactions: list[TransactionGroup] = []
 
@@ -83,8 +90,8 @@ class TransactionGroupingService:
             findings.append(
                 self._finding(
                     "R-GRP-011",
-                    SubjectRef(SubjectKind.EVENT, f"{entry.ref[0]}:{entry.ref[1]}"),
-                    {"source_file": entry.ref[0], "log_position": str(entry.ref[1])},
+                    SubjectRef(SubjectKind.EVENT, f"{entry.ref[0]}:{entry.ref[1]}#{entry.ref[2]}"),
+                    {"source_file": entry.ref[0], "log_position": str(entry.ref[1]), "row_index": str(entry.ref[2])},
                     (entry.provenance,),
                 )
             )
@@ -107,11 +114,10 @@ class TransactionGroupingService:
     def _index_events(
         self, events: Sequence[BinlogEvent], findings: list[Finding]
     ) -> dict[EventRef, BinlogEvent]:
-        """Index by `(source_file, log_position)`, reporting any collision.
+        """Index by file, position and row index, reporting repeated row references.
 
-        Two events cannot share a position in one log, so a duplicate means the
-        evidence set is inconsistent - the same file registered twice, or a relay
-        log mixed in. The first is kept and both are reported.
+        Multiple row images at one position are legitimate. Only a collision of
+        the complete row reference is a duplicate; its first image is retained.
         """
         by_ref: dict[EventRef, BinlogEvent] = {}
         for event in events:
@@ -119,10 +125,11 @@ class TransactionGroupingService:
                 findings.append(
                     self._finding(
                         "R-GRP-013",
-                        SubjectRef(SubjectKind.EVENT, f"{event.source_file}:{event.log_position}"),
+                        SubjectRef(SubjectKind.EVENT, f"{event.source_file}:{event.log_position}#{event.row_index}"),
                         {
                             "source_file": event.source_file,
                             "log_position": str(event.log_position),
+                            "row_index": str(event.row_index),
                         },
                         (self._provenance_for(event, findings),),
                     )
@@ -172,9 +179,8 @@ class TransactionGroupingService:
     ) -> list[BinlogEvent]:
         taken: list[BinlogEvent] = []
         for position in marker.event_positions:
-            ref = (marker.source_file, position)
-            event = by_ref.get(ref)
-            if event is None:
+            rows = self._by_position.get((marker.source_file, position), ())
+            if not rows:
                 findings.append(
                     self._finding(
                         "R-GRP-009",
@@ -188,26 +194,30 @@ class TransactionGroupingService:
                     )
                 )
                 continue
-            taken.append(event)
-            claimed.add(ref)
+            for event in rows:
+                taken.append(event)
+                claimed.add(event.ref)
 
         # An event inside the range the marker did not list is left alone: it may
         # belong to an interleaved session, and claiming it would assert a
         # membership the marker itself does not state.
-        for ref, event in by_ref.items():
+        listed = set(marker.event_positions)
+        for event in self._by_file.get(marker.source_file, ()):
+            ref = event.ref
             if (
                 ref[0] == marker.source_file
                 and marker.start_position <= ref[1] <= marker.end_position
-                and ref[1] not in marker.event_positions
+                and ref[1] not in listed
             ):
                 findings.append(
                     self._finding(
                         "R-GRP-010",
-                        SubjectRef(SubjectKind.EVENT, f"{ref[0]}:{ref[1]}"),
+                        SubjectRef(SubjectKind.EVENT, f"{ref[0]}:{ref[1]}#{ref[2]}"),
                         {
                             "transaction": transaction_id,
                             "source_file": ref[0],
                             "log_position": str(ref[1]),
+                            "row_index": str(ref[2]),
                         },
                         (self._provenance_for(event, findings),),
                     )
@@ -264,7 +274,7 @@ class TransactionGroupingService:
         provisional_id = self._provisional_id(marker)
         events = self._claim(marker, by_ref, claimed, findings, provisional_id)
         ordered = sorted(
-            events, key=lambda e: event_sort_key(sequence, e.source_file, e.log_position)
+            events, key=lambda e: (*event_sort_key(sequence, e.source_file, e.log_position), e.row_index)
         )
 
         status = TransactionStatus(marker.status)
@@ -436,7 +446,7 @@ class TransactionGroupingService:
         """
         unclaimed = sorted(
             (e for ref, e in by_ref.items() if ref not in claimed),
-            key=lambda e: event_sort_key(sequence, e.source_file, e.log_position),
+            key=lambda e: (*event_sort_key(sequence, e.source_file, e.log_position), e.row_index),
         )
         if not unclaimed:
             return [], []
@@ -465,7 +475,7 @@ class TransactionGroupingService:
         the adapter actually saw.
         """
         ordered = sorted(
-            events, key=lambda e: event_sort_key(sequence, e.source_file, e.log_position)
+            events, key=lambda e: (*event_sort_key(sequence, e.source_file, e.log_position), e.row_index)
         )
         first = ordered[0]
         suffix = basename(first.source_file).rpartition(".")[2] or basename(first.source_file)
