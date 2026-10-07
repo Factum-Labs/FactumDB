@@ -217,6 +217,8 @@ This was found by feeding a two-row event through the adapter: it produced two r
 
 `row_index` defaults to 0, so a single-row event - which is most of them - has the same identity it always had.
 
+`source_file` is the binlog's own name, `mysql-bin.000006`, as it was registered - the same name in `transactions`. The adapter reads a working copy, which the filesystem layer names `<evidence id>-mysql-bin.000006`, so the decode is stored under the registered name instead. The domain orders the logs by finding these names in `mysql-bin.index`; with the working-copy names it found none of them and fell back to ordering by evidence id, which put the logs in the wrong order.
+
 `event_time_utc` is indexed because building a timeline means sorting by time, and that is the main thing this tool does.
 
 ---

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import replace
 
 from core.application.models import DecodedBinlog, NormalizedEvidence
 from core.application.errors import ConflictError, NotFoundError, PrerequisiteError
@@ -50,9 +51,45 @@ class SqliteExtractionRepository:
     ) -> None:
         with self._atomic():
             self._validate_provenance(case_id, evidence_id, tool_run_id, "mysqlbinlog")
+            decoded = self._under_registered_name(evidence_id, decoded)
             self._events.save_many(decoded.events, evidence_id, tool_run_id)
             self._transactions.save_many(decoded.markers, evidence_id, tool_run_id)
             self._warnings.save_many(decoded.warnings, case_id, evidence_id, tool_run_id)
+
+    def _under_registered_name(self, evidence_id: str, decoded: DecodedBinlog) -> DecodedBinlog:
+        """The decode, with its events and markers under the binlog's own name.
+
+        The adapter names events after the file it read, and that file is the
+        working copy, e.g. "<evidence id>-mysql-bin.000006". The server's
+        index - and anyone reading the report - knows the log as
+        "mysql-bin.000006", the name it was registered under. Ordering the
+        logs and spotting missing ones both match on that name, so it is the
+        one stored.
+
+        One evidence file is one binlog. A decode claiming events from more
+        than one file was put together wrongly, and renaming them all would
+        hide that, so it is refused.
+        """
+        name = self._connection.execute(
+            "SELECT filename FROM evidence_files WHERE evidence_id = ?", (evidence_id,)
+        ).fetchone()["filename"]
+        files = {e.source_file for e in decoded.events} | {m.source_file for m in decoded.markers}
+        if len(files) > 1:
+            raise ConflictError(
+                f"one decoded binlog holds events from {len(files)} files: {sorted(files)}"
+            )
+        if not files or files == {name}:
+            return decoded
+        (read_as,) = files
+        return DecodedBinlog(
+            tuple(replace(e, source_file=name) for e in decoded.events),
+            tuple(replace(m, source_file=name) for m in decoded.markers),
+            tuple(
+                replace(w, context={**w.context, "source_file": name})
+                if w.context.get("source_file") == read_as else w
+                for w in decoded.warnings
+            ),
+        )
 
     def save_normalized(self, case_id: str, normalized: NormalizedEvidence) -> None:
         """Record which part of the stored evidence the analysis covers.
