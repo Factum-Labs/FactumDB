@@ -27,6 +27,7 @@ on the transaction repository.
 
 from typing import Optional, Sequence
 
+from adapters.persistence._in_case import in_case
 from adapters.persistence._provenance import provenance_from
 from adapters.persistence._timestamps import from_text, to_text
 from adapters.persistence._values import from_json, to_json
@@ -124,13 +125,14 @@ class SqliteBinlogEventRepository(BinlogEventRepositoryPort):
                 rows,
             )
 
-    def events(self) -> Sequence[BinlogEvent]:
+    def events(self, *, case_id: Optional[str] = None) -> Sequence[BinlogEvent]:
         """Every decoded event in the case, in time order.
 
         Time rather than position, because a position only orders events
         inside one file and a case normally has several files.
         """
-        rows = self._connection.execute(f"{_SELECT} {_ORDER}").fetchall()
+        condition, args = in_case(case_id, "b.evidence_id")
+        rows = self._connection.execute(f"{_SELECT} WHERE {condition} {_ORDER}", args).fetchall()
         return [_row_to_event(r) for r in rows]
 
     def list_by_table(self, database: str, table: str) -> Sequence[BinlogEvent]:

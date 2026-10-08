@@ -19,8 +19,9 @@ markers() is the other half of the domain layer's EventSource protocol;
 events() is on the binlog event repository.
 """
 
-from typing import Sequence
+from typing import Optional, Sequence
 
+from adapters.persistence._in_case import in_case
 from adapters.persistence._provenance import provenance_from
 from core.application.ports.transaction_repository_port import (
     TransactionRepositoryPort,
@@ -92,9 +93,10 @@ class SqliteTransactionRepository(TransactionRepositoryPort):
                 )
                 self._link_events(transaction_id, evidence_id, marker)
 
-    def markers(self) -> Sequence[TransactionMarker]:
+    def markers(self, *, case_id: Optional[str] = None) -> Sequence[TransactionMarker]:
         """Every transaction marker in the case, in log order."""
-        rows = self._connection.execute(f"{_SELECT} {_ORDER}").fetchall()
+        condition, args = in_case(case_id, "t.evidence_id")
+        rows = self._connection.execute(f"{_SELECT} WHERE {condition} {_ORDER}", args).fetchall()
         return [self._load(r) for r in rows]
 
     def list_by_evidence(self, evidence_id: str) -> Sequence[TransactionMarker]:
