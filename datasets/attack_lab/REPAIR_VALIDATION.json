@@ -1,0 +1,182 @@
+{
+  "engine_revision": 2,
+  "all_acceptance_passed": true,
+  "subjects": [
+    {
+      "subject": "01_marketplace_fraud",
+      "pipeline_seconds": 61.29,
+      "record_counts": {
+        "Unsupported": 1,
+        "Exact": 15437,
+        "Conflicting": 33,
+        "Partial": 300,
+        "Strong": 11,
+        "Unresolved": 20
+      },
+      "field_counts": {
+        "Unsupported": 901,
+        "Exact": 108890,
+        "Conflicting": 53,
+        "Strong": 78,
+        "Unresolved": 188
+      },
+      "acceptance_checks": {
+        "all_decoded_rows_accounted_for": true,
+        "no_false_duplicate_rows": true,
+        "keyless_table_visible": true,
+        "unsupported_type_limitations_visible": true,
+        "composite_key_continuity": true,
+        "key_reuse": true,
+        "minimal_updates_retained": true,
+        "financial_rewrites_11_20": true,
+        "contact_takeovers_31_40": true,
+        "role_rewrites_8_9": true,
+        "hidden_deletions_81_90": true,
+        "fabricated_row_900001": true,
+        "discontinuity_71": true
+      },
+      "physical_rows": 16271,
+      "previous_pipeline_seconds": 574.11,
+      "speedup": 9.37
+    },
+    {
+      "subject": "02_credit_union_log_erasure",
+      "pipeline_seconds": 75.32,
+      "record_counts": {
+        "Unsupported": 1,
+        "Strong": 15324,
+        "Unresolved": 178,
+        "Partial": 300
+      },
+      "field_counts": {
+        "Unsupported": 901,
+        "Exact": 15769,
+        "Strong": 92986,
+        "Unresolved": 460
+      },
+      "acceptance_checks": {
+        "all_decoded_rows_accounted_for": true,
+        "no_false_duplicate_rows": true,
+        "keyless_table_visible": true,
+        "unsupported_type_limitations_visible": true,
+        "withheld_key_change_not_invented": true,
+        "withheld_key_reuse_not_invented": true,
+        "missing_log_named": true,
+        "gap_explains_financial_differences": true,
+        "fabricated_row_conservative": true
+      },
+      "physical_rows": 16271
+    },
+    {
+      "subject": "03_clinic_interrupted_coverup",
+      "pipeline_seconds": 65.08,
+      "record_counts": {
+        "Unsupported": 1,
+        "Strong": 15442,
+        "Unresolved": 59,
+        "Partial": 300
+      },
+      "field_counts": {
+        "Unsupported": 901,
+        "Exact": 15790,
+        "Strong": 93172,
+        "Unresolved": 247
+      },
+      "acceptance_checks": {
+        "all_decoded_rows_accounted_for": true,
+        "no_false_duplicate_rows": true,
+        "keyless_table_visible": true,
+        "unsupported_type_limitations_visible": true,
+        "composite_key_continuity": true,
+        "key_reuse": true,
+        "minimal_updates_retained": true,
+        "truncation_keeps_earlier_differences_unresolved": true,
+        "final_transaction_incomplete": true,
+        "unterminated_changes_not_applied": true,
+        "truncated_coverage_visible": true,
+        "cleanup_not_observed_rollback": true
+      },
+      "physical_rows": 16271
+    },
+    {
+      "subject": "04_payroll_page_damage",
+      "pipeline_seconds": 78.29,
+      "record_counts": {
+        "Unsupported": 1,
+        "Exact": 10467,
+        "Conflicting": 23,
+        "Unresolved": 5000,
+        "Partial": 300,
+        "Strong": 11
+      },
+      "field_counts": {
+        "Unsupported": 901,
+        "Exact": 74080,
+        "Conflicting": 43,
+        "Unresolved": 35008,
+        "Strong": 78
+      },
+      "acceptance_checks": {
+        "all_decoded_rows_accounted_for": true,
+        "no_false_duplicate_rows": true,
+        "keyless_table_visible": true,
+        "unsupported_type_limitations_visible": true,
+        "composite_key_continuity": true,
+        "key_reuse": true,
+        "minimal_updates_retained": true,
+        "damaged_tablespace_visible": true,
+        "damaged_presence_conservative": true,
+        "damaged_values_conservative": true
+      },
+      "physical_rows": 16271
+    },
+    {
+      "subject": "05_logistics_scope_gaps",
+      "pipeline_seconds": 50.35,
+      "record_counts": {
+        "Unsupported": 1,
+        "Strong": 10478,
+        "Unresolved": 23,
+        "Partial": 300
+      },
+      "field_counts": {
+        "Unsupported": 901,
+        "Exact": 10800,
+        "Strong": 63358,
+        "Unresolved": 51
+      },
+      "acceptance_checks": {
+        "all_decoded_rows_accounted_for": true,
+        "no_false_duplicate_rows": true,
+        "keyless_table_visible": true,
+        "unsupported_type_limitations_visible": true,
+        "composite_key_continuity": true,
+        "key_reuse": true,
+        "minimal_updates_retained": true,
+        "missing_index_visible": true,
+        "unavailable_invoice_schema_visible": true,
+        "no_invoice_physical_values_invented": true
+      },
+      "physical_rows": 11301
+    },
+    {
+      "subject": "06_clean_marketplace",
+      "pipeline_seconds": 65.31,
+      "record_counts": {
+        "Exact": 15500
+      },
+      "field_counts": {
+        "Exact": 108000
+      },
+      "acceptance_checks": {
+        "all_decoded_rows_accounted_for": true,
+        "no_false_duplicate_rows": true,
+        "15500_live_records_exact": true,
+        "no_unexpected_warnings": true
+      },
+      "physical_rows": 15500,
+      "previous_pipeline_seconds": 459.23,
+      "speedup": 7.03
+    }
+  ]
+}

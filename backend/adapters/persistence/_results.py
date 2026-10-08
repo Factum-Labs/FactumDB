@@ -61,7 +61,8 @@ def encode(obj):
 
 def decode(data, hint):
     """Plain JSON data -> an object of the type `hint` describes."""
-    if isinstance(hint, typing.TypeAliasType):
+    alias_type = getattr(typing, "TypeAliasType", None)
+    if alias_type is not None and isinstance(hint, alias_type):
         hint = hint.__value__
     if hint == Value:
         return decode_value(data)

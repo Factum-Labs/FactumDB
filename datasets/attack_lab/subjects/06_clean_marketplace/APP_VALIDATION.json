@@ -1,0 +1,194 @@
+{
+  "complete": true,
+  "elapsed_seconds": 85.77,
+  "include_deleted": false,
+  "stages": [
+    {
+      "stage": "verify_evidence",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T18:16:25.628695+00:00",
+          "finished_at": "2026-10-07T18:16:25.701678+00:00",
+          "item_count": 9,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "validate_pages",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T18:16:25.706681+00:00",
+          "finished_at": "2026-10-07T18:16:26.049741+00:00",
+          "item_count": 5,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "extract_schema",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T18:16:26.053746+00:00",
+          "finished_at": "2026-10-07T18:16:26.249752+00:00",
+          "item_count": 5,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "extract_physical_rows",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T18:16:26.253407+00:00",
+          "finished_at": "2026-10-07T18:16:28.104477+00:00",
+          "item_count": 15500,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "decode_binary_logs",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T18:16:28.110479+00:00",
+          "finished_at": "2026-10-07T18:16:30.660479+00:00",
+          "item_count": 15613,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "normalize_evidence",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T18:16:30.665586+00:00",
+          "finished_at": "2026-10-07T18:16:31.061829+00:00",
+          "item_count": 31118,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "group_transactions",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T18:16:31.068846+00:00",
+          "finished_at": "2026-10-07T18:16:32.637940+00:00",
+          "item_count": 63,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "correlate_records",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T18:16:32.648515+00:00",
+          "finished_at": "2026-10-07T18:16:37.207874+00:00",
+          "item_count": 15500,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "reconstruct_state",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T18:16:37.216221+00:00",
+          "finished_at": "2026-10-07T18:16:52.285476+00:00",
+          "item_count": 15500,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    },
+    {
+      "stage": "reconcile_records",
+      "status": "succeeded",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "succeeded",
+          "started_at": "2026-10-07T18:16:52.296173+00:00",
+          "finished_at": "2026-10-07T18:17:30.994939+00:00",
+          "item_count": 108000,
+          "error_code": null,
+          "error_message": null,
+          "skip_reason": null
+        }
+      ]
+    }
+  ],
+  "physical_rows": 15500,
+  "engine_revision": 2,
+  "record_counts": {
+    "Exact": 15500
+  },
+  "field_counts": {
+    "Exact": 108000
+  },
+  "acceptance_checks": {
+    "all_decoded_rows_accounted_for": true,
+    "no_false_duplicate_rows": true,
+    "15500_live_records_exact": true,
+    "no_unexpected_warnings": true
+  },
+  "acceptance_passed": true,
+  "finding_rule_counts": {
+    "R-GRP-001": 63,
+    "R-HIST-002": 15500,
+    "R-HIST-003": 15550,
+    "R-HIST-012": 15500,
+    "R-RECON-001": 92150,
+    "R-RECON-011": 350,
+    "R-RECON-020": 15500,
+    "R-ROLL-002": 15500
+  },
+  "note": "Distinct record rollups and field rows are counted separately. Acceptance checks use exact affected keys.",
+  "pipeline_seconds": 65.31
+}

@@ -57,11 +57,13 @@ from core.domain.models.values import (
     UndecodableValue,
     Value,
     compare,
+    base_type,
     render,
 )
 from core.domain.ordering import record_sort_key
 from core.domain.ports import EvidenceContext, PhysicalRecordSource, SchemaCatalog
 from core.domain.rules import rule
+from core.domain.services.physical_index import PhysicalIndex
 
 #: Field results that mean a real comparison happened.
 _COMPARED = (ReconResult.EXACT, ReconResult.STRONG, ReconResult.CONFLICTING)
@@ -88,6 +90,12 @@ class ReconciliationService:
         correlation: CorrelationResult,
         coverage: CoverageReport,
     ) -> ReconciliationResult:
+        self._physical_index = PhysicalIndex(self._schemas, self._physical)
+        self._extracted_tables = self._evidence.tables_with_complete_extraction()
+        self._created_tables = {
+            (c.database, c.table): c for c in self._evidence.table_creations()
+            if (c.database, c.table) not in correlation.uncertain_tables
+        } if coverage.complete else {}
         findings: list[Finding] = []
         records: list[RecordReconciliation] = []
 
@@ -223,7 +231,7 @@ class ReconciliationService:
 
         # 1. The column's type has never been validated, so comparing it would
         #    rest on decoding we have not verified.
-        if column.data_type.lower() not in supported:
+        if base_type(column.data_type) not in supported:
             return ReconResult.UNSUPPORTED, "R-RECON-008", extra
 
         # 2. One side could not be decoded at all.
@@ -325,8 +333,16 @@ class ReconciliationService:
     ) -> FieldReconciliation:
         """Whether the record exists, asked before what it holds."""
         log_presence = history.final_log_state.presence
+        key = correlation.record.to_key()
+        integrity = self._evidence.integrity_for(key.database, key.table)
+        healthy = integrity is not None and integrity.status == "valid"
+        extracted = (key.database, key.table) in self._extracted_tables
+        if (log_presence is Presence.UNKNOWN and not correlation.has_log_evidence
+                and healthy and extracted
+                and (key.database, key.table) in self._created_tables):
+            log_presence = Presence.ABSENT
         if correlation.physical is None:
-            phys_presence = Presence.UNKNOWN if physical_values is None else Presence.ABSENT
+            phys_presence = Presence.ABSENT if healthy and extracted else Presence.UNKNOWN
         else:
             phys_presence = (
                 Presence.ABSENT if correlation.physical.is_deleted else Presence.PRESENT
@@ -335,6 +351,7 @@ class ReconciliationService:
         subject = SubjectRef(SubjectKind.FIELD, f"{correlation.record.id}.presence")
         context = {
             "record": correlation.record.id,
+            "field": PRESENCE_FIELD,
             "presence": log_presence.value,
             "log_presence": log_presence.value,
             "phys_presence": phys_presence.value,
@@ -344,6 +361,9 @@ class ReconciliationService:
         result, rule_id = self._classify_presence(
             log_presence, phys_presence, correlation, history
         )
+        if integrity is not None and integrity.status != "valid":
+            result, rule_id = ReconResult.UNRESOLVED, "R-RECON-009"
+            context["integrity_status"] = integrity.status
         finding = self._finding(rule_id, subject, context, ())
         findings.append(finding)
 
@@ -501,13 +521,8 @@ class ReconciliationService:
         """
         if correlation.physical is None or schema is None:
             return None
-        key = correlation.record.to_key()
-        for record in self._physical.records_for(key.database, key.table):
-            if record.is_deleted != correlation.physical.is_deleted:
-                continue
-            if self._key_of(record, schema) == key:
-                return dict(record.values)
-        return None
+        record = self._physical_index.selected(correlation)
+        return dict(record.values) if record is not None else None
 
     @staticmethod
     def _key_of(record: PhysicalRecord, schema: Schema) -> RecordKey | None:
@@ -531,7 +546,8 @@ class ReconciliationService:
     ) -> FieldProvenance:
         ref = history.final_log_state.derived_from.get(column)
         narrowed = tuple(
-            p for p in correlation.provenance if ref is not None and p.log_position == ref[1]
+            p for p in correlation.provenance if ref is not None
+            and (p.source_file, p.log_position, p.row_index) == ref
         )
         return FieldProvenance(
             log=narrowed or correlation.provenance,

@@ -64,6 +64,7 @@ def test_a_multi_row_event_is_listed_once_in_its_marker() -> None:
     events, markers, _ = parse()
 
     assert [e.log_position for e in events] == [1600, 1600]
+    assert [e.row_index for e in events] == [0, 1]
     assert markers[0].event_positions == (1600,)
 
 
@@ -77,3 +78,28 @@ def test_a_skipped_event_is_not_listed_in_its_marker() -> None:
 
     assert 1700 not in markers[0].event_positions
     assert [w.code for w in warnings] == ["SCHEMA_NOT_FOUND"]
+
+
+def test_generated_cleanup_does_not_close_a_truncated_transaction():
+    text = TEXT.split('#260923 12:00:00 server id 1  end_log_pos 1731')[0]
+    text += 'ROLLBACK /* added by mysqlbinlog */;\n'
+    events, markers, _ = MysqlBinlogAdapter.parse(text, 'mysql-bin.000024', lambda d, t: ACCOUNTS)
+    assert events and markers[-1].status == 'incomplete'
+
+
+def test_genuine_rollback_is_preserved():
+    text = TEXT.split('#260923 12:00:00 server id 1  end_log_pos 1731')[0] + 'ROLLBACK;\n'
+    _, markers, _ = MysqlBinlogAdapter.parse(text, 'mysql-bin.000024', lambda d, t: ACCOUNTS)
+    assert markers[-1].status == 'rolled_back'
+
+
+def test_observed_creation_provenance_excludes_conditional_and_temporary_ddl():
+    text = '''#260923 12:00:00 server id 1  end_log_pos 100 CRC32 0x1 Query thread_id=8
+use `finance`/*!*/;
+CREATE TABLE `notes` (id INT PRIMARY KEY);
+#260923 12:00:00 server id 1  end_log_pos 200 CRC32 0x1 Query thread_id=8
+CREATE TABLE IF NOT EXISTS `old_notes` (id INT);
+CREATE TEMPORARY TABLE `tmp` (id INT);
+'''
+    _, _, _, creations = MysqlBinlogAdapter.parse(text, 'mysql-bin.000024', lambda d, t: None, include_creations=True)
+    assert [(c.database, c.table, c.log_position) for c in creations] == [('finance', 'notes', 100)]

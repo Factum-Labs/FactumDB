@@ -46,6 +46,10 @@ class SqliteExtractionRepository:
         with self._atomic():
             self._validate_provenance(case_id, evidence_id, tool_run_id, "ibd2sql")
             self._physical.save_many(records, evidence_id, tool_run_id)
+            self._connection.execute(
+                "INSERT OR REPLACE INTO physical_extractions VALUES (?, ?)",
+                (evidence_id, tool_run_id),
+            )
 
     def save_decoded_binlog(
         self, case_id: str, evidence_id: str, tool_run_id: str, decoded: DecodedBinlog,
@@ -56,6 +60,12 @@ class SqliteExtractionRepository:
             self._events.save_many(decoded.events, evidence_id, tool_run_id)
             self._transactions.save_many(decoded.markers, evidence_id, tool_run_id)
             self._warnings.save_many(decoded.warnings, case_id, evidence_id, tool_run_id)
+            self._connection.execute("DELETE FROM table_creations WHERE evidence_id = ?", (evidence_id,))
+            self._connection.executemany(
+                "INSERT INTO table_creations VALUES (?, ?, ?, ?, ?, ?)",
+                [(evidence_id, tool_run_id, c.database, c.table, c.source_file, c.log_position)
+                 for c in decoded.table_creations],
+            )
 
     def _under_registered_name(self, evidence_id: str, decoded: DecodedBinlog) -> DecodedBinlog:
         """The decode, with its events and markers under the binlog's own name.
@@ -74,7 +84,8 @@ class SqliteExtractionRepository:
         name = self._connection.execute(
             "SELECT filename FROM evidence_files WHERE evidence_id = ?", (evidence_id,)
         ).fetchone()["filename"]
-        files = {e.source_file for e in decoded.events} | {m.source_file for m in decoded.markers}
+        files = ({e.source_file for e in decoded.events} | {m.source_file for m in decoded.markers}
+                 | {c.source_file for c in decoded.table_creations})
         if len(files) > 1:
             raise ConflictError(
                 f"one decoded binlog holds events from {len(files)} files: {sorted(files)}"
@@ -90,6 +101,7 @@ class SqliteExtractionRepository:
                 if w.context.get("source_file") == read_as else w
                 for w in decoded.warnings
             ),
+            tuple(replace(c, source_file=name) for c in decoded.table_creations),
         )
 
     def save_normalized(self, case_id: str, normalized: NormalizedEvidence) -> None:

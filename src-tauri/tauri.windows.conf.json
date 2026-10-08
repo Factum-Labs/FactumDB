@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "targets": ["nsis"],
+    "windows": { "nsis": { "compression": "zlib" } },
+    "resources": {
+      "resources/runtime/windows/": "runtime/windows/",
+      "resources/sources/": "sources/"
+    }
+  }
+}

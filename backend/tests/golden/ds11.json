@@ -118,11 +118,13 @@
             "provenance": {
               "evidence_id": "ev_b7785a0c",
               "log_position": 100,
+              "row_index": 0,
               "source_file": "binlog.000018",
               "tool_name": "mysqlbinlog",
               "tool_run_id": "run_3f21c8de"
             },
             "raw_timestamp": "260816  0:36:25",
+            "row_index": 0,
             "source_file": "binlog.000018",
             "table": "audit_log",
             "thread_id": 13,
@@ -132,6 +134,7 @@
           "provenance": {
             "evidence_id": "ev_b7785a0c",
             "log_position": 100,
+            "row_index": 0,
             "source_file": "binlog.000018",
             "tool_name": "mysqlbinlog",
             "tool_run_id": "run_3f21c8de"
@@ -149,6 +152,7 @@
             {
               "evidence_id": "ev_b7785a0c",
               "log_position": 90,
+              "row_index": null,
               "source_file": "binlog.000018",
               "tool_name": "mysqlbinlog",
               "tool_run_id": "run_3f21c8de"
@@ -169,6 +173,7 @@
         {
           "evidence_id": "ev_b7785a0c",
           "log_position": 90,
+          "row_index": null,
           "source_file": "binlog.000018",
           "tool_name": "mysqlbinlog",
           "tool_run_id": "run_3f21c8de"

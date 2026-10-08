@@ -61,6 +61,7 @@ from core.domain.models.values import (
 from core.domain.ordering import FileSequence, event_sort_key
 from core.domain.ports import EvidenceContext, PhysicalRecordSource, SchemaCatalog
 from core.domain.rules import rule
+from core.domain.services.physical_index import PhysicalIndex
 
 
 class _Working:
@@ -112,6 +113,7 @@ class StateReconstructionService:
         self, grouping: GroupingResult, correlation: CorrelationResult
     ) -> ReconstructionResult:
         sequence = FileSequence(self._evidence.inventory())
+        self._physical_index = PhysicalIndex(self._schemas, self._physical)
         findings: list[Finding] = []
         events = self._event_index(grouping)
 
@@ -469,16 +471,10 @@ class StateReconstructionService:
         """
         if not grouping.coverage.gaps:
             return ()
-        files = {ref[0] for ref in correlation.log_event_refs}
-        relevant = [
-            window
-            for window in grouping.coverage.gaps
-            if window.reason != "truncated_file"
-            or window.after_file is None
-            or window.after_file in files
-            or not files
-        ]
-        return tuple(relevant)
+        # An unobserved tail may contain later changes to any record, including
+        # records last seen in an earlier file. File membership cannot prove
+        # that the tail would not have explained a present-day difference.
+        return grouping.coverage.gaps
 
     def _gap_steps(
         self,
@@ -553,15 +549,7 @@ class StateReconstructionService:
     def _physical_record(
         self, correlation: RecordCorrelation, schema: Schema
     ) -> PhysicalRecord | None:
-        key = correlation.record.to_key()
-        for record in self._physical.records_for(key.database, key.table):
-            if self._key_of(record, schema) == key:
-                if correlation.physical is not None and (
-                    record.is_deleted != correlation.physical.is_deleted
-                ):
-                    continue
-                return record
-        return None
+        return self._physical_index.selected(correlation)
 
     @staticmethod
     def _key_of(record: PhysicalRecord, schema: Schema) -> RecordKey | None:
@@ -595,7 +583,7 @@ class StateReconstructionService:
     ) -> list[BinlogEvent]:
         found = [events[ref] for ref in correlation.log_event_refs if ref in events]
         return sorted(
-            found, key=lambda e: event_sort_key(sequence, e.source_file, e.log_position)
+            found, key=lambda e: (*event_sort_key(sequence, e.source_file, e.log_position), e.row_index)
         )
 
     @staticmethod

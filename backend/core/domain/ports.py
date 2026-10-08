@@ -24,6 +24,7 @@ from core.domain.models.canonical import (
     ProvenanceReference,
     Schema,
     TransactionMarker,
+    TableCreation,
 )
 
 #: The data types the pipeline has actually been validated against. Anything
@@ -113,4 +114,12 @@ class EvidenceContext(Protocol):
         "we were not given the file" would look identical to "the row is not
         there" - and the second one is a far stronger claim.
         """
+        ...
+
+    def tables_with_complete_extraction(self) -> frozenset[tuple[str, str]]:
+        """Tables whose supplied tablespace was successfully extracted."""
+        ...
+
+    def table_creations(self) -> Sequence[TableCreation]:
+        """Observed CREATE TABLE statements with binlog/tool provenance."""
         ...

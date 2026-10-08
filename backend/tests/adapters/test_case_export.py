@@ -94,7 +94,7 @@ def read_csv(path):
 def test_the_json_export_holds_every_table_for_this_case_only(stores) -> None:
     tables = case_export(connection_of(stores), "case-1")["tables"]
 
-    assert len(tables) == 15
+    assert len(tables) == 17
     assert [r["record_id"].split(":")[0] for r in tables["physical_records"]] == ["ev-ibd", "ev-ibd"]
     assert {r["evidence_id"] for r in tables["evidence_files"]} == {"ev-ibd", "ev-bin"}
     assert len(tables["binlog_events"]) == 3

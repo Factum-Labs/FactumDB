@@ -1,0 +1,147 @@
+{
+  "subject": "01_marketplace_fraud",
+  "database": "harbor_market",
+  "title": "Harbor Market",
+  "seed": 20261008,
+  "mysql_version": "C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqld.exe  Ver 8.0.43 for Win64 on x86_64 (MySQL Community Server - GPL)",
+  "acquisition": "clean private-server shutdown, followed by listed acquisition mutations",
+  "acquired_at_utc": "2026-10-07T16:58:14.795029+00:00",
+  "binlog_format": "ROW",
+  "default_row_image": "FULL",
+  "page_size": 16384,
+  "baseline_rows": {
+    "customers": 2500,
+    "orders": 2500,
+    "order_lines": 5000,
+    "payments": 5000,
+    "staff": 500,
+    "access_notes": 500,
+    "documents": 300
+  },
+  "source_live_rows": {
+    "customers": 2500,
+    "orders": 2501,
+    "order_lines": 5000,
+    "payments": 4970,
+    "staff": 500,
+    "access_notes": 500,
+    "documents": 300
+  },
+  "acquisition_mutations": [],
+  "files": [
+    {
+      "path": "ibd/access_notes.ibd",
+      "bytes": 147456,
+      "sha256": "4fd3b1575e84ee874b9e89537a8a75b4af71bf16d4b0fecb224cd2c1f1f2b92e"
+    },
+    {
+      "path": "ibd/customers.ibd",
+      "bytes": 327680,
+      "sha256": "934ac466931508df387855ecd7142e8914c7527d5064759dcc5ac286d452b18c"
+    },
+    {
+      "path": "ibd/documents.ibd",
+      "bytes": 163840,
+      "sha256": "44ae3c609d37fa6f25f654040fccebadba0f7cf2a74f0c61c5303ee3500a02b6"
+    },
+    {
+      "path": "ibd/order_lines.ibd",
+      "bytes": 376832,
+      "sha256": "052abe57aee0172362a4e449f09b91f22ffb79d334b9a2b93f626c65d905fbbc"
+    },
+    {
+      "path": "ibd/orders.ibd",
+      "bytes": 458752,
+      "sha256": "b43af3ba4446df86029d9d6138ec6b1fee344030a74478ca018b1419c15e8178"
+    },
+    {
+      "path": "ibd/payments.ibd",
+      "bytes": 491520,
+      "sha256": "c8330e009253a5bdbd49ab401461a14c14b5f049fe99ca7ba330654f6d9665fd"
+    },
+    {
+      "path": "ibd/staff.ibd",
+      "bytes": 147456,
+      "sha256": "39d2ff80aaddd30290d209f7444db7996c73c30e2b1e68d05bb52b2bfaca90c8"
+    },
+    {
+      "path": "binlog/mysql-bin.000001",
+      "bytes": 804840,
+      "sha256": "8a365aece85a694dae5323cfb01b0bea8d01917c92bb6e51f2ab6050e0eb3236"
+    },
+    {
+      "path": "binlog/mysql-bin.000002",
+      "bytes": 24408,
+      "sha256": "6fb942f8fc5e0f0d6b9511179e102c6e36c3f4a81dc09793cc347d21324acf10"
+    },
+    {
+      "path": "binlog/mysql-bin.000003",
+      "bytes": 682,
+      "sha256": "446ec60f83f48926de4ccd9b419c5de7bfff1223bd3457721b9f0030931c3e11"
+    },
+    {
+      "path": "binlog/mysql-bin.index",
+      "bytes": 354,
+      "sha256": "0178408c15d47a7c647b4eb52cec8836180cd2d48ab71e04992576d4c772c620"
+    }
+  ],
+  "utility_validation": {
+    "ibd": {
+      "access_notes.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "customers.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "documents.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "order_lines.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "orders.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "payments.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "staff.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      }
+    },
+    "binlog": {
+      "mysql-bin.000001": {
+        "checksum_valid": true,
+        "event_count": 416,
+        "row_images": 16300,
+        "diagnostic": ""
+      },
+      "mysql-bin.000002": {
+        "checksum_valid": true,
+        "event_count": 50,
+        "row_images": 171,
+        "diagnostic": ""
+      },
+      "mysql-bin.000003": {
+        "checksum_valid": true,
+        "event_count": 8,
+        "row_images": 1,
+        "diagnostic": ""
+      }
+    }
+  }
+}

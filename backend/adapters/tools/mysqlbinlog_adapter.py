@@ -43,7 +43,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
 from adapters.tools.versions import read_version
-from core.domain.models.canonical import BinlogEvent, TransactionMarker
+from core.domain.models.canonical import BinlogEvent, TransactionMarker, TableCreation
 from core.domain.models.values import UndecodableValue
 from core.domain.models.canonical import AnalysisWarning
 
@@ -77,7 +77,7 @@ class MysqlBinlogAdapter:
     def version(self):
         return read_version([self.mysqlbinlog_path])
 
-    def decode(self, binlog_path, schema_lookup, *, run=None):
+    def decode(self, binlog_path, schema_lookup, *, run=None, include_creations=False):
         """Run mysqlbinlog on one file and parse what it prints.
 
         schema_lookup(database, table) should return a Schema or None.
@@ -95,11 +95,12 @@ class MysqlBinlogAdapter:
             )
         source_file = binlog_path.split("/")[-1]
         return self.parse(
-            result.stdout.decode(errors="replace"), source_file, schema_lookup
+            result.stdout.decode(errors="replace"), source_file, schema_lookup,
+            include_creations=include_creations,
         )
 
     @staticmethod
-    def parse(text, source_file, schema_lookup):
+    def parse(text, source_file, schema_lookup, *, include_creations=False):
         """Walk the decoded text and build events and markers.
 
         Kept separate from decode() so it can be run against saved output.
@@ -110,6 +111,8 @@ class MysqlBinlogAdapter:
             state.feed(line)
 
         state.finish()
+        if include_creations:
+            return state.events, state.markers, state.warnings, state.table_creations
         return state.events, state.markers, state.warnings
 
 
@@ -123,6 +126,8 @@ class _ParserState:
         self.events = []
         self.markers = []
         self.warnings = []
+        self.table_creations = []
+        self.default_database = None
 
         # Read from the log rather than assumed. Stays None until the first
         # commit timestamp comment, and then times are converted with it.
@@ -134,6 +139,7 @@ class _ParserState:
         self.timestamp = None      # datetime of the current event
         self.raw_timestamp = ""
         self.log_position = 0
+        self.row_indices = {}
 
         # The row event currently being read.
         self.operation = None
@@ -159,6 +165,22 @@ class _ParserState:
 
         # Any non-### line ends whatever row image was being read.
         self._flush_row()
+
+        use = re.match(r"use\s+`([^`]+)`", line, re.IGNORECASE)
+        if use:
+            self.default_database = use.group(1)
+        # IF NOT EXISTS does not prove that creation happened. Temporary tables
+        # do not establish the history of an acquired persistent tablespace.
+        creation = re.match(
+            r"CREATE\s+TABLE\s+(?!IF\b)(?:`([^`]+)`\.)?`?([\w]+)`?\s*\(",
+            line, re.IGNORECASE,
+        )
+        if creation:
+            database = creation.group(1) or self.default_database
+            if database:
+                self.table_creations.append(TableCreation(
+                    database, creation.group(2), self.source_file, self.log_position,
+                ))
 
         header = HEADER.match(line)
         if header:
@@ -193,8 +215,10 @@ class _ParserState:
         xid = XID.search(line)
         if xid:
             self._close_transaction("committed", int(xid.group(1)))
-        elif line.startswith("ROLLBACK"):
+        elif line.startswith("ROLLBACK") and "added by mysqlbinlog" not in line:
             self._close_transaction("rolled_back", None)
+        elif line.strip().startswith("COMMIT"):
+            self._close_transaction("committed", None)
 
     def finish(self):
         """Called at the end of the file."""
@@ -243,6 +267,8 @@ class _ParserState:
             self._reset_row()
             return
 
+        row_index = self.row_indices.get(self.log_position, 0)
+        self.row_indices[self.log_position] = row_index + 1
         schema = self.schema_lookup(self.database, self.table)
         if schema is None:
             self.warnings.append(AnalysisWarning(
@@ -273,6 +299,7 @@ class _ParserState:
             source_file=self.source_file,
             gtid=self.gtid,
             thread_id=self.thread_id,
+            row_index=row_index,
         )
         self.events.append(event)
         # A multi-row event reaches here once per row, all at one position.

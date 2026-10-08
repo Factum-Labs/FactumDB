@@ -75,7 +75,7 @@ def test_a_multi_row_event_is_listed_once(transactions, binlog, stored, connecti
     """Two rows at one position are both linked, but the position comes back once."""
     evidence_id, run_id = stored
     binlog.save_many(
-        [an_event(101, position=1600), an_event(103, position=1600)], evidence_id, run_id
+        [an_event(101, position=1600), an_event(103, position=1600, row_index=1)], evidence_id, run_id
     )
     transactions.save_many([a_marker(1400, (1600,))], evidence_id, run_id)
 

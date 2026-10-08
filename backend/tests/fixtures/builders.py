@@ -7,6 +7,7 @@ defaults here cover everything a scenario is not specifically about.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from core.domain.models.canonical import (
@@ -112,7 +113,7 @@ def ev(
         source_file=source_file,
         gtid=gtid,
         thread_id=thread_id,
-        provenance=provenance(source_file, log_position) if with_provenance else None,
+        provenance=replace(provenance(source_file, log_position), row_index=0) if with_provenance else None,
     )
 
 

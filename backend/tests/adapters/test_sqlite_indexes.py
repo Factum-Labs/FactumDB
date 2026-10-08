@@ -61,8 +61,9 @@ def test_every_table_is_read_through_an_index(two_cases) -> None:
             continue
         for step in connection.execute("EXPLAIN QUERY PLAN " + sql):
             detail = step[3]
-            # "SCAN (subquery-1)" reads a result already built, not a table.
-            if detail.startswith("SCAN") and "(subquery" not in detail:
+            # Subqueries and SQLite schema metadata do not scan case evidence.
+            if (detail.startswith("SCAN") and "(subquery" not in detail
+                    and not detail.startswith("SCAN sqlite_master")):
                 scans.append(f"{detail}  <-  {' '.join(sql.split())}")
 
     assert scans == []

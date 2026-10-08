@@ -35,9 +35,8 @@ EventType = Literal["INSERT", "UPDATE", "DELETE"]
 MarkerStatus = Literal["committed", "rolled_back", "incomplete"]
 IntegrityStatus = Literal["valid", "damaged", "unknown"]
 
-#: The only globally unique handle for a binlog event. `log_position` restarts
-#: at 4 in every file, so it is never unique on its own.
-EventRef = tuple[str, int]
+#: A row-specific handle. Positions restart per file and may contain many rows.
+EventRef = tuple[str, int, int]
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +52,7 @@ class ProvenanceReference:
     tool_run_id: str
     source_file: str
     log_position: int | None = None
+    row_index: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,14 +163,25 @@ class BinlogEvent:
     gtid: str | None = None
     thread_id: int | None = None
     provenance: ProvenanceReference | None = None
+    row_index: int = 0
 
     @property
     def ref(self) -> EventRef:
-        return (self.source_file, self.log_position)
+        return (self.source_file, self.log_position, self.row_index)
 
     @property
     def qualified_name(self) -> str:
         return f"{self.database}.{self.table}"
+
+
+@dataclass(frozen=True, slots=True)
+class TableCreation:
+    """A CREATE TABLE observed in a supplied binlog, not inferred from SDI."""
+    database: str
+    table: str
+    source_file: str
+    log_position: int
+    provenance: ProvenanceReference | None = None
 
 
 @dataclass(frozen=True, slots=True)

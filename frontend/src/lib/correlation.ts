@@ -38,6 +38,7 @@ export type RecordNodeKind =
   | 'conflicting' // flagged, most-severe = Conflicting
   | 'unresolved' // flagged, most-severe = Unresolved
   | 'agreeing' // not flagged, but has reconciliation results (Exact / Strong / Partial)
+  | 'unsupported' // compared fields are all outside the validated scope
   | 'context' // not flagged and never compared — included only because a group transaction touched it
 
 export interface GroupRecord {
@@ -79,14 +80,26 @@ function cmpStr(a: string, b: string): number {
 
 /** Numeric when both sides are integers, lexical otherwise. Never locale-dependent. */
 function cmpKey(a: string, b: string): number {
-  const na = Number(a)
-  const nb = Number(b)
-  if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na < nb ? -1 : 1
+  const aa = a.split('|')
+  const bb = b.split('|')
+  if (aa.length > 1 || bb.length > 1) {
+    for (let i = 0; i < Math.min(aa.length, bb.length); i++) {
+      const order = cmpKey(aa[i], bb[i])
+      if (order) return order
+    }
+    return aa.length - bb.length
+  }
+  if (/^-?\d+$/.test(a) && /^-?\d+$/.test(b)) {
+    const na = BigInt(a)
+    const nb = BigInt(b)
+    return na < nb ? -1 : na > nb ? 1 : cmpStr(a, b)
+  }
   return cmpStr(a, b)
 }
 
 /** Canonical transaction order: binlog file, then position within that file. */
 export function cmpTransaction(a: Transaction, b: Transaction): number {
+  if (a.order !== undefined && b.order !== undefined) return a.order - b.order || cmpStr(a.id, b.id)
   return cmpStr(a.binlogFile, b.binlogFile) || a.binlogPos - b.binlogPos || cmpStr(a.id, b.id)
 }
 
@@ -116,7 +129,7 @@ function classify(fields: { field: string; result: ReconResult }[]): {
     ? severity === 'Conflicting'
       ? 'conflicting'
       : 'unresolved'
-    : 'agreeing'
+    : severity === 'Unsupported' ? 'unsupported' : 'agreeing'
   return { flagged, severity, kind, triggers }
 }
 

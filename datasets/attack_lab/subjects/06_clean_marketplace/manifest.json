@@ -1,0 +1,123 @@
+{
+  "subject": "06_clean_marketplace",
+  "database": "willow_market",
+  "title": "Willow Market (clean control)",
+  "seed": 20261013,
+  "mysql_version": "C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqld.exe  Ver 8.0.43 for Win64 on x86_64 (MySQL Community Server - GPL)",
+  "acquisition": "clean private-server shutdown, followed by listed acquisition mutations",
+  "acquired_at_utc": "2026-10-07T16:58:37.075664+00:00",
+  "binlog_format": "ROW",
+  "default_row_image": "FULL",
+  "page_size": 16384,
+  "baseline_rows": {
+    "customers": 2500,
+    "orders": 2500,
+    "order_lines": 5000,
+    "payments": 5000,
+    "staff": 500
+  },
+  "source_live_rows": {
+    "customers": 2500,
+    "orders": 2500,
+    "order_lines": 5000,
+    "payments": 5000,
+    "staff": 500
+  },
+  "acquisition_mutations": [],
+  "files": [
+    {
+      "path": "ibd/customers.ibd",
+      "bytes": 327680,
+      "sha256": "001eee33066fd0b4f562847661a33c4916cbc514baff029f535b88320bfcd988"
+    },
+    {
+      "path": "ibd/order_lines.ibd",
+      "bytes": 360448,
+      "sha256": "8aad87e57f9a52bbe2f8c81b8f64305033123b432f7e6226561a68dd12ca78d7"
+    },
+    {
+      "path": "ibd/orders.ibd",
+      "bytes": 442368,
+      "sha256": "d8f4f31a773de72c3d2ae5d05a9f18eebde34d9b9738f51840a474a32c9ccba6"
+    },
+    {
+      "path": "ibd/payments.ibd",
+      "bytes": 475136,
+      "sha256": "b8af052952c75caf6ad9386ac00b97a4b802f612e21c8664d5c1959c638f9c39"
+    },
+    {
+      "path": "ibd/staff.ibd",
+      "bytes": 147456,
+      "sha256": "08d2cfad101ca15dbfbd9baecf15f87bf57dc243ec32a7221ef093cff33b336e"
+    },
+    {
+      "path": "binlog/mysql-bin.000001",
+      "bytes": 744275,
+      "sha256": "d0a71ac418c0fc1fac29c2185ed8b1f5810e17c17410f010ced9fe15b4b29025"
+    },
+    {
+      "path": "binlog/mysql-bin.000002",
+      "bytes": 9516,
+      "sha256": "9a9e8f7a1bc14dfd4d82c5ce0a885a6d147bce49f5f3b57577934e5fd4755c16"
+    },
+    {
+      "path": "binlog/mysql-bin.000003",
+      "bytes": 180,
+      "sha256": "e786b88a93637570bec34f38a228e0daac16fb0580c9380097836e2201ec87ae"
+    },
+    {
+      "path": "binlog/mysql-bin.index",
+      "bytes": 354,
+      "sha256": "0178408c15d47a7c647b4eb52cec8836180cd2d48ab71e04992576d4c772c620"
+    }
+  ],
+  "utility_validation": {
+    "ibd": {
+      "customers.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "order_lines.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "orders.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "payments.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "staff.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      }
+    },
+    "binlog": {
+      "mysql-bin.000001": {
+        "checksum_valid": true,
+        "event_count": 387,
+        "row_images": 15500,
+        "diagnostic": ""
+      },
+      "mysql-bin.000002": {
+        "checksum_valid": true,
+        "event_count": 9,
+        "row_images": 50,
+        "diagnostic": ""
+      },
+      "mysql-bin.000003": {
+        "checksum_valid": true,
+        "event_count": 3,
+        "row_images": 0,
+        "diagnostic": ""
+      }
+    }
+  }
+}

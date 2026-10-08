@@ -57,7 +57,7 @@ def to_jsonable(obj: Any) -> Any:
         return {UNDECODABLE_MARKER: f"binary float not serialized: {obj!r}"}
 
     if is_dataclass(obj) and not isinstance(obj, type):
-        return {f.name: to_jsonable(getattr(obj, f.name)) for f in fields(obj)}
+        return {f.name: to_jsonable(getattr(obj, f.name)) for f in fields(obj) if f.init}
 
     if isinstance(obj, Mapping):
         return {str(k): to_jsonable(v) for k, v in obj.items()}

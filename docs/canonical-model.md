@@ -1,5 +1,23 @@
 # FactumDB Canonical Model
 
+Engine revision 2 uses analysis/export format version 2. A decoded row change
+has a stable zero-based `row_index`, assigned by the decoder within its binlog
+event. Its reference is `(source_file, log_position, row_index)`; transaction
+markers still list event positions and grouping expands each position into all
+of its rows in row-index order. Provenance carries the row index when it refers
+to a row image.
+
+Decoded evidence also contains observed `TableCreation` records: database,
+table, source file, log position and tool provenance. These come from explicit
+CREATE TABLE statements in supplied binlogs, not from tablespace schema metadata.
+Conditional CREATE TABLE statements and temporary tables do not prove creation
+of the acquired persistent table. A complete log inventory alone does not prove
+coverage of a table's lifetime.
+
+SQL declarations retain their precision, scale and ENUM members. Capability
+checks normalize only the base type, so `VARCHAR(120)` and `DECIMAL(12,2)` remain
+supported without extending comparison support to JSON, binary or float types.
+
 ## Why we need this
 
 We use four different tools to read the evidence and every one of them gives output in a different format. You can't compare them directly - it is like getting four receipts in four different currencies, you have to convert everything into one currency before you can add anything up. The canonical model is that one currency. Each adapter converts its tool's output into these objects, and everything after that point (the domain services and the UI) only works with these objects, never with raw tool output. This document is therefore the contract between the layers: the adapters produce these shapes, and the domain services can depend on them. The models below are the ones listed in `Architecture.md` section 5.9.

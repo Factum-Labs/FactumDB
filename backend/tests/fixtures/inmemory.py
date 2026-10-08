@@ -73,12 +73,16 @@ class InMemoryEvidenceContext:
         provenance: dict[EventRef, ProvenanceReference] | None = None,
         supported_types: frozenset[str] = DEFAULT_SUPPORTED_TYPES,
         physical_tables: frozenset[tuple[str, str]] = frozenset(),
+        extracted_tables: frozenset[tuple[str, str]] = frozenset(),
+        table_creations: tuple = (),
     ) -> None:
         self._inventory = inventory
         self._integrity = integrity or {}
         self._provenance = provenance or {}
         self._supported_types = supported_types
         self._physical_tables = physical_tables
+        self._extracted_tables = extracted_tables
+        self._table_creations = table_creations
 
     def inventory(self) -> BinlogInventory | None:
         return self._inventory
@@ -94,3 +98,9 @@ class InMemoryEvidenceContext:
 
     def tables_with_physical_evidence(self) -> frozenset[tuple[str, str]]:
         return self._physical_tables
+
+    def tables_with_complete_extraction(self):
+        return self._extracted_tables
+
+    def table_creations(self):
+        return self._table_creations

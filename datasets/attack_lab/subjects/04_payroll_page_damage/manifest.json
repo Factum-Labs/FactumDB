@@ -1,0 +1,155 @@
+{
+  "subject": "04_payroll_page_damage",
+  "database": "summit_payroll",
+  "title": "Summit Payroll",
+  "seed": 20261011,
+  "mysql_version": "C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqld.exe  Ver 8.0.43 for Win64 on x86_64 (MySQL Community Server - GPL)",
+  "acquisition": "clean private-server shutdown, followed by listed acquisition mutations",
+  "acquired_at_utc": "2026-10-07T16:58:30.138021+00:00",
+  "binlog_format": "ROW",
+  "default_row_image": "FULL",
+  "page_size": 16384,
+  "baseline_rows": {
+    "workers": 2500,
+    "payslips": 2500,
+    "pay_components": 5000,
+    "disbursements": 5000,
+    "administrators": 500,
+    "access_notes": 500,
+    "documents": 300
+  },
+  "source_live_rows": {
+    "workers": 2500,
+    "payslips": 2501,
+    "pay_components": 5000,
+    "disbursements": 4970,
+    "administrators": 500,
+    "access_notes": 500,
+    "documents": 300
+  },
+  "acquisition_mutations": [
+    {
+      "type": "page_checksum_damage",
+      "file": "disbursements.ibd",
+      "page": 4,
+      "byte_offset": 65536,
+      "original_sha256": "9d9f98fc50227529fc0ef49eb792375b5f6faed138fcdf79587f4c62807adcca"
+    }
+  ],
+  "files": [
+    {
+      "path": "ibd/access_notes.ibd",
+      "bytes": 147456,
+      "sha256": "dff6868b02c93c6ae9b0430d33d13726e762ba40499c7b5de0bea4b0b8e9589b"
+    },
+    {
+      "path": "ibd/administrators.ibd",
+      "bytes": 147456,
+      "sha256": "61207218b0747513d8ef3e813ce009db9d58f10ae4db2552d4c49e567d9d8603"
+    },
+    {
+      "path": "ibd/disbursements.ibd",
+      "bytes": 491520,
+      "sha256": "de501e6631f31d45659248cf3cf6920843ae31fbe759d2ceef83b74fe81e1ef6"
+    },
+    {
+      "path": "ibd/documents.ibd",
+      "bytes": 163840,
+      "sha256": "7c6b082914386d83eb1c1254a76cff96eac1fbfd5c66185ae74c53ff745abac2"
+    },
+    {
+      "path": "ibd/pay_components.ibd",
+      "bytes": 393216,
+      "sha256": "7e6da282088a0a873a98d7c73d8deb3869ddb889d416dca0adfc8095d16cc623"
+    },
+    {
+      "path": "ibd/payslips.ibd",
+      "bytes": 458752,
+      "sha256": "c0234043e937ea0e0d5577d822443a22e6ac0169b914067a4b916afb4e85895a"
+    },
+    {
+      "path": "ibd/workers.ibd",
+      "bytes": 327680,
+      "sha256": "fac203b8bb6e078d8db751ce9e6625f089f09fe76928336fe9c4af7f9109a2e4"
+    },
+    {
+      "path": "binlog/mysql-bin.000001",
+      "bytes": 820023,
+      "sha256": "1c8f9458bd186fdf9a084c2d6b757c18ef20bab0f4191ab951e0ac60fada5381"
+    },
+    {
+      "path": "binlog/mysql-bin.000002",
+      "bytes": 24437,
+      "sha256": "520843e1ea7e33b92a27c4f9bf88f16fbc1cc6934752a88c39882d2cedeb7fbd"
+    },
+    {
+      "path": "binlog/mysql-bin.000003",
+      "bytes": 686,
+      "sha256": "3469c8ab05836e416ba42a10d8baef26fb0ad6615c92bd10356f8eea7b3c1b58"
+    },
+    {
+      "path": "binlog/mysql-bin.index",
+      "bytes": 354,
+      "sha256": "0178408c15d47a7c647b4eb52cec8836180cd2d48ab71e04992576d4c772c620"
+    }
+  ],
+  "utility_validation": {
+    "ibd": {
+      "access_notes.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "administrators.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "disbursements.ibd": {
+        "checksum_valid": false,
+        "sdi_readable": true,
+        "diagnostic": "Fail: page 4 invalid\r\nExceeded the maximum allowed checksum mismatch count::0"
+      },
+      "documents.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "pay_components.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "payslips.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "workers.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      }
+    },
+    "binlog": {
+      "mysql-bin.000001": {
+        "checksum_valid": true,
+        "event_count": 436,
+        "row_images": 16300,
+        "diagnostic": ""
+      },
+      "mysql-bin.000002": {
+        "checksum_valid": true,
+        "event_count": 50,
+        "row_images": 171,
+        "diagnostic": ""
+      },
+      "mysql-bin.000003": {
+        "checksum_valid": true,
+        "event_count": 8,
+        "row_images": 1,
+        "diagnostic": ""
+      }
+    }
+  }
+}

@@ -72,7 +72,7 @@ def test_each_event_points_to_the_run_that_decoded_it(inputs) -> None:
     events = inputs.events.events()
 
     assert [e.provenance for e in events] == [
-        ProvenanceReference("ev-bin", "mysqlbinlog", "bin", FILE, e.log_position)
+        ProvenanceReference("ev-bin", "mysqlbinlog", "bin", FILE, e.log_position, e.row_index)
         for e in events
     ]
 

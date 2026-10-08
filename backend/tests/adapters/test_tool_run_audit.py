@@ -147,7 +147,7 @@ def test_a_multi_row_update_is_decoded_saved_and_traced(run, chain) -> None:
     ).execute(EvidenceStageRequest("case-1", "ev-bin"))
 
     links = chain.db.execute("SELECT COUNT(*) FROM transaction_events").fetchone()[0]
-    provenance = chain.stores.tool_runs.provenance_for(("mysql-bin.000024", 1600))
+    provenance = chain.stores.tool_runs.provenance_for(("mysql-bin.000024", 1600, 0))
 
     assert links == 2
     assert provenance.tool_name == "mysqlbinlog"

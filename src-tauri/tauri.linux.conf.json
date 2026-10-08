@@ -1,0 +1,14 @@
+{
+  "bundle": {
+    "targets": ["deb"],
+    "resources": {
+      "resources/runtime/linux/": "runtime/linux/",
+      "resources/sources/": "sources/"
+    },
+    "linux": {
+      "deb": {
+        "depends": ["python3 (>= 3.11)", "polkitd", "pkexec", "libaio1t64", "libnuma1", "libstdc++6"]
+      }
+    }
+  }
+}

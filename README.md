@@ -6,6 +6,16 @@ The main goal of this README is to help team members understand how the project 
 
 ## Architecture Overview
 
+The desktop frontend is connected to the Python backend. See
+[Desktop setup and workflow](docs/desktop-runtime.md) for prerequisites, tool
+configuration, case storage, supported exports, and integration checks.
+See [Local examiner accounts](docs/authentication.md) for sign-up, device
+verification, Windows/Linux setup and the shared authentication architecture.
+Build the Windows installer with `npm run bundle:windows`; it includes Python,
+the MySQL utilities and ibd2sql. See [Windows bundling](docs/windows-bundle.md).
+Build the Ubuntu 24.04 x86-64 desktop installer with `npm run bundle:linux`
+from Linux or WSL. See [Linux bundling and headless checks](docs/linux-bundle.md).
+
 FactumDB separates user interaction, workflow coordination, forensic domain logic, and technology-specific integrations into clear layers.
 
 ![FactumDB high-level architecture](images/High%20level%202.png)

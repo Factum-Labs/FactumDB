@@ -31,6 +31,9 @@ class RegisterEvidenceUseCase:
         hasher: FileHasher,
         ids: IdGenerator,
         clock: Clock,
+        *,
+        actor_id: str | None = None,
+        actor_username: str | None = None,
     ) -> None:
         self._cases = cases
         self._evidence = evidence
@@ -38,6 +41,7 @@ class RegisterEvidenceUseCase:
         self._hasher = hasher
         self._ids = ids
         self._clock = clock
+        self._actor_id, self._actor_username = actor_id, actor_username
 
     def execute(self, request: RegisterEvidenceRequest) -> RegisterEvidenceResponse:
         if self._cases.get(request.case_id) is None:
@@ -61,6 +65,8 @@ class RegisterEvidenceUseCase:
             size_bytes=metadata.size_bytes,
             source_sha256=digest,
             registered_at=self._clock.now(),
+            actor_id=self._actor_id,
+            actor_username=self._actor_username,
         )
         self._evidence.save(registered)
         return RegisterEvidenceResponse(registered)

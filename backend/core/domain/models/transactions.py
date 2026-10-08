@@ -212,9 +212,17 @@ class GroupingResult:
     def event_count(self) -> int:
         return sum(len(t.events) for t in self.transactions) + len(self.ungrouped_events)
 
+    _transaction_index: dict[EventRef, TransactionGroup] = field(default_factory=dict, init=False, repr=False, compare=False)
+
+    _event_index: dict[EventRef, BinlogEvent] = field(default_factory=dict, init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        self._event_index.update({g.ref: g.event for t in self.transactions for g in t.events})
+        self._event_index.update({u.ref: u.event for u in self.ungrouped_events})
+        self._transaction_index.update({g.ref: t for t in self.transactions for g in t.events})
+
+    def event_for(self, ref: EventRef) -> BinlogEvent | None:
+        return self._event_index.get(ref)
+
     def transaction_for(self, ref: EventRef) -> TransactionGroup | None:
-        for transaction in self.transactions:
-            for grouped in transaction.events:
-                if grouped.ref == ref:
-                    return transaction
-        return None
+        return self._transaction_index.get(ref)

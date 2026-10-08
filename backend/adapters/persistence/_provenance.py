@@ -14,7 +14,7 @@ second time, so it can never disagree with the row's own columns.
 from core.domain.models.canonical import ProvenanceReference
 
 
-def provenance_from(row, source_file, log_position=None):
+def provenance_from(row, source_file, log_position=None, row_index=None):
     """The reference for one stored row.
 
     The row must come with the tool's name from a join on tool_runs. The
@@ -29,4 +29,5 @@ def provenance_from(row, source_file, log_position=None):
         tool_run_id=row["tool_run_id"],
         source_file=source_file,
         log_position=log_position,
+        row_index=row_index,
     )

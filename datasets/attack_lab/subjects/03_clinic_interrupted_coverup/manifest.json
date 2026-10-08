@@ -1,0 +1,155 @@
+{
+  "subject": "03_clinic_interrupted_coverup",
+  "database": "maple_clinic",
+  "title": "Maple Clinic",
+  "seed": 20261010,
+  "mysql_version": "C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqld.exe  Ver 8.0.43 for Win64 on x86_64 (MySQL Community Server - GPL)",
+  "acquisition": "clean private-server shutdown, followed by listed acquisition mutations",
+  "acquired_at_utc": "2026-10-07T16:58:26.489106+00:00",
+  "binlog_format": "ROW",
+  "default_row_image": "FULL",
+  "page_size": 16384,
+  "baseline_rows": {
+    "patients": 2500,
+    "visits": 2500,
+    "visit_services": 5000,
+    "billing": 5000,
+    "operators": 500,
+    "access_notes": 500,
+    "documents": 300
+  },
+  "source_live_rows": {
+    "patients": 2500,
+    "visits": 2501,
+    "visit_services": 5000,
+    "billing": 4970,
+    "operators": 500,
+    "access_notes": 500,
+    "documents": 300
+  },
+  "acquisition_mutations": [
+    {
+      "type": "removed_final_commit_and_tail",
+      "file": "mysql-bin.000003",
+      "cut_offset": 1942,
+      "original_size": 1996,
+      "original_sha256": "ee1ec9254845097315187671bd24b442ee97fff8518cb051a468f88233154e5e"
+    }
+  ],
+  "files": [
+    {
+      "path": "ibd/access_notes.ibd",
+      "bytes": 147456,
+      "sha256": "b3b3fc7ec42ff16bc99b2c19cdf6c1dc7fa44ef001d1fadbaaec2a4ef8c1573e"
+    },
+    {
+      "path": "ibd/billing.ibd",
+      "bytes": 491520,
+      "sha256": "ae61c2283ffbf4516928f5922f55243d3f2419e0b03f3c4cc0baaf424872b003"
+    },
+    {
+      "path": "ibd/documents.ibd",
+      "bytes": 163840,
+      "sha256": "d3b29b5f446d65bb3661b4b352ac88ff076cf97694096fb48888bbf496cbbb1f"
+    },
+    {
+      "path": "ibd/operators.ibd",
+      "bytes": 147456,
+      "sha256": "2b995a1c22c12a3bf9a1b1c686de39f3f2d16c6b78a2b90cca7341498d65d040"
+    },
+    {
+      "path": "ibd/patients.ibd",
+      "bytes": 327680,
+      "sha256": "bcf18805548a85cb46d92dbb4bceaad6bf2126328d225f6184087442dc98df18"
+    },
+    {
+      "path": "ibd/visit_services.ibd",
+      "bytes": 393216,
+      "sha256": "f22198555e2cbaae0496e372320b14cd1b044fce0873aeb444b9a4dc97a539e9"
+    },
+    {
+      "path": "ibd/visits.ibd",
+      "bytes": 458752,
+      "sha256": "a0f93979d2f02b644679a3888e878027cac26b3d93ca16a64e5b98f7082d70fe"
+    },
+    {
+      "path": "binlog/mysql-bin.000001",
+      "bytes": 813678,
+      "sha256": "8674e974d615bfc9aacdec0e54a945a9811228c23bb873b913ef0cfb749ded7e"
+    },
+    {
+      "path": "binlog/mysql-bin.000002",
+      "bytes": 24369,
+      "sha256": "369a922e03b6e2adc0ab48759e111a2d06e2ef3157f681eba08a243ed0d32da9"
+    },
+    {
+      "path": "binlog/mysql-bin.000003",
+      "bytes": 1942,
+      "sha256": "77d0be93be8dc8461e9cb71363497566aa13470f730539c06755e9ebe0bbbe40"
+    },
+    {
+      "path": "binlog/mysql-bin.index",
+      "bytes": 354,
+      "sha256": "0178408c15d47a7c647b4eb52cec8836180cd2d48ab71e04992576d4c772c620"
+    }
+  ],
+  "utility_validation": {
+    "ibd": {
+      "access_notes.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "billing.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "documents.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "operators.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "patients.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "visit_services.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "visits.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      }
+    },
+    "binlog": {
+      "mysql-bin.000001": {
+        "checksum_valid": true,
+        "event_count": 416,
+        "row_images": 16300,
+        "diagnostic": ""
+      },
+      "mysql-bin.000002": {
+        "checksum_valid": true,
+        "event_count": 50,
+        "row_images": 171,
+        "diagnostic": ""
+      },
+      "mysql-bin.000003": {
+        "checksum_valid": true,
+        "event_count": 13,
+        "row_images": 7,
+        "diagnostic": ""
+      }
+    }
+  }
+}

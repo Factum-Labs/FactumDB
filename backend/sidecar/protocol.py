@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass, is_dataclass
+from contextlib import nullcontext
+from dataclasses import asdict, dataclass, fields, is_dataclass, replace
 from typing import TextIO
-
 
 JsonObject = dict[str, object]
 CommandHandler = Callable[[Mapping[str, object]], object]
@@ -42,7 +42,9 @@ class SidecarResponse:
     error_message: str | None = None
 
     def to_json(self) -> str:
-        value = asdict(self)
+        # asdict deep-copies the complete result, even when it is already JSON
+        # data. A desktop projection can contain many thousands of rows.
+        value = {field.name: getattr(self, field.name) for field in fields(self)}
         return json.dumps(value, sort_keys=True, separators=(",", ":"), default=_json_default)
 
 
@@ -59,8 +61,9 @@ def _json_default(value: object) -> object:
 
 
 class CommandRouter:
-    def __init__(self) -> None:
+    def __init__(self, before_dispatch: Callable[[str], None] | None = None) -> None:
         self._handlers: dict[str, CommandHandler] = {}
+        self._before_dispatch = before_dispatch
 
     def register(self, command: str, handler: CommandHandler) -> None:
         name = command.strip()
@@ -80,7 +83,12 @@ class CommandRouter:
                 error_message=f"unknown command: {request.command}",
             )
         try:
-            return SidecarResponse(request.request_id, True, result=handler(request.payload))
+            if self._before_dispatch is not None:
+                self._before_dispatch(request.command)
+            result = handler(request.payload)
+            if isinstance(result, SidecarResponse):
+                return replace(result, request_id=request.request_id)
+            return SidecarResponse(request.request_id, True, result=result)
         except Exception as error:
             return SidecarResponse(
                 request.request_id,
@@ -90,7 +98,13 @@ class CommandRouter:
             )
 
 
-def serve(input_stream: TextIO, output_stream: TextIO, router: CommandRouter) -> None:
+def serve(
+    input_stream: TextIO,
+    output_stream: TextIO,
+    router: CommandRouter,
+    *,
+    native_verification=None,
+) -> None:
     """Serve newline-delimited requests until stdin closes."""
 
     for line in input_stream:
@@ -100,7 +114,11 @@ def serve(input_stream: TextIO, output_stream: TextIO, router: CommandRouter) ->
         try:
             request = SidecarRequest.from_json(line)
             request_id = request.request_id
-            response = router.dispatch(request)
+            scope = (
+                native_verification.request_scope(request) if native_verification else nullcontext()
+            )
+            with scope:
+                response = router.dispatch(request)
         except Exception as error:
             response = SidecarResponse(
                 request_id,

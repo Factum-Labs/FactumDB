@@ -40,6 +40,8 @@ export interface RecordRef {
 
 /** A transaction as produced by TransactionGroupingService. */
 export interface Transaction {
+  /** Backend replay order, when supplied by a real case. */
+  order?: number
   id: string
   status: TxStatus
   summary: string

@@ -8,7 +8,7 @@ the gap is reported instead.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Literal
 
@@ -142,12 +142,15 @@ class CorrelationResult:
     event_correlations: tuple[EventCorrelation, ...]
     unsupported_tables: tuple[UnsupportedTable, ...] = ()
     findings: tuple[Finding, ...] = ()
+    uncertain_tables: tuple[tuple[str, str], ...] = ()
+
+    _record_index: dict[str, RecordCorrelation] = field(default_factory=dict, init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        self._record_index.update({r.record.id: r for r in self.records})
 
     def record(self, record_id: str) -> RecordCorrelation | None:
-        for correlation in self.records:
-            if correlation.record.id == record_id:
-                return correlation
-        return None
+        return self._record_index.get(record_id)
 
 
 #: Which row image carries the identity, per event type. A DELETE's identity is

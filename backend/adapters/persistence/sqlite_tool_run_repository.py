@@ -38,7 +38,7 @@ _COLUMNS = """
     executable_path, executable_sha256, arguments_json, status,
     started_at, finished_at, exit_code,
     stdout_path, stdout_sha256, stdout_size_bytes,
-    stderr_path, stderr_sha256, stderr_size_bytes
+    stderr_path, stderr_sha256, stderr_size_bytes, actor_id, actor_username
 """
 
 
@@ -51,7 +51,7 @@ class SqliteToolRunRepository(ToolRunRepositoryPort):
     def save(self, run: ToolRun) -> None:
         self._connection.execute(
             f"INSERT OR REPLACE INTO tool_runs ({_COLUMNS}) "
-            "VALUES (" + ", ".join(["?"] * 18) + ")",
+            "VALUES (" + ", ".join(["?"] * 20) + ")",
             (
                 run.id,
                 run.case_id,
@@ -67,6 +67,8 @@ class SqliteToolRunRepository(ToolRunRepositoryPort):
                 run.exit_code,
                 *_output_columns(run.stdout),
                 *_output_columns(run.stderr),
+                run.actor_id,
+                run.actor_username,
             ),
         )
         self._connection.commit()
@@ -100,7 +102,7 @@ class SqliteToolRunRepository(ToolRunRepositoryPort):
         """Which tool run produced the event at this position.
 
         Part of the domain layer's EvidenceContext protocol. EventRef is
-        (source_file, log_position), and there is no direct key from that to a
+        (source_file, log_position, row_index), and there is no direct key from that to a
         tool run, so the lookup joins through binlog_events, which stores both
         the position and the run that produced it.
 
@@ -108,17 +110,17 @@ class SqliteToolRunRepository(ToolRunRepositoryPort):
         and "the event exists but no provenance was recorded". Either way
         there is nothing to show the examiner.
         """
-        source_file, log_position = ref
+        source_file, log_position, row_index = ref
         condition, args = in_case(case_id, "e.evidence_id")
         row = self._connection.execute(
             f"""
             SELECT t.tool_run_id, t.tool_name, t.evidence_id,
-                   e.source_file, e.log_position
+                   e.source_file, e.log_position, e.row_index
             FROM binlog_events e
             JOIN tool_runs t ON t.tool_run_id = e.tool_run_id
-            WHERE e.source_file = ? AND e.log_position = ? AND {condition}
+            WHERE e.source_file = ? AND e.log_position = ? AND e.row_index = ? AND {condition}
             """,
-            (source_file, log_position, *args),
+            (source_file, log_position, row_index, *args),
         ).fetchone()
 
         if row is None:
@@ -130,6 +132,7 @@ class SqliteToolRunRepository(ToolRunRepositoryPort):
             tool_run_id=row["tool_run_id"],
             source_file=row["source_file"],
             log_position=row["log_position"],
+            row_index=row["row_index"],
         )
 
 
@@ -169,4 +172,6 @@ def _row_to_tool_run(row) -> ToolRun:
         exit_code=row["exit_code"],
         stdout=_read_output(row, "stdout"),
         stderr=_read_output(row, "stderr"),
+        actor_id=row["actor_id"],
+        actor_username=row["actor_username"],
     )

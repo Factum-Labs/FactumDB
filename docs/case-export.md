@@ -15,8 +15,9 @@ write_csv(connection, case_id, "exports/FDB-2026-014-csv/")
 
 One file holding every table's rows for the case, under `tables`:
 
-`cases`, `evidence_files`, `tool_runs`, `integrity_results`, `schemas`, `schema_columns`, `physical_records`, `binlog_events`, `transactions`, `transaction_events`, `warnings`, `binlog_inventory`, `case_scopes`, `normalizations`, `analysis_results`.
+`cases`, `evidence_files`, `tool_runs`, `integrity_results`, `schemas`, `schema_columns`, `physical_records`, `binlog_events`, `transactions`, `transaction_events`, `warnings`, `binlog_inventory`, `case_scopes`, `normalizations`, `analysis_results`, `table_creations`, `physical_extractions`. Desktop cases also include `pipeline_runs` when that table exists. The `reports` history stays in the case database.
 
+- Format version 2 includes `engine_revision` and `analysis_format_version`. Binlog rows retain their `(source_file, log_position, row_index)` identity in JSON and CSV.
 - Columns stored as JSON in SQLite (`values_json`, `before_json`, ...) are written as JSON, without the `_json` suffix.
 - Column values keep the tags they are stored with, listed in the file's `value_tags`. `{"__decimal__": "4000.10"}` is the DECIMAL 4000.10, which a plain `4000.10` or `"4000.10"` could not say.
 - Every row keeps its `evidence_id` and `tool_run_id`, and `tool_runs` has the exact command, tool version and executable hash, so any value can be followed back to the command that produced it.
@@ -55,6 +56,6 @@ Every export written to disk is recorded in the case database's `reports` table 
 
 The history is kept in the database, not inside the export, so the same case still exports the same way.
 
-## Not included here
+## Desktop workflow
 
-Turning the export into a command or a button is on the application side (a sidecar command) and the UI. PDF and HTML reports are the report presentation, built from the same case data; they can record themselves in the same history with `SqliteReportRepository.record()`.
+The authenticated `export_case` sidecar command and the Report screen support JSON and CSV after the pipeline completes. Incomplete analysis and existing destinations are rejected. PDF and HTML report generation remain future work; their files can use the same history through `SqliteReportRepository.record()`.

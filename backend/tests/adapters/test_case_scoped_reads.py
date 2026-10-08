@@ -133,8 +133,8 @@ def test_integrity_inventory_and_provenance_come_from_the_cases_own_files(two_ca
     assert second.integrity_for("finance", "accounts").status == "valid"
     assert first.inventory() is None
     assert second.inventory().missing_files == ("mysql-bin.000005",)
-    assert first.provenance_for((FILE, 739)).tool_run_id == "bin"
-    assert second.provenance_for((FILE, 739)).tool_run_id == "bin-2"
+    assert first.provenance_for((FILE, 739, 0)).tool_run_id == "bin"
+    assert second.provenance_for((FILE, 739, 0)).tool_run_id == "bin-2"
 
 
 @pytest.mark.parametrize("case_id", ["case-1", "case-2"])
@@ -153,3 +153,25 @@ def test_each_case_is_analysed_on_its_own_evidence(two_cases, case_id) -> None:
     assert referenced and referenced <= OWN_FILES[case_id]
     records = {r.record.id for r in results[1].records}
     assert ("accounts:201" in records) == (case_id == "case-2")
+
+
+def test_complete_extraction_and_table_creation_context_are_case_scoped(two_cases):
+    from core.domain.models.canonical import TableCreation
+
+    connection = two_cases.extraction._connection
+    connection.execute("DELETE FROM physical_extractions WHERE evidence_id = 'ev-ibd'")
+    connection.commit()
+    two_cases.extraction.save_decoded_binlog("case-2", "ev2-bin", "bin-2", DecodedBinlog(
+        events=(an_event(201, position=739),),
+        markers=(TransactionMarker("committed", 600, 1050, FILE, (739,)),),
+        table_creations=(TableCreation("finance", "accounts", FILE, 100),),
+    ))
+    normalize(two_cases, "case-1")
+    normalize(two_cases, "case-2")
+    first = two_cases.domain.inputs_for("case-1").evidence
+    second = two_cases.domain.inputs_for("case-2").evidence
+    assert ("finance", "accounts") not in first.tables_with_complete_extraction()
+    assert ("finance", "accounts") in second.tables_with_complete_extraction()
+    assert first.table_creations() == ()
+    assert len(second.table_creations()) == 1
+    assert second.table_creations()[0].provenance.evidence_id == "ev2-bin"

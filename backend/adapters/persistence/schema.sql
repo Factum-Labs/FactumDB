@@ -7,8 +7,11 @@ CREATE TABLE IF NOT EXISTS cases (
     case_id        TEXT PRIMARY KEY,
     case_name      TEXT NOT NULL,
     examiner       TEXT NOT NULL,
+    examiner_notes TEXT NOT NULL DEFAULT '',
     workspace_path TEXT NOT NULL,
-    created_at     TEXT NOT NULL
+    created_at     TEXT NOT NULL,
+    engine_revision INTEGER NOT NULL DEFAULT 2,
+    reanalysis_required INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 CREATE TABLE IF NOT EXISTS evidence_files (
     evidence_id         TEXT PRIMARY KEY,
@@ -23,7 +26,9 @@ CREATE TABLE IF NOT EXISTS evidence_files (
     working_copy_path   TEXT,
     working_copy_sha256 TEXT,
     acquisition_method  TEXT NOT NULL DEFAULT '',
-    registered_at       TEXT NOT NULL
+    registered_at       TEXT NOT NULL,
+    actor_id            TEXT,
+    actor_username      TEXT
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_evidence_case ON evidence_files(case_id);
@@ -47,7 +52,9 @@ CREATE TABLE IF NOT EXISTS tool_runs (
     stdout_size_bytes INTEGER,
     stderr_path       TEXT,
     stderr_sha256     TEXT,
-    stderr_size_bytes INTEGER
+    stderr_size_bytes INTEGER,
+    actor_id          TEXT,
+    actor_username    TEXT
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_tool_runs_evidence ON tool_runs(evidence_id);
@@ -182,6 +189,23 @@ CREATE TABLE IF NOT EXISTS analysis_results (
     result_json TEXT NOT NULL CHECK (json_valid(result_json)),
     saved_at    TEXT NOT NULL,
     PRIMARY KEY (case_id, stage)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_binlog_row_ref ON binlog_events(source_file, log_position, row_index);
+
+CREATE TABLE IF NOT EXISTS table_creations (
+    evidence_id TEXT NOT NULL REFERENCES evidence_files(evidence_id),
+    tool_run_id TEXT NOT NULL REFERENCES tool_runs(tool_run_id),
+    database_name TEXT NOT NULL,
+    table_name TEXT NOT NULL,
+    source_file TEXT NOT NULL,
+    log_position INTEGER NOT NULL,
+    PRIMARY KEY(evidence_id, log_position, database_name, table_name)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS physical_extractions (
+    evidence_id TEXT PRIMARY KEY REFERENCES evidence_files(evidence_id),
+    tool_run_id TEXT NOT NULL REFERENCES tool_runs(tool_run_id)
 ) STRICT;
 CREATE TABLE IF NOT EXISTS reports (
     report_id   TEXT PRIMARY KEY,

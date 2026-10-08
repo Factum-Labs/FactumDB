@@ -1,5 +1,30 @@
 # FactumDB SQLite Schema
 
+Examiner accounts are stored separately in the application catalog's `users`
+table, defined by `backend/adapters/persistence/accounts.sql`. That schema is
+initialized only for `catalog.db`; case databases and exports contain no account
+credentials. See [authentication](authentication.md) for the account schema and
+shared/native implementation.
+
+Engine revision 2 adds `cases.engine_revision` and `cases.reanalysis_required`.
+Opening an older database preserves evidence, working-copy hashes, normalized
+extraction tables and tool audit history, deletes incompatible analysis results
+and normalization summaries, and marks its pipeline runs obsolete. The desktop
+shows **Needs reanalysis** until a fresh decode and complete analysis finish.
+
+Two additive extraction tables support presence comparisons:
+
+- `table_creations(evidence_id, tool_run_id, database_name, table_name,
+  source_file, log_position)` stores CREATE TABLE observations from binlogs.
+- `physical_extractions(evidence_id, tool_run_id)` records successful row
+  extraction even when the tablespace contains zero live rows. Schema extraction
+  alone does not prove that the physical rows were successfully examined.
+
+The decoder now owns `binlog_events.row_index`; repository round trips and
+lookups preserve it. `idx_binlog_row_ref(source_file, log_position, row_index)`
+supports row-specific provenance queries. JSON and CSV exports carry format
+version 2, engine revision 2 and analysis format version 2.
+
 ## What this is
 
 This is the internal store for one case. Everything the adapters extract goes in here, and Yasiru's domain services and the UI read it back out. The original evidence files are never stored inside the database - they stay in the case folder and we only keep their paths and hashes.

@@ -10,6 +10,7 @@ DECIMAL, used to stop the pipeline altogether.
 from __future__ import annotations
 
 import time
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -19,6 +20,7 @@ from adapters.persistence.sqlite_physical_record_repository import (
     SqlitePhysicalRecordRepository,
 )
 from adapters.tools.ibd2sql_adapter import Ibd2SqlAdapter
+from adapters.tools import mysqlbinlog_adapter
 from adapters.tools.mysqlbinlog_adapter import MysqlBinlogAdapter, _typed
 from core.domain.models.canonical import Column, Schema
 from core.domain.models.values import UndecodableValue
@@ -142,13 +144,31 @@ PAGE_DELETED = (
 
 @pytest.fixture
 def zone(monkeypatch):
-    """TIMESTAMP values depend on the machine's zone, so each test sets one."""
+    """Supply deterministic local zones without changing the operating system.
+
+    Windows has no time.tzset(). Patch only the adapter's datetime boundary:
+    parsing and value conversion still run, and an explicit UTC conversion in
+    the adapter would still fail the UTC+05:30 assertions.
+    """
+    local_zone = timezone.utc
+
+    class LocalDatetime(datetime):
+        @classmethod
+        def fromtimestamp(cls, timestamp, tz=None):
+            if tz is not None:
+                return super().fromtimestamp(timestamp, tz)
+            return super().fromtimestamp(timestamp, local_zone).replace(tzinfo=None)
+
+    monkeypatch.setattr(mysqlbinlog_adapter, "datetime", LocalDatetime)
+
     def use(tz):
-        monkeypatch.setenv("TZ", tz)
-        time.tzset()
-    yield use
-    monkeypatch.undo()
-    time.tzset()
+        nonlocal local_zone
+        local_zone = {
+            "IST-5:30": timezone(timedelta(hours=5, minutes=30)),
+            "UTC0": timezone.utc,
+        }[tz]
+
+    return use
 
 
 def binlog_rows():
@@ -204,6 +224,15 @@ def test_a_timestamp_is_shown_in_the_machines_zone_like_ibd2sql(zone) -> None:
 
     zone("UTC0")
     assert binlog_rows()[0].after["created_at"] == "2026-10-03 03:45:00"
+
+
+@pytest.mark.parametrize("epoch", [1790999100, Decimal("1790999100.123456")])
+def test_a_timestamp_uses_the_actual_host_timezone(epoch) -> None:
+    """Exercise the native local conversion on Windows as well as Unix."""
+    expected = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(epoch)))
+    if isinstance(epoch, Decimal):
+        expected += ".123456"
+    assert _typed("timestamp(6)", epoch) == expected
 
 
 def test_a_datetime_is_left_alone() -> None:

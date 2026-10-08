@@ -1,10 +1,8 @@
 /**
- * Hardcoded demo fixtures for case FDB-2026-014.
+ * Graph acceptance-test fixtures for case FDB-2026-014.
  *
- * These stand in for the outputs of the Python sidecar / domain services. The
- * shapes match what TransactionGroupingService, RecordCorrelationService and
- * ReconciliationService are contracted to return, so replacing this module with
- * Tauri command results later is a drop-in swap — no consumer changes.
+ * Only correlation.check.ts imports these. Application screens load persisted
+ * evidence and analysis through the desktop backend.
  */
 import type {
   CorrelationEdge,

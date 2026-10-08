@@ -25,7 +25,13 @@ def read_version(command):
     A version that cannot be read is an error rather than "unknown": a tool
     that fails on --version is not one whose output should be trusted.
     """
-    result = subprocess.run(list(command) + ["--version"], capture_output=True)
+    try:
+        result = subprocess.run(list(command) + ["--version"], capture_output=True)
+    except FileNotFoundError as error:
+        raise RuntimeError(
+            f"Cannot launch tool executable '{command[0]}': file not found. "
+            "Configure its full path in Settings or restore the bundled tools."
+        ) from error
     text = result.stdout.decode(errors="replace").strip()
     if result.returncode != 0 or not text:
         raise RuntimeError(

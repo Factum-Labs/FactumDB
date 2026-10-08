@@ -45,4 +45,7 @@ src-tauri/target/
 *.exe
 *.AppImage
 *.deb
+.bundle-cache/
+src-tauri/resources/runtime/
+src-tauri/resources/sources/
 

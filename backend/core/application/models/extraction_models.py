@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Generic, TypeVar
 from core.domain.models.canonical import (
-    AnalysisWarning, BinlogEvent, PhysicalRecord, Schema, TransactionMarker,
+    AnalysisWarning, BinlogEvent, PhysicalRecord, Schema, TransactionMarker, TableCreation,
 )
 
 
@@ -13,6 +13,7 @@ class DecodedBinlog:
     events: tuple[BinlogEvent, ...]
     markers: tuple[TransactionMarker, ...]
     warnings: tuple[AnalysisWarning, ...] = ()
+    table_creations: tuple[TableCreation, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

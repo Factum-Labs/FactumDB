@@ -96,7 +96,7 @@ export function CorrelationGraph({
 
           {/* Edges first so nodes paint over the endpoints. */}
           {layout.edges.map((e) => (
-            <g key={`${e.txId}->${e.recordId}`}>
+            <g key={`${e.txId}->${e.recordId}:${e.eventType}`}>
               <path
                 d={e.path}
                 fill="none"
@@ -275,6 +275,10 @@ const REC_COLOR: Record<
     sub: '#2f7a68',
     key: '#7d938d',
   },
+  unsupported: {
+    bg: '#f4f7f6', border: '#d5dedb', bar: GRY,
+    title: '#6e6e6e', sub: '#8a8a8a', key: '#a0aeab',
+  },
   context: {
     bg: '#f4f7f6',
     border: '#d5dedb',
@@ -307,6 +311,7 @@ function Legend() {
       <LegendSwatch kind="conflicting" label="Conflicting" />
       <LegendSwatch kind="unresolved" label="Unresolved" />
       <LegendSwatch kind="agreeing" label="Agrees" />
+      <LegendSwatch kind="unsupported" label="Unsupported" />
       <LegendSwatch kind="context" label="Context" />
       <span className="h-3 w-px bg-line" />
       <LegendLine dash={undefined} label="UPDATE" />

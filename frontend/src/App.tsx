@@ -1,20 +1,11 @@
-import type { FC } from 'react'
+import { useEffect, type FC } from 'react'
 import { useApp } from './store'
 import type { Screen } from './data/types'
 import { A, A_DARK, A_SOFT, GRN } from './lib/tokens'
-import { CASE } from './data/caseData'
 import { Logo } from './components/Logo'
+import { AuthScreen } from './screens/AuthScreen'
 
-import { CasesScreen } from './screens/CasesScreen'
-import { IntakeScreen } from './screens/IntakeScreen'
-import { PipelineScreen } from './screens/PipelineScreen'
-import { TimelineScreen } from './screens/TimelineScreen'
-import { RecordHistoryScreen } from './screens/RecordHistoryScreen'
-import { ReconciliationScreen } from './screens/ReconciliationScreen'
-import { GapsScreen } from './screens/GapsScreen'
-import { ProvenanceScreen } from './screens/ProvenanceScreen'
-import { ReportScreen } from './screens/ReportScreen'
-import { SettingsScreen } from './screens/SettingsScreen'
+import { CasesScreen, IntakeScreen, PipelineScreen, TimelineScreen, RecordHistoryScreen, ReconciliationScreen, GapsScreen, ProvenanceScreen, ReportScreen, SettingsScreen } from './screens/ConnectedScreens'
 
 const META: Record<Screen, [string, string]> = {
   cases: ['Cases', 'Open an existing case or create a new one'],
@@ -29,30 +20,30 @@ const META: Record<Screen, [string, string]> = {
   settings: ['Settings', 'Utility paths, versions and workspace'],
 }
 
-const NAV_GROUPS: { title: string; items: { id: Screen; label: string; code: string; count: string }[] }[] = [
+const NAV_GROUPS: { title: string; items: { id: Screen; label: string; code: string }[] }[] = [
   {
     title: 'Case',
     items: [
-      { id: 'cases', label: 'Cases', code: 'CS', count: '5' },
-      { id: 'intake', label: 'Evidence', code: 'EV', count: '6' },
+      { id: 'cases', label: 'Cases', code: 'CS' },
+      { id: 'intake', label: 'Evidence', code: 'EV' },
     ],
   },
   {
     title: 'Analysis',
     items: [
-      { id: 'pipeline', label: 'Pipeline', code: 'PL', count: '13' },
-      { id: 'timeline', label: 'Transactions', code: 'TX', count: '4' },
-      { id: 'record', label: 'Record history', code: 'RH', count: '5' },
-      { id: 'recon', label: 'Reconciliation', code: 'RC', count: '10' },
-      { id: 'gaps', label: 'Gaps & warnings', code: 'GP', count: '5' },
-      { id: 'prov', label: 'Provenance', code: 'PV', count: '' },
+      { id: 'pipeline', label: 'Pipeline', code: 'PL' },
+      { id: 'timeline', label: 'Transactions', code: 'TX' },
+      { id: 'record', label: 'Record history', code: 'RH' },
+      { id: 'recon', label: 'Reconciliation', code: 'RC' },
+      { id: 'gaps', label: 'Gaps & warnings', code: 'GP' },
+      { id: 'prov', label: 'Provenance', code: 'PV' },
     ],
   },
   {
     title: 'Output',
     items: [
-      { id: 'report', label: 'Report', code: 'RP', count: '' },
-      { id: 'settings', label: 'Settings', code: 'ST', count: '' },
+      { id: 'report', label: 'Report', code: 'RP' },
+      { id: 'settings', label: 'Settings', code: 'ST' },
     ],
   },
 ]
@@ -73,12 +64,23 @@ const SCREENS: Record<Screen, FC> = {
 }
 
 export default function App() {
+  const user = useApp(s => s.user)
+  const signOut = useApp(s => s.signOut)
+  const data = useApp(s => s.data)
+  const ready = useApp(s => s.ready)
+  const busy = useApp(s => s.busy)
+  const error = useApp(s => s.error)
+  const notice = useApp(s => s.notice)
+  const initialize = useApp(s => s.initialize)
+  useEffect(() => { void initialize() }, [initialize])
   const screen = useApp((s) => s.screen)
   const go = useApp((s) => s.go)
   const pipelineComplete = useApp((s) => s.pipelineComplete)
 
   const [title, subtitle] = META[screen]
   const Screen = SCREENS[screen]
+
+  if (!user) return <AuthScreen />
 
   return (
     <div className="flex h-screen flex-col bg-page text-ink">
@@ -87,8 +89,8 @@ export default function App() {
         <Logo size={26} />
         <div className="h-[14px] w-px bg-line" />
         <div className="flex items-center gap-[7px] text-[11.5px] text-muted">
-          <span className="font-mono text-ink">{CASE.id}</span>
-          <span>{CASE.name}</span>
+          <span className="font-mono text-ink">{data?.case.case_id ?? 'FactumDB'}</span>
+          <span>{data?.case.case_name ?? 'Select a case'}</span>
         </div>
         <div className="flex-1" />
         <div className="flex items-center gap-1.5 text-[11.5px] text-muted">
@@ -96,7 +98,8 @@ export default function App() {
           Read-only evidence mode
         </div>
         <div className="h-[14px] w-px bg-line" />
-        <div className="text-[11.5px] text-muted">Examiner: {CASE.examiner}</div>
+        <div className="text-[11.5px] text-muted">Signed in: {user.username}</div>
+        <button disabled={busy} onClick={() => { void signOut() }} className="text-[11.5px] text-accent disabled:opacity-40">Sign out</button>
       </div>
 
       {/* Top tabs nav */}
@@ -106,6 +109,7 @@ export default function App() {
           return (
             <button
               key={n.id}
+              disabled={!ready || (busy && n.id === 'cases')}
               onClick={() => go(n.id)}
               className="h-[34px] whitespace-nowrap border-b-2 px-[11px] text-[12px] hover:bg-accent-soft"
               style={{
@@ -144,19 +148,23 @@ export default function App() {
             )}
           </div>
 
-          <div className="flex-1 overflow-auto px-[18px] pb-10 pt-4">
-            <Screen />
+          <div className={'min-h-0 flex-1 overflow-auto px-[18px] pt-4 ' + (screen === 'pipeline' ? 'flex flex-col pb-4' : 'pb-10')}>
+            {error && <div role="alert" className="mb-4 whitespace-pre-wrap rounded border border-red-300 bg-red-50 p-3 text-xs text-red-800">{error}{!ready && <button onClick={() => { void initialize() }} className="ml-3 underline">Retry connection</button>}</div>}
+            {notice && <div role="status" className="mb-4 rounded border border-green-300 bg-green-50 p-3 text-xs text-green-800">{notice}</div>}
+            <div className={screen === 'pipeline' ? 'min-h-0 flex-1' : 'contents'}>
+              {ready ? <Screen /> : !error && <p className="text-sm text-muted">Connecting to the Python backend…</p>}
+            </div>
           </div>
 
           {/* Status bar */}
           <div className="flex h-6 flex-none items-center gap-3.5 border-t border-line bg-chrome px-3.5 font-mono text-[10.5px] text-dim">
-            <span>SQLite: cases.db</span>
+            <span>{ready ? 'Backend connected · SQLite per case' : 'Backend disconnected'}</span>
             <span>·</span>
             <span>MySQL 8.4.x profile</span>
             <span>·</span>
             <span>hash SHA-256</span>
             <div className="flex-1" />
-            <span>2 conflicting · 3 unresolved · 1 coverage gap</span>
+            <span>{busy ? 'Processing…' : pipelineComplete ? 'Analysis saved' : 'Ready'}</span>
           </div>
         </main>
       </div>

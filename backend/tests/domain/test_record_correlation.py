@@ -246,10 +246,10 @@ def test_ds07_refusing_continuity_does_not_discard_the_old_keys() -> None:
         "accounts:111",
     ]
     # The event at 100 is evidence about both the key it left and the key it made.
-    assert result.record("accounts:101").log_event_refs == (("binlog.000018", 100),)
+    assert result.record("accounts:101").log_event_refs == (("binlog.000018", 100, 0),)
     assert result.record("accounts:111").log_event_refs == (
-        ("binlog.000018", 100),
-        ("binlog.000018", 110),
+        ("binlog.000018", 100, 0),
+        ("binlog.000018", 110, 0),
     )
 
 
@@ -492,7 +492,7 @@ def test_ungrouped_events_are_still_correlated() -> None:
         records=[phys("accounts", {"account_id": 101})],
     )
     assert [r.record.id for r in result.records] == ["accounts:101"]
-    assert result.records[0].log_event_refs == (("binlog.000018", 500),)
+    assert result.records[0].log_event_refs == (("binlog.000018", 500, 0),)
 
 
 def test_correlation_is_repeatable_under_input_reordering() -> None:

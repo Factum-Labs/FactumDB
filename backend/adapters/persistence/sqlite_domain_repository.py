@@ -100,6 +100,7 @@ class SqliteDomainRepository:
                 inventory=self._inventory,
                 tool_runs=self._tool_runs,
                 physical=self._physical,
+                connection=self._connection,
             ),
         )
 
@@ -144,6 +145,8 @@ class SqliteDomainRepository:
                 "(case_id, stage, result_json, saved_at) VALUES (?, ?, ?, ?)",
                 (case_id, stage, json.dumps(encode(result)), to_text(self._now())),
             )
+            if stage == "reconciliation":
+                self._connection.execute("UPDATE cases SET reanalysis_required = 0 WHERE case_id = ?", (case_id,))
 
     def _load(self, case_id: str, stage: str, result_type):
         row = self._connection.execute(
@@ -192,13 +195,15 @@ class _PhysicalRecords:
 class _EvidenceContext:
     """What one case's evidence as a whole can and cannot tell, within the scope."""
 
-    def __init__(self, scope, *, case_id, integrity, inventory, tool_runs, physical):
+    def __init__(self, scope, *, case_id, integrity, inventory, tool_runs, physical, connection):
         self._scope = scope
         self._case_id = case_id
         self._integrity = integrity
         self._inventory = inventory
         self._tool_runs = tool_runs
         self._physical = physical
+        self._connection = connection
+        self._integrity_cache = {}
 
     def inventory(self):
         return self._inventory.inventory(case_id=self._case_id)
@@ -206,13 +211,40 @@ class _EvidenceContext:
     def integrity_for(self, database, table):
         if not self._scope.includes(database, table):
             return None
-        return self._integrity.integrity_for(database, table, case_id=self._case_id)
+        pair = (database, table)
+        if pair not in self._integrity_cache:
+            self._integrity_cache[pair] = self._integrity.integrity_for(database, table, case_id=self._case_id)
+        return self._integrity_cache[pair]
 
     def provenance_for(self, ref):
         return self._tool_runs.provenance_for(ref, case_id=self._case_id)
 
     def supported_data_types(self):
         return DEFAULT_SUPPORTED_TYPES
+
+    def tables_with_complete_extraction(self):
+        return frozenset(
+            (r[0], r[1]) for r in self._connection.execute(
+                "SELECT s.database_name, s.table_name FROM schemas s "
+                "JOIN physical_extractions p ON p.evidence_id = s.evidence_id "
+                "JOIN evidence_files e ON e.evidence_id = s.evidence_id WHERE e.case_id = ?",
+                (self._case_id,),
+            ) if self._scope.includes(r[0], r[1])
+        )
+
+    def table_creations(self):
+        from core.domain.models.canonical import TableCreation, ProvenanceReference
+        return tuple(
+            TableCreation(r['database_name'], r['table_name'], r['source_file'], r['log_position'],
+                          ProvenanceReference(r['evidence_id'], 'mysqlbinlog', r['tool_run_id'],
+                                              r['source_file'], r['log_position']))
+            for r in self._connection.execute(
+                "SELECT t.* FROM table_creations t JOIN evidence_files e "
+                "ON e.evidence_id = t.evidence_id WHERE e.case_id = ? "
+                "ORDER BY t.source_file, t.log_position", (self._case_id,),
+            )
+            if self._scope.includes(r['database_name'], r['table_name'])
+        )
 
     def tables_with_physical_evidence(self):
         return frozenset(
