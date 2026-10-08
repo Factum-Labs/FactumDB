@@ -41,3 +41,11 @@ Two cases allow more than one verdict:
 
 - **A record changed through a partial row image** (scenario 4, payment 1). R-RECON-002 makes agreeing values Strong when a partial image is involved; but `binlog_row_image=MINIMAL` only leaves out columns that did not change, so Exact is defensible too. Either counts as correct. Conflicting or Unresolved would not.
 - **A row left on a page under a key that was later changed** (scenario 4, payment 3 and order item `(100, 2)`). InnoDB keeps the old version delete-marked, and the logged key change explains it. It may be reported as its own record, agreeing, or merged into the record under the new key (`may_be_merged_into`).
+
+## Running the evaluation
+
+`evaluate.py` runs the whole pipeline on each scenario's reference evidence, twice, and scores the result against `expected.json`; see `docs/evaluation.md` for what it measures.
+
+```bash
+python3 datasets/evaluate.py --evidence ~/factumdb/evidence --out docs/evaluation-results.md
+```

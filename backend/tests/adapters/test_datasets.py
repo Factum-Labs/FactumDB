@@ -19,7 +19,9 @@ VERDICTS = {"Exact", "Strong", "Partial", "Conflicting", "Unresolved", "Unsuppor
 
 
 def test_every_scenario_has_its_files() -> None:
-    for folder in (p for p in DATASETS.iterdir() if p.is_dir()):
+    folders = [p for p in DATASETS.glob("scenario*") if p.is_dir()]
+    assert folders
+    for folder in folders:
         assert {"README.md", "generate.sql", "expected.json"} <= {p.name for p in folder.iterdir()}
 
 
