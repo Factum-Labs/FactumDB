@@ -1,0 +1,164 @@
+{
+  "scenario": "scenario2_delete",
+  "acquired": "2026-08-16",
+  "mysql_version": "8.4.10",
+  "evidence": [
+    {
+      "file": "accounts.ibd",
+      "bytes": 114688,
+      "sha256": "aabaf8b432a7a375c8c57d52667c7b2604fff56cffa91d30a46c2e71eab700e0"
+    },
+    {
+      "file": "mysql-bin.000001",
+      "bytes": 2050,
+      "sha256": "71484bbded5614dff92af9fc2e4fd0e327e61f1500abf45784bba045a4d41f4f"
+    },
+    {
+      "file": "mysql-bin.000002",
+      "bytes": 198,
+      "sha256": "c63b5ecc3f66a14068905ffd7027e8e6df7616dcd996399f0750d92ac6bb2cf9"
+    },
+    {
+      "file": "mysql-bin.000003",
+      "bytes": 198,
+      "sha256": "63a904610e3fe4338122c2d2d395aa95fcd0162739d230e9d97840b09ac9ddbd"
+    },
+    {
+      "file": "mysql-bin.000004",
+      "bytes": 221,
+      "sha256": "9c05d2ca7e8da12561975e5dbe2c527e6b1b36f1ba4ebd7b3a5064cb62e2e75f"
+    },
+    {
+      "file": "mysql-bin.000005",
+      "bytes": 245,
+      "sha256": "62ba74b8ac438a9319e7af8a8e3218b8f724f2f806a299c2b036a4200e716380"
+    },
+    {
+      "file": "mysql-bin.000006",
+      "bytes": 1143,
+      "sha256": "c395ede448a852593939beb4b23a07a77bee67e415a0b1553c1d4424a749070e"
+    },
+    {
+      "file": "mysql-bin.index",
+      "bytes": 192,
+      "sha256": "42be7aaec1b21c4d8cddf33476580b0dfca158c7e2b6bd04392f296218ee2d79"
+    }
+  ],
+  "columns": {
+    "finance.accounts": [
+      "account_id",
+      "owner",
+      "balance",
+      "status"
+    ]
+  },
+  "page_rows": {
+    "finance.accounts": {
+      "live": [
+        [
+          101,
+          "Amal",
+          4000,
+          "suspended"
+        ],
+        [
+          103,
+          "Kamal",
+          3200,
+          "active"
+        ]
+      ],
+      "deleted": [
+        [
+          102,
+          "Nimal",
+          7500,
+          "active"
+        ]
+      ]
+    }
+  },
+  "row_events": {
+    "finance.accounts": {
+      "INSERT": 3,
+      "UPDATE": 2,
+      "DELETE": 1
+    }
+  },
+  "transactions": {
+    "committed": 6
+  },
+  "warnings": {},
+  "coverage": {
+    "complete": true,
+    "missing_files": []
+  },
+  "records": {
+    "accounts:101": {
+      "rollup": [
+        "Exact"
+      ],
+      "fields": {
+        "record presence": [
+          "Exact"
+        ],
+        "account_id": [
+          "Exact"
+        ],
+        "owner": [
+          "Exact"
+        ],
+        "balance": [
+          "Exact"
+        ],
+        "status": [
+          "Exact"
+        ]
+      }
+    },
+    "accounts:102": {
+      "rollup": [
+        "Exact"
+      ],
+      "fields": {
+        "record presence": [
+          "Exact"
+        ],
+        "account_id": [
+          "Exact"
+        ],
+        "owner": [
+          "Exact"
+        ],
+        "balance": [
+          "Exact"
+        ],
+        "status": [
+          "Exact"
+        ]
+      }
+    },
+    "accounts:103": {
+      "rollup": [
+        "Exact"
+      ],
+      "fields": {
+        "record presence": [
+          "Exact"
+        ],
+        "account_id": [
+          "Exact"
+        ],
+        "owner": [
+          "Exact"
+        ],
+        "balance": [
+          "Exact"
+        ],
+        "status": [
+          "Exact"
+        ]
+      }
+    }
+  }
+}

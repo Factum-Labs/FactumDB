@@ -1,0 +1,282 @@
+{
+  "scenario": "scenario3_quotes",
+  "acquired": "2026-09-04",
+  "mysql_version": "8.4.10",
+  "evidence": [
+    {
+      "file": "accounts.ibd",
+      "bytes": 114688,
+      "sha256": "5b49d5778e46590ffc95d296193ea2d83f7d39ed557575ca9e816e407d23c5f9"
+    },
+    {
+      "file": "mysql-bin.000001",
+      "bytes": 2050,
+      "sha256": "71484bbded5614dff92af9fc2e4fd0e327e61f1500abf45784bba045a4d41f4f"
+    },
+    {
+      "file": "mysql-bin.000002",
+      "bytes": 198,
+      "sha256": "c63b5ecc3f66a14068905ffd7027e8e6df7616dcd996399f0750d92ac6bb2cf9"
+    },
+    {
+      "file": "mysql-bin.000003",
+      "bytes": 198,
+      "sha256": "63a904610e3fe4338122c2d2d395aa95fcd0162739d230e9d97840b09ac9ddbd"
+    },
+    {
+      "file": "mysql-bin.000004",
+      "bytes": 221,
+      "sha256": "9c05d2ca7e8da12561975e5dbe2c527e6b1b36f1ba4ebd7b3a5064cb62e2e75f"
+    },
+    {
+      "file": "mysql-bin.000005",
+      "bytes": 245,
+      "sha256": "62ba74b8ac438a9319e7af8a8e3218b8f724f2f806a299c2b036a4200e716380"
+    },
+    {
+      "file": "mysql-bin.000006",
+      "bytes": 1143,
+      "sha256": "09b5b5a6e352d615e72f00da9a7e35e1f5b68792ccd27b1dc5da5f1e39b309ba"
+    },
+    {
+      "file": "mysql-bin.000007",
+      "bytes": 245,
+      "sha256": "119cb08c5c5d7725ecdbbf0ef686b10f0ba81c61a2986456f171a0e8e8d8bf30"
+    },
+    {
+      "file": "mysql-bin.000008",
+      "bytes": 245,
+      "sha256": "4d764b0aee22a88969ec7b7aa0e3bf502ec474612a116dffd5db3f6c4cc23fef"
+    },
+    {
+      "file": "mysql-bin.000009",
+      "bytes": 198,
+      "sha256": "fc60b58148299bd43c09a77a13fa5754dd03edead09ce790c77e4a415d40b8a6"
+    },
+    {
+      "file": "mysql-bin.000010",
+      "bytes": 198,
+      "sha256": "c47685f71130071affcc8fe5dab9b45c95da672c49a7709e8542a617dc565ee6"
+    },
+    {
+      "file": "mysql-bin.000011",
+      "bytes": 245,
+      "sha256": "c111ebb251c59d9d2eb198e551228943d83069e9be685a17d41c6c76318108ac"
+    },
+    {
+      "file": "mysql-bin.000012",
+      "bytes": 245,
+      "sha256": "1f202de1142a1c34775b09aef49790b97dcfa6c0921f9c40a59c8e3c9a896e51"
+    },
+    {
+      "file": "mysql-bin.000013",
+      "bytes": 198,
+      "sha256": "b31c9a59d2725035f42c126a93e289360559b63b6cf37754008047355a42b7ae"
+    },
+    {
+      "file": "mysql-bin.000014",
+      "bytes": 245,
+      "sha256": "2d722f813a02faaaa3740ceeb1b22f2969ebc6371106a5c9d37cf96c4c276984"
+    },
+    {
+      "file": "mysql-bin.000015",
+      "bytes": 198,
+      "sha256": "5278172b635dce70bef029833b305dac69215b0c9e86c987d21b7981baa1570e"
+    },
+    {
+      "file": "mysql-bin.000016",
+      "bytes": 245,
+      "sha256": "77b2b74a6051d5d3d253e51335ddf9a3a18a2b7e75ec4d2588cebd4619b7e1fb"
+    },
+    {
+      "file": "mysql-bin.000017",
+      "bytes": 198,
+      "sha256": "81be182c2eaf1a102f08994f5203326851aca3a8541f3a29b751a74438ca4365"
+    },
+    {
+      "file": "mysql-bin.000018",
+      "bytes": 198,
+      "sha256": "db2a176826a795cdd3cf3bf0bb7aa90daf5940f64b5ea2ecf8188dc40a7e81ae"
+    },
+    {
+      "file": "mysql-bin.000019",
+      "bytes": 198,
+      "sha256": "683f2c4bc4e95dba01dd39ef78b81bff00e9ee9afabe09a66f1555e1d433c42b"
+    },
+    {
+      "file": "mysql-bin.000020",
+      "bytes": 198,
+      "sha256": "1f9f2ee4230fb866225ded66e20bcfa2338b2949af365163e5fd77ccc9c25570"
+    },
+    {
+      "file": "mysql-bin.000021",
+      "bytes": 198,
+      "sha256": "97c16e5e03a5ff190e6c1166fc9fbf4bfb45c274dc2bd826082bb8df18d6b1af"
+    },
+    {
+      "file": "mysql-bin.000022",
+      "bytes": 198,
+      "sha256": "8b5a33c38469d43cddba5afa9c6f6201c61bf31099fb881bcff364482a580402"
+    },
+    {
+      "file": "mysql-bin.000023",
+      "bytes": 198,
+      "sha256": "f3b1530719ccb4c8fcb98e3420faa6c18f5aec984c616124a29c4e902a964f48"
+    },
+    {
+      "file": "mysql-bin.000024",
+      "bytes": 526,
+      "sha256": "5c0387a6198d3f39a6f77a24762d10b3ae6ca0d8288611ddeb5fd411dfe204e8"
+    },
+    {
+      "file": "mysql-bin.index",
+      "bytes": 768,
+      "sha256": "d76e2eb441358f8920882089ac94a995456392b6c6cfe5ff505cf09f57e4c930"
+    }
+  ],
+  "columns": {
+    "finance.accounts": [
+      "account_id",
+      "owner",
+      "balance",
+      "status"
+    ]
+  },
+  "page_rows": {
+    "finance.accounts": {
+      "live": [
+        [
+          101,
+          "Amal",
+          4000,
+          "suspended"
+        ],
+        [
+          103,
+          "Kamal",
+          3200,
+          "active"
+        ],
+        [
+          104,
+          "Perera, A. O'Brien",
+          9000,
+          "active"
+        ]
+      ],
+      "deleted": [
+        [
+          102,
+          "Nimal",
+          7500,
+          "active"
+        ]
+      ]
+    }
+  },
+  "row_events": {
+    "finance.accounts": {
+      "INSERT": 4,
+      "UPDATE": 2,
+      "DELETE": 1
+    }
+  },
+  "transactions": {
+    "committed": 7
+  },
+  "warnings": {},
+  "coverage": {
+    "complete": true,
+    "missing_files": []
+  },
+  "records": {
+    "accounts:101": {
+      "rollup": [
+        "Exact"
+      ],
+      "fields": {
+        "record presence": [
+          "Exact"
+        ],
+        "account_id": [
+          "Exact"
+        ],
+        "owner": [
+          "Exact"
+        ],
+        "balance": [
+          "Exact"
+        ],
+        "status": [
+          "Exact"
+        ]
+      }
+    },
+    "accounts:102": {
+      "rollup": [
+        "Exact"
+      ],
+      "fields": {
+        "record presence": [
+          "Exact"
+        ],
+        "account_id": [
+          "Exact"
+        ],
+        "owner": [
+          "Exact"
+        ],
+        "balance": [
+          "Exact"
+        ],
+        "status": [
+          "Exact"
+        ]
+      }
+    },
+    "accounts:103": {
+      "rollup": [
+        "Exact"
+      ],
+      "fields": {
+        "record presence": [
+          "Exact"
+        ],
+        "account_id": [
+          "Exact"
+        ],
+        "owner": [
+          "Exact"
+        ],
+        "balance": [
+          "Exact"
+        ],
+        "status": [
+          "Exact"
+        ]
+      }
+    },
+    "accounts:104": {
+      "rollup": [
+        "Exact"
+      ],
+      "fields": {
+        "record presence": [
+          "Exact"
+        ],
+        "account_id": [
+          "Exact"
+        ],
+        "owner": [
+          "Exact"
+        ],
+        "balance": [
+          "Exact"
+        ],
+        "status": [
+          "Exact"
+        ]
+      }
+    }
+  }
+}

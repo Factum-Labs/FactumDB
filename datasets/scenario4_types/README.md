@@ -55,6 +55,7 @@ sudo chown -R "$USER": ~/factumdb/evidence/scenario4_types
 - The newer binlogs and the index are readable by the `mysql` user only, so they are copied with `sudo`.
 - The session time zone is fixed to `+05:30`, so the `TIMESTAMP` values are predictable.
 - The delete is the last change, so payment 2 is likely still on the page as a delete-marked record. If purge has already removed it, that is a valid result too: the row is gone from the page and only the binlog records it.
+- `mysql-bin.000024` is also in scenario 3. That copy was taken while it was the active log; this one after the server closed it, so the two differ in MySQL's one-byte "in use" flag and have different hashes, with identical events.
 
 ## Expected results
 
@@ -80,4 +81,20 @@ Checked against the copy acquired on 2026-10-05.
 - `payments`: payment 2 as deleted (fee `2.000`, `paid`), two earlier versions of payment 2, payment 3 under its old key, and payment 1 as first inserted (`5000.00`, `pending`).
 - `order_items`: `(101, 1)` as deleted, and `(100, 2)` under its old key.
 
-**Whole pipeline.** All ten stages succeed. With the adapter conversions, every column of payment 2's DELETE before image equals its deleted remnant on the page. `DATE`, `DATETIME` and `TIMESTAMP` columns reconcile as Strong (Exact needs the binlog index step). `note` on payment 1 is Unresolved because step 8 only partly logged it. `BLOB` and `JSON` columns are reported as Unsupported. The other typed columns (`DECIMAL`, `ENUM`, `CHAR`, `VARCHAR`, `TINYINT(1)`) also come out as Unsupported for now, because the supported-type check compares the full type such as `decimal(12,2)` with the base name `decimal`; when the check uses the base name, they reconcile as Strong with no conflicts.
+**Transactions and warnings.** 14 committed transactions: 13 from the scenario, and one in `mysql-bin.000024` that inserted account 104 into `finance.accounts` (scenario 3). No tablespace of that table is in this evidence, so its columns cannot be named: one `SCHEMA_NOT_FOUND` warning, and the row is not stored as an event.
+
+**Records and verdicts.** Binlog coverage is complete, so values that agree are Exact. Every column of payment 2's `DELETE` before image equals its deleted remnant on the page.
+
+| Record | Expected |
+|---|---|
+| `payments:1` | Every field agrees, `note` = `'checked'` included, which step 8 logged. Exact or Strong, because step 8 was a partial row image (see `../README.md`) |
+| `payments:2` | Deleted. The remnant matching the `DELETE`'s before image (fee `2.000`, `paid`) agrees on every field: Exact |
+| `payments:30` | The row under its new key: every field Exact |
+| `payments:3` | The page's copy under the old key, explained by the logged key change: agreeing (Exact or Strong), or merged into `payments:30` |
+| `order_items:100\|1` | Every field Exact (`qty` 3) |
+| `order_items:100\|3` | The row under its new key: every field Exact |
+| `order_items:100\|2` | The old key's copy, explained by the key change: agreeing, or merged into `order_items:100\|3` |
+| `order_items:101\|1` | Deleted. The remnant matches the logged deletion: every field Exact |
+| `attachments:1` | `attachment_id` Exact; `content` (`BLOB`) and `meta` (`JSON`) Unsupported; the record Partial |
+
+All 72 field verdicts are in `expected.json`. No field should be Conflicting or Unresolved: nothing in this scenario disagrees.
