@@ -8,6 +8,7 @@ event at a single position, and the original schema lost all but one of them.
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -15,7 +16,7 @@ import pytest
 
 from adapters.persistence.sqlite_binlog_event_repository import SqliteBinlogEventRepository
 from adapters.tools.mysqlbinlog_adapter import MysqlBinlogAdapter
-from core.domain.models.canonical import BinlogEvent, Column, Schema
+from core.domain.models.canonical import BinlogEvent, Column, ProvenanceReference, Schema
 from tests.adapters.conftest import a_run, an_ibd
 
 WHEN = datetime(2026, 8, 15, 19, 6, 25, tzinfo=timezone.utc)
@@ -157,6 +158,7 @@ COMMIT/*!*/;
 
 
 def test_an_update_round_trips(binlog, stored) -> None:
+    """It comes back as saved, plus a reference to the run it was saved under."""
     evidence_id, run_id = stored
     event = an_event(
         101,
@@ -165,7 +167,8 @@ def test_an_update_round_trips(binlog, stored) -> None:
     )
     binlog.save_many([event], evidence_id, run_id)
 
-    assert binlog.events() == [event]
+    from_run = ProvenanceReference(evidence_id, "mysqlbinlog", run_id, "mysql-bin.000006", 1600)
+    assert binlog.events() == [replace(event, provenance=from_run)]
 
 
 def test_insert_has_no_before_and_delete_has_no_after(binlog, stored) -> None:

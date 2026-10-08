@@ -27,6 +27,7 @@ on the transaction repository.
 
 from typing import Optional, Sequence
 
+from adapters.persistence._provenance import provenance_from
 from adapters.persistence._timestamps import from_text, to_text
 from adapters.persistence._values import from_json, to_json
 from core.application.ports.binlog_event_repository_port import (
@@ -40,11 +41,19 @@ _COLUMNS = """
     gtid, thread_id, source_file, log_position, row_index
 """
 
+# Reads also fetch the name of the tool that produced each event, which its
+# provenance needs (see _provenance.py).
+_SELECT = (
+    "SELECT " + ", ".join(f"b.{c.strip()}" for c in _COLUMNS.split(","))
+    + ", t.tool_name FROM binlog_events b"
+    " LEFT JOIN tool_runs t ON t.tool_run_id = b.tool_run_id"
+)
+
 # Timestamps in a binlog header are only accurate to the second, so several
 # events regularly share one - all three in the deletion scenario did. The
 # file, position and row index after it make the order the same on every run,
 # and within one server's logs they are the order the events were written in.
-_ORDER = "ORDER BY event_time_utc, source_file, log_position, row_index"
+_ORDER = "ORDER BY b.event_time_utc, b.source_file, b.log_position, b.row_index"
 
 
 class SqliteBinlogEventRepository(BinlogEventRepositoryPort):
@@ -121,9 +130,7 @@ class SqliteBinlogEventRepository(BinlogEventRepositoryPort):
         Time rather than position, because a position only orders events
         inside one file and a case normally has several files.
         """
-        rows = self._connection.execute(
-            f"SELECT {_COLUMNS} FROM binlog_events {_ORDER}"
-        ).fetchall()
+        rows = self._connection.execute(f"{_SELECT} {_ORDER}").fetchall()
         return [_row_to_event(r) for r in rows]
 
     def list_by_table(self, database: str, table: str) -> Sequence[BinlogEvent]:
@@ -133,8 +140,7 @@ class SqliteBinlogEventRepository(BinlogEventRepositoryPort):
         Python - that is the reason (database_name, table_name) is indexed.
         """
         rows = self._connection.execute(
-            f"SELECT {_COLUMNS} FROM binlog_events "
-            f"WHERE database_name = ? AND table_name = ? {_ORDER}",
+            f"{_SELECT} WHERE b.database_name = ? AND b.table_name = ? {_ORDER}",
             (database, table),
         ).fetchall()
         return [_row_to_event(r) for r in rows]
@@ -149,9 +155,8 @@ class SqliteBinlogEventRepository(BinlogEventRepositoryPort):
         """
         source_file, log_position = ref
         row = self._connection.execute(
-            f"SELECT {_COLUMNS} FROM binlog_events "
-            "WHERE evidence_id = ? AND source_file = ? AND log_position = ? "
-            "ORDER BY row_index LIMIT 1",
+            f"{_SELECT} WHERE b.evidence_id = ? AND b.source_file = ? AND b.log_position = ? "
+            "ORDER BY b.row_index LIMIT 1",
             (evidence_id, source_file, log_position),
         ).fetchone()
         return _row_to_event(row) if row is not None else None
@@ -165,9 +170,8 @@ class SqliteBinlogEventRepository(BinlogEventRepositoryPort):
         """
         source_file, log_position = ref
         rows = self._connection.execute(
-            f"SELECT {_COLUMNS} FROM binlog_events "
-            "WHERE evidence_id = ? AND source_file = ? AND log_position = ? "
-            "ORDER BY row_index",
+            f"{_SELECT} WHERE b.evidence_id = ? AND b.source_file = ? AND b.log_position = ? "
+            "ORDER BY b.row_index",
             (evidence_id, source_file, log_position),
         ).fetchall()
         return [_row_to_event(r) for r in rows]
@@ -191,4 +195,5 @@ def _row_to_event(row) -> BinlogEvent:
         source_file=row["source_file"],
         gtid=row["gtid"],
         thread_id=row["thread_id"],
+        provenance=provenance_from(row, row["source_file"], row["log_position"]),
     )

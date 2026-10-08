@@ -403,7 +403,7 @@ The microseconds are always written, even when they are zero. Text only sorts in
 
 **D. Undecodable values are stored inside the JSON as `{"__undecodable__": "reason"}`.** This is safe because MySQL column values are always scalars - a number, a string, a date, or NULL. They are never dictionaries. So any dict appearing where a value should be can only be our marker, and it can never collide with real data.
 
-**E. Every table that holds extracted data has a `tool_run_id`.** That is what makes the provenance requirement actually true rather than just something we say in the report.
+**E. Every table that holds extracted data has a `tool_run_id`.** That is what makes the provenance requirement actually true rather than just something we say in the report. When rows are read for the analysis, each one comes back with a `ProvenanceReference` rebuilt from its `evidence_id`, `tool_run_id` and the run's tool name (`_provenance.py`), so the findings the domain services make can point to the run behind them. It is rebuilt on every read rather than stored twice, so it can never disagree with the row.
 
 **F. `STRICT` on every table.** Normally SQLite lets you put a string into an INTEGER column and says nothing. For a forensic tool that silently storing the wrong type is a bad failure mode, so `STRICT` turns it into an error instead.
 

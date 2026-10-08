@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from adapters.persistence.sqlite_binlog_event_repository import SqliteBinlogEventRepository
 from adapters.persistence.sqlite_transaction_repository import SqliteTransactionRepository
-from core.domain.models.canonical import TransactionMarker
+from core.domain.models.canonical import ProvenanceReference, TransactionMarker
 from tests.adapters.conftest import a_binlog, a_run
 from tests.adapters.test_sqlite_binlog_events import an_event
 
@@ -53,7 +55,8 @@ def test_a_marker_round_trips(transactions, binlog, stored) -> None:
     marker = a_marker(600, (739, 985))
     transactions.save_many([marker], evidence_id, run_id)
 
-    assert transactions.markers() == [marker]
+    from_run = ProvenanceReference(evidence_id, "mysqlbinlog", run_id, FILE, 600)
+    assert transactions.markers() == [replace(marker, provenance=from_run)]
 
 
 def test_event_order_is_kept(transactions, binlog, stored) -> None:
