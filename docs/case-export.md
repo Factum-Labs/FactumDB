@@ -45,6 +45,16 @@ A CSV cell is only text, so these markers keep apart things an empty cell would 
 
 Text starting with `=`, `+`, `-` or `@` is written with a leading `'`, so a spreadsheet shows it instead of running it as a formula. The evidence comes from a database that may have been tampered with, so its text is never trusted to be harmless (this is known as CSV or formula injection).
 
+## Report history
+
+Every export written to disk is recorded in the case database's `reports` table (see `sqlite-schema.md`, section 16):
+
+- a version number, counted separately for JSON and for CSV;
+- the SHA-256 and size of every file written, so a copy handed over can be checked later with `sha256sum`;
+- `analysed_at`, which says which analysis the export contains, or that the analysis had not run yet.
+
+The history is kept in the database, not inside the export, so the same case still exports the same way.
+
 ## Not included here
 
-Turning the export into a command or a button is on the application side (a sidecar command) and the UI. PDF and HTML reports are the report presentation, built from the same case data.
+Turning the export into a command or a button is on the application side (a sidecar command) and the UI. PDF and HTML reports are the report presentation, built from the same case data; they can record themselves in the same history with `SqliteReportRepository.record()`.

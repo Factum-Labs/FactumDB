@@ -408,6 +408,32 @@ The results build on each other, so saving one stage deletes the stages after it
 
 ---
 
+## 16. reports
+
+```sql
+CREATE TABLE reports (
+    report_id   TEXT PRIMARY KEY,
+    case_id     TEXT NOT NULL REFERENCES cases(case_id),
+    format      TEXT NOT NULL CHECK (format IN ('json', 'csv', 'html', 'pdf')),
+    version     INTEGER NOT NULL CHECK (version >= 1),
+    location    TEXT NOT NULL,
+    files_json  TEXT NOT NULL CHECK (json_valid(files_json)),
+    analysed_at TEXT,
+    created_at  TEXT NOT NULL,
+    UNIQUE (case_id, format, version)
+) STRICT;
+```
+
+The report metadata: one row for every report or export made from a case. The project proposal promises "maintaining different versions of reports", and a case is often reported on more than once - before and after more evidence arrives, or after the analysis is run again.
+
+- `version` counts up separately for each format, so "the third JSON export of this case" means one thing. `report_id` is `<case>:<format>:v<version>`.
+- `files_json` lists every file written, each with its SHA-256 and size: one file for JSON or PDF, the whole folder for CSV. Anyone holding a copy can check it is the file FactumDB wrote by running `sha256sum` - no need to trust the tool for that.
+- `analysed_at` is the `saved_at` of the case's reconciliation result when the report was made, or empty if the analysis had not run. A report made before the analysis was run again shows that it describes the older analysis.
+
+The JSON and CSV exports record themselves (`case_export.py`). A PDF or HTML report can call `SqliteReportRepository.record()` once its file is written. The table is not part of the export itself, so exporting the same case twice still gives the same content.
+
+---
+
 ## Design decisions
 
 **A. IDs are text, not auto-increment integers.** Nisal's `Case` model already generates a UUID string for `case_id`, so the same style is used everywhere rather than having two different kinds of ID in one database. Consistency across the team is worth more here than the small speed difference.
