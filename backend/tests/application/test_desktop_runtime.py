@@ -2,6 +2,8 @@
 
 External tool execution is mocked; its recorded output and provenance are real.
 """
+import csv
+import hashlib
 import json
 import subprocess
 import sys
@@ -297,3 +299,47 @@ def test_bundle_defaults_follow_installation_and_preserve_custom_overrides(tmp_p
         assert runtime.settings["mysqlbinlog_path"] == str(second / "mysqlbinlog.exe")
     finally:
         runtime.close()
+
+
+def test_desktop_exports_preserve_versions_hashes_and_row_identity(runtime, tmp_path, monkeypatch):
+    case_id = create(runtime)
+    evidence(runtime, tmp_path, case_id)
+    tools(runtime, tmp_path, monkeypatch)
+    assert finish(runtime, case_id)["complete"]
+    paths = [tmp_path / "first.json", tmp_path / "second.json", tmp_path / "exports"]
+    for format, path in zip(("JSON", "JSON", "CSV"), paths):
+        call(runtime, "export_case", case_id=case_id, format=format, path=str(path))
+    documents = [json.loads(path.read_text(encoding="utf-8")) for path in paths[:2]]
+    for document in documents:
+        assert document["format_version"] == document["engine_revision"] == 2
+        assert document["analysis_format_version"] == 2
+        assert "reports" not in document["tables"]
+        document.pop("exported_at")
+    assert documents[0] == documents[1]
+    events = documents[0]["tables"]["binlog_events"]
+    with (paths[2] / "events_finance.accounts.csv").open(encoding="utf-8", newline="") as stream:
+        exported_events = list(csv.DictReader(stream))
+    assert len(exported_events) == len(events)
+    assert {(row["source_file"], int(row["log_position"]), int(row["row_index"]))
+            for row in exported_events} == {
+                (event["source_file"], event["log_position"], event["row_index"]) for event in events
+            }
+    assert "engine revision: 2" in (paths[2] / "about.txt").read_text(encoding="utf-8")
+    reopened = DesktopRuntime(runtime.root)
+    try:
+        reports = reopened.session(case_id)[1].reports.list_by_case(case_id)
+        assert [(report.format, report.version) for report in reports] == [
+            ("csv", 1), ("json", 1), ("json", 2)
+        ]
+        for report in reports:
+            for file in report.files:
+                path = Path(report.location)
+                if path.is_dir():
+                    path /= file.name
+                assert hashlib.sha256(path.read_bytes()).hexdigest() == file.sha256
+                assert path.stat().st_size == file.size_bytes
+        failed = response(reopened, "export_case", case_id=case_id, format="JSON", path=str(paths[0]))
+        assert failed["error_code"] == "FileExistsError"
+        assert len(reopened.session(case_id)[1].reports.list_by_case(case_id)) == 3
+    finally:
+        reopened.close()

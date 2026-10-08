@@ -71,6 +71,7 @@ class SqliteDomainRepository:
 
         evidence = scoped_evidence(
             normalization.scope,
+            case_id=case_id,
             schemas=self._schemas,
             physical=self._physical,
             events=self._events,
@@ -94,6 +95,7 @@ class SqliteDomainRepository:
             physical=_PhysicalRecords(evidence.physical_records),
             evidence=_EvidenceContext(
                 normalization.scope,
+                case_id=case_id,
                 integrity=self._integrity,
                 inventory=self._inventory,
                 tool_runs=self._tool_runs,
@@ -191,10 +193,11 @@ class _PhysicalRecords:
 
 
 class _EvidenceContext:
-    """What the evidence set as a whole can and cannot tell, within the scope."""
+    """What one case's evidence as a whole can and cannot tell, within the scope."""
 
-    def __init__(self, scope, *, integrity, inventory, tool_runs, physical, connection):
+    def __init__(self, scope, *, case_id, integrity, inventory, tool_runs, physical, connection):
         self._scope = scope
+        self._case_id = case_id
         self._integrity = integrity
         self._inventory = inventory
         self._tool_runs = tool_runs
@@ -203,18 +206,18 @@ class _EvidenceContext:
         self._integrity_cache = {}
 
     def inventory(self):
-        return self._inventory.inventory()
+        return self._inventory.inventory(case_id=self._case_id)
 
     def integrity_for(self, database, table):
         if not self._scope.includes(database, table):
             return None
         pair = (database, table)
         if pair not in self._integrity_cache:
-            self._integrity_cache[pair] = self._integrity.integrity_for(database, table)
+            self._integrity_cache[pair] = self._integrity.integrity_for(database, table, case_id=self._case_id)
         return self._integrity_cache[pair]
 
     def provenance_for(self, ref):
-        return self._tool_runs.provenance_for(ref)
+        return self._tool_runs.provenance_for(ref, case_id=self._case_id)
 
     def supported_data_types(self):
         return DEFAULT_SUPPORTED_TYPES
@@ -223,7 +226,9 @@ class _EvidenceContext:
         return frozenset(
             (r[0], r[1]) for r in self._connection.execute(
                 "SELECT s.database_name, s.table_name FROM schemas s "
-                "JOIN physical_extractions p ON p.evidence_id = s.evidence_id"
+                "JOIN physical_extractions p ON p.evidence_id = s.evidence_id "
+                "JOIN evidence_files e ON e.evidence_id = s.evidence_id WHERE e.case_id = ?",
+                (self._case_id,),
             ) if self._scope.includes(r[0], r[1])
         )
 
@@ -233,12 +238,16 @@ class _EvidenceContext:
             TableCreation(r['database_name'], r['table_name'], r['source_file'], r['log_position'],
                           ProvenanceReference(r['evidence_id'], 'mysqlbinlog', r['tool_run_id'],
                                               r['source_file'], r['log_position']))
-            for r in self._connection.execute('SELECT * FROM table_creations ORDER BY source_file, log_position')
+            for r in self._connection.execute(
+                "SELECT t.* FROM table_creations t JOIN evidence_files e "
+                "ON e.evidence_id = t.evidence_id WHERE e.case_id = ? "
+                "ORDER BY t.source_file, t.log_position", (self._case_id,),
+            )
             if self._scope.includes(r['database_name'], r['table_name'])
         )
 
     def tables_with_physical_evidence(self):
         return frozenset(
-            pair for pair in self._physical.tables_with_physical_evidence()
+            pair for pair in self._physical.tables_with_physical_evidence(case_id=self._case_id)
             if self._scope.includes(*pair)
         )

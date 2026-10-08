@@ -194,9 +194,7 @@ Where a piece of information came from.
 
 In forensics it is not enough to say "the balance is 4000". We have to be able to answer "how do you know that?" for every value we show. This model is what makes that possible.
 
-A provenance field is not placed inside every other model because it would be repeated everywhere. Instead the repositories save the `tool_run_id` on each row, so the link is still there.
-
-TODO: agree with Nisal on exactly what a tool run record stores. It needs at least the tool version, the full command, the exit code and a hash of the raw output, otherwise the run is not reproducible.
+The adapters leave this field empty: the tool run is attached when their output is saved, and every stored row keeps its `evidence_id` and `tool_run_id` (decision E in `sqlite-schema.md`). When the case database hands rows to the analysis, it rebuilds the reference from those columns and puts it on each `PhysicalRecord`, `BinlogEvent` and `TransactionMarker`. The domain services copy it into their findings, which is how a verdict names the event and the page row it compared. For a page row, `source_file` is the `.ibd` file's name and `log_position` is empty; for a marker, `log_position` is where the transaction starts.
 
 ---
 

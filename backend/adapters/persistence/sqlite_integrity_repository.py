@@ -14,6 +14,7 @@ says which table that file holds.
 import json
 from typing import Optional, Sequence
 
+from adapters.persistence._in_case import in_case
 from core.application.ports.integrity_repository_port import IntegrityRepositoryPort
 from core.domain.models.canonical import IntegrityResult
 
@@ -55,7 +56,8 @@ class SqliteIntegrityRepository(IntegrityRepositoryPort):
                 ),
             )
 
-    def integrity_for(self, database: str, table: str) -> Optional[IntegrityResult]:
+    def integrity_for(self, database: str, table: str, *,
+                      case_id: Optional[str] = None) -> Optional[IntegrityResult]:
         """The check for the file holding this table, or None.
 
         None means there is no checked .ibd for the table - either none was
@@ -65,15 +67,16 @@ class SqliteIntegrityRepository(IntegrityRepositoryPort):
         If one table was seized more than once, the most recently stored
         schema decides which file is used, the same rule schema_for() uses.
         """
+        condition, args = in_case(case_id, "i.evidence_id")
         row = self._connection.execute(
             f"""
             SELECT {_prefixed('i')} FROM integrity_results i
             JOIN schemas s ON s.evidence_id = i.evidence_id
-            WHERE s.database_name = ? AND s.table_name = ?
+            WHERE s.database_name = ? AND s.table_name = ? AND {condition}
             ORDER BY s.rowid DESC
             LIMIT 1
             """,
-            (database, table),
+            (database, table, *args),
         ).fetchone()
         return _row_to_result(row) if row is not None else None
 

@@ -27,6 +27,7 @@ find_by_id().
 import json
 from typing import Optional, Sequence
 
+from adapters.persistence._in_case import in_case
 from adapters.persistence._timestamps import from_text, to_text
 from core.application.ports.tool_run_repository_port import ToolRunRepositoryPort
 from core.domain.models.canonical import EventRef, ProvenanceReference
@@ -96,7 +97,8 @@ class SqliteToolRunRepository(ToolRunRepositoryPort):
         ).fetchall()
         return [_row_to_tool_run(r) for r in rows]
 
-    def provenance_for(self, ref: EventRef) -> Optional[ProvenanceReference]:
+    def provenance_for(self, ref: EventRef, *,
+                       case_id: Optional[str] = None) -> Optional[ProvenanceReference]:
         """Which tool run produced the event at this position.
 
         Part of the domain layer's EvidenceContext protocol. EventRef is
@@ -109,15 +111,16 @@ class SqliteToolRunRepository(ToolRunRepositoryPort):
         there is nothing to show the examiner.
         """
         source_file, log_position, row_index = ref
+        condition, args = in_case(case_id, "e.evidence_id")
         row = self._connection.execute(
-            """
+            f"""
             SELECT t.tool_run_id, t.tool_name, t.evidence_id,
                    e.source_file, e.log_position, e.row_index
             FROM binlog_events e
             JOIN tool_runs t ON t.tool_run_id = e.tool_run_id
-            WHERE e.source_file = ? AND e.log_position = ? AND e.row_index = ?
+            WHERE e.source_file = ? AND e.log_position = ? AND e.row_index = ? AND {condition}
             """,
-            (source_file, log_position, row_index),
+            (source_file, log_position, row_index, *args),
         ).fetchone()
 
         if row is None:

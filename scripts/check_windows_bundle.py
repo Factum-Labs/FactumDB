@@ -42,11 +42,26 @@ def check(resources):
             result = json.loads(process.stdout.readline())
             assert result["ok"], result
             return result["result"]
+        # Seed only this disposable smoke-test account, as the Rust transport tests do.
+        # Native Windows Hello approval is covered separately by the host exchange tests.
+        seed = (
+            "import sys; sys.path.insert(0,sys.argv[1]); "
+            "from sidecar.desktop import DesktopRuntime; "
+            "from core.application.authentication import AuthenticationService; "
+            "r=DesktopRuntime(sys.argv[2]); salt=bytes(range(16)); "
+            "r.auth.accounts.create('BundleTest','bundletest',salt,"
+            "AuthenticationService.digest('Bundle test password 123',salt),r.auth.device.identity()); "
+            "r.close()"
+        )
+        subprocess.run([str(python), "-B", "-X", "utf8", "-c", seed,
+                        str(resources / "backend"), workspace], env=env, check=True, timeout=30)
         for attempt in range(2):
             process = subprocess.Popen(args, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE, text=True, encoding="utf-8")
             try:
                 assert request(process, "health")["application_configured"]
+                request(process, "auth_login", {"username": "BundleTest",
+                                                 "password": "Bundle test password 123"})
                 settings = request(process, "get_settings")
                 assert Path(settings["tools"]["python_path"]) == python
                 assert len(settings["bundled_tools"]) == 5

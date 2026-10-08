@@ -125,6 +125,7 @@ CREATE TABLE tool_runs (
 ) STRICT;
 
 CREATE INDEX idx_tool_runs_evidence ON tool_runs(evidence_id);
+CREATE INDEX idx_tool_runs_case ON tool_runs(case_id);
 ```
 
 This is the most important table in the schema. Almost every other table has a `tool_run_id`, so any value we show in a report can be traced back to the exact command that produced it. That is the whole "how do you know that?" requirement.
@@ -137,7 +138,7 @@ This is the most important table in the schema. Almost every other table has a `
 
 `stdout` and `stderr` are recorded separately, each with its own path, hash and size. Both are needed: `innochecksum` reports a damaged page on stderr, so keeping only stdout would record an empty success for a file the tool had just called invalid.
 
-The index is on `evidence_id` because "show me every tool run for this file" is the query the UI will use most.
+The index is on `evidence_id` because "show me every tool run for this file" is the query the UI will use most. The one on `case_id` is for listing a whole case's runs, which the case export does.
 
 ---
 
@@ -198,11 +199,15 @@ CREATE TABLE physical_records (
 
 CREATE INDEX idx_physical_table ON physical_records(database_name, table_name);
 CREATE INDEX idx_physical_deleted ON physical_records(is_deleted);
+CREATE INDEX idx_physical_evidence
+    ON physical_records(evidence_id, database_name, table_name);
 ```
 
 `page_no` and `page_offset` are nullable because we might not always be able to work them out, and a null is honest about that. In the scenario 2 evidence the deleted row is at page 4, offset 170.
 
 The index on `is_deleted` is there because "show me all recovered deleted rows" is going to be one of the main things an investigator asks for, and it is also one of the main screens to demonstrate.
+
+`idx_physical_evidence` is for reading one case's rows of one table, which goes through the case's evidence files (decision G).
 
 ---
 
@@ -263,9 +268,13 @@ CREATE TABLE transactions (
     start_position INTEGER NOT NULL,
     end_position   INTEGER NOT NULL
 ) STRICT;
+
+CREATE INDEX idx_transactions_evidence ON transactions(evidence_id, source_file);
 ```
 
 `gtid` and `xid` are both nullable because a server can be running without GTID enabled. We record what is there and do not invent the rest.
+
+The index serves reading a case's markers and replacing one binlog file's markers when it is decoded again.
 
 ---
 
@@ -278,6 +287,8 @@ CREATE TABLE transaction_events (
     event_order    INTEGER NOT NULL,
     PRIMARY KEY (transaction_id, event_id)
 ) STRICT;
+
+CREATE INDEX idx_transaction_events_event ON transaction_events(event_id);
 ```
 
 This one is not in the model list - it is added because `TransactionMarker.event_positions` is a list, and a list of things that already exist as rows should be a link table rather than a JSON blob. This way the foreign key actually checks that the event exists, which a JSON array of numbers could never do.
@@ -287,6 +298,8 @@ This one is not in the model list - it is added because `TransactionMarker.event
 A marker lists log positions, but since `row_index` was added one position can be several rows in `binlog_events` (a multi-row UPDATE or DELETE). Every row at the position is linked, and they share the position's `event_order`. Reading the marker back takes each position once, so `event_positions` comes back exactly as the adapter produced it.
 
 The events have to be saved before the markers. If a marker points at a position with no stored event, the foreign key rejects it, which is the point: a transaction claiming an event we do not have is a gap that should be noticed, not a dangling number.
+
+The primary key starts with `transaction_id`, so it cannot find the links of one event. That lookup happens for every event deleted when a binlog is decoded again, because the foreign key check has to confirm nothing still points at it, and without `idx_transaction_events_event` each check read the whole table. With 60,000 events, decoding the file again took 8.9 s without the index and 1.1 s with it.
 
 ---
 
@@ -303,6 +316,8 @@ CREATE TABLE integrity_results (
     page_counts_json TEXT CHECK (page_counts_json IS NULL OR json_valid(page_counts_json)),
     raw_summary      TEXT
 ) STRICT;
+
+CREATE INDEX idx_integrity_evidence ON integrity_results(evidence_id);
 ```
 
 `page_counts_json` holds the full page type breakdown from `innochecksum -S`, including the ones that are zero. In the first evidence set `Undo log page` is 0, and that zero is the reason the original balance of 5000 cannot be recovered from the `.ibd` file at all. It would be easy to drop zeros as noise but that would throw away the finding.
@@ -345,6 +360,8 @@ CREATE TABLE binlog_inventory (
     present_files_json TEXT NOT NULL CHECK (json_valid(present_files_json)),
     missing_files_json TEXT NOT NULL CHECK (json_valid(missing_files_json))
 ) STRICT;
+
+CREATE INDEX idx_inventory_evidence ON binlog_inventory(evidence_id);
 ```
 
 `missing_files_json` is worked out when we save, not calculated every time it is read, because it is what decides whether a mismatch gets reported as an evidence gap or as tampering. Storing it means the report and the screen can never disagree.
@@ -416,6 +433,32 @@ The results build on each other, so saving one stage deletes the stages after it
 
 ---
 
+## 16. reports
+
+```sql
+CREATE TABLE reports (
+    report_id   TEXT PRIMARY KEY,
+    case_id     TEXT NOT NULL REFERENCES cases(case_id),
+    format      TEXT NOT NULL CHECK (format IN ('json', 'csv', 'html', 'pdf')),
+    version     INTEGER NOT NULL CHECK (version >= 1),
+    location    TEXT NOT NULL,
+    files_json  TEXT NOT NULL CHECK (json_valid(files_json)),
+    analysed_at TEXT,
+    created_at  TEXT NOT NULL,
+    UNIQUE (case_id, format, version)
+) STRICT;
+```
+
+The report metadata: one row for every report or export made from a case. The project proposal promises "maintaining different versions of reports", and a case is often reported on more than once - before and after more evidence arrives, or after the analysis is run again.
+
+- `version` counts up separately for each format, so "the third JSON export of this case" means one thing. `report_id` is `<case>:<format>:v<version>`.
+- `files_json` lists every file written, each with its SHA-256 and size: one file for JSON or PDF, the whole folder for CSV. Anyone holding a copy can check it is the file FactumDB wrote by running `sha256sum` - no need to trust the tool for that.
+- `analysed_at` is the `saved_at` of the case's reconciliation result when the report was made, or empty if the analysis had not run. A report made before the analysis was run again shows that it describes the older analysis.
+
+The JSON and CSV exports record themselves (`case_export.py`). A PDF or HTML report can call `SqliteReportRepository.record()` once its file is written. The table is not part of the export itself, so exporting the same case twice still gives the same content.
+
+---
+
 ## Design decisions
 
 **A. IDs are text, not auto-increment integers.** Nisal's `Case` model already generates a UUID string for `case_id`, so the same style is used everywhere rather than having two different kinds of ID in one database. Consistency across the team is worth more here than the small speed difference.
@@ -428,9 +471,11 @@ The microseconds are always written, even when they are zero. Text only sorts in
 
 **D. Undecodable values are stored inside the JSON as `{"__undecodable__": "reason"}`.** This is safe because MySQL column values are always scalars - a number, a string, a date, or NULL. They are never dictionaries. So any dict appearing where a value should be can only be our marker, and it can never collide with real data.
 
-**E. Every table that holds extracted data has a `tool_run_id`.** That is what makes the provenance requirement actually true rather than just something we say in the report.
+**E. Every table that holds extracted data has a `tool_run_id`.** That is what makes the provenance requirement actually true rather than just something we say in the report. When rows are read for the analysis, each one comes back with a `ProvenanceReference` rebuilt from its `evidence_id`, `tool_run_id` and the run's tool name (`_provenance.py`), so the findings the domain services make can point to the run behind them. It is rebuilt on every read rather than stored twice, so it can never disagree with the row.
 
 **F. `STRICT` on every table.** Normally SQLite lets you put a string into an INTEGER column and says nothing. For a forensic tool that silently storing the wrong type is a bad failure mode, so `STRICT` turns it into an error instead.
+
+**G. Every read for one case goes through that case's evidence files.** The extracted rows have no `case_id` of their own; they reach their case through `evidence_id`. So the normalizer, the evidence handed to the analysis and the decoder's schema lookup only keep rows whose evidence file belongs to the case (`_in_case.py`). That keeps two cases in one database file apart even when they have a table with the same name, a binlog with the same name and events at the same positions. Without it the newest schema of a table was used for every case, and one case's analysis read the other case's rows. Read methods that are given no case still cover the whole database. The indexes added for these reads are checked by `test_sqlite_indexes.py`, which fails if any statement run on a case makes SQLite read a whole table.
 
 ---
 

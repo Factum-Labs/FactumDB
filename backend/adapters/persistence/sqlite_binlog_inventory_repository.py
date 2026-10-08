@@ -14,6 +14,7 @@ import json
 import os
 from typing import Optional, Sequence
 
+from adapters.persistence._in_case import in_case
 from core.application.ports.binlog_inventory_repository_port import (
     BinlogInventoryRepositoryPort,
 )
@@ -59,14 +60,17 @@ class SqliteBinlogInventoryRepository(BinlogInventoryRepositoryPort):
                 ),
             )
 
-    def inventory(self) -> Optional[BinlogInventory]:
+    def inventory(self, *, case_id: Optional[str] = None) -> Optional[BinlogInventory]:
         """The inventory for the case, or None if no index file was seized.
 
         None is weaker than an empty missing list: it means we cannot tell
         whether any logs are missing at all.
         """
+        condition, args = in_case(case_id)
         row = self._connection.execute(
-            f"SELECT {_COLUMNS} FROM binlog_inventory ORDER BY rowid DESC LIMIT 1"
+            f"SELECT {_COLUMNS} FROM binlog_inventory WHERE {condition} "
+            "ORDER BY rowid DESC LIMIT 1",
+            args,
         ).fetchone()
         return _row_to_inventory(row) if row is not None else None
 

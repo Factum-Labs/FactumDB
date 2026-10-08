@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import replace
 
+from adapters.persistence._in_case import in_case
 from core.application.models import DecodedBinlog, NormalizedEvidence
 from core.application.errors import ConflictError, NotFoundError, PrerequisiteError
 
@@ -116,7 +117,7 @@ class SqliteExtractionRepository:
                 "SELECT 1 FROM cases WHERE case_id = ?", (case_id,)
             ).fetchone() is None:
                 raise NotFoundError(f"case not found: {case_id}")
-            stored = self._stored_counts()
+            stored = self._stored_counts(case_id)
             counts = {
                 "schemas": (len(normalized.schemas), stored["schemas"]),
                 "physical_records": (len(normalized.physical_records), stored["physical_records"]),
@@ -161,18 +162,22 @@ class SqliteExtractionRepository:
                 )
             self._inventory.save(inventory, evidence_id)
 
-    def _stored_counts(self) -> dict[str, int]:
+    def _stored_counts(self, case_id: str) -> dict[str, int]:
+        """How much of each kind of evidence this case has stored."""
+        condition, args = in_case(case_id)
+
         def count(sql: str) -> int:
-            return self._connection.execute(sql).fetchone()[0]
+            return self._connection.execute(sql, args).fetchone()[0]
 
         return {
             # One schema per table, however many files it was extracted from.
             "schemas": count(
-                "SELECT COUNT(*) FROM (SELECT DISTINCT database_name, table_name FROM schemas)"
+                "SELECT COUNT(*) FROM (SELECT DISTINCT database_name, table_name "
+                f"FROM schemas WHERE {condition})"
             ),
-            "physical_records": count("SELECT COUNT(*) FROM physical_records"),
-            "events": count("SELECT COUNT(*) FROM binlog_events"),
-            "markers": count("SELECT COUNT(*) FROM transactions"),
+            "physical_records": count(f"SELECT COUNT(*) FROM physical_records WHERE {condition}"),
+            "events": count(f"SELECT COUNT(*) FROM binlog_events WHERE {condition}"),
+            "markers": count(f"SELECT COUNT(*) FROM transactions WHERE {condition}"),
         }
 
     def _validate_provenance(self, case_id: str, evidence_id: str, tool_run_id: str,

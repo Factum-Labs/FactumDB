@@ -17,6 +17,11 @@ and anyone can follow a value back to the command that produced it.
 
 An export never overwrites an earlier one. Two exports mixed in one folder
 could no longer be told apart.
+
+Every export written to disk is recorded in the case's report history (the
+reports table): its version and the SHA-256 of each file, so a copy someone
+holds later can be checked against what was written. The history is not part
+of the export itself, so the same case still exports the same way.
 """
 
 import csv
@@ -28,6 +33,7 @@ from pathlib import Path
 
 from adapters.persistence._timestamps import to_text
 from adapters.persistence._values import decode_value
+from adapters.persistence.sqlite_report_repository import SqliteReportRepository
 from core.application.errors import NotFoundError
 from core.domain.models.values import UNOBSERVED, UndecodableValue
 from core.engine import ENGINE_REVISION, ANALYSIS_FORMAT_VERSION
@@ -125,12 +131,20 @@ def case_export(connection, case_id: str, *, now=_utc_now) -> dict:
 
 
 def write_json(connection, case_id: str, path, *, now=_utc_now) -> Path:
-    document = case_export(connection, case_id, now=now)
+    """The whole case in one new file, recorded as the next JSON version."""
+    moment = now()
+    document = case_export(connection, case_id, now=lambda: moment)
     path = Path(path)
     with open(path, "x", encoding="utf-8") as out:      # "x" never overwrites
         json.dump(document, out, indent=2, sort_keys=True, ensure_ascii=False)
         out.write("\n")
+    _record(connection, case_id, "json", path, [path], moment)
     return path
+
+
+def _record(connection, case_id, format, location, files, moment):
+    """Add a finished export to the case's report history."""
+    SqliteReportRepository(connection, now=lambda: moment).record(case_id, format, location, files)
 
 
 def _row(row) -> dict:
@@ -149,8 +163,12 @@ def _row(row) -> dict:
 
 
 def write_csv(connection, case_id: str, folder, *, now=_utc_now) -> list:
-    """One CSV file per kind of data, in a new folder. Returns the files written."""
-    tables = case_export(connection, case_id, now=now)["tables"]
+    """One CSV file per kind of data, in a new folder. Returns the files written.
+
+    The folder is recorded as the next CSV version, with about.txt included.
+    """
+    moment = now()
+    tables = case_export(connection, case_id, now=lambda: moment)["tables"]
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=False)
 
@@ -181,6 +199,7 @@ def write_csv(connection, case_id: str, folder, *, now=_utc_now) -> list:
         f"Format version: {FORMAT_VERSION}; engine revision: {ENGINE_REVISION}; "
         f"analysis format version: {ANALYSIS_FORMAT_VERSION}\n\n" + _ABOUT, encoding="utf-8",
     )
+    _record(connection, case_id, "csv", folder, [*written, folder / "about.txt"], moment)
     return written
 
 

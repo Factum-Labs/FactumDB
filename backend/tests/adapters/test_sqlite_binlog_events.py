@@ -16,7 +16,7 @@ import pytest
 
 from adapters.persistence.sqlite_binlog_event_repository import SqliteBinlogEventRepository
 from adapters.tools.mysqlbinlog_adapter import MysqlBinlogAdapter
-from core.domain.models.canonical import BinlogEvent, Column, Schema
+from core.domain.models.canonical import BinlogEvent, Column, ProvenanceReference, Schema
 from tests.adapters.conftest import a_run, an_ibd
 
 WHEN = datetime(2026, 8, 15, 19, 6, 25, tzinfo=timezone.utc)
@@ -101,6 +101,7 @@ def test_find_by_ref_names_each_row_of_a_multi_row_event(binlog, stored) -> None
 
 
 def test_an_update_round_trips(binlog, stored) -> None:
+    """It comes back as saved, plus a reference to the run it was saved under."""
     evidence_id, run_id = stored
     event = an_event(
         101,

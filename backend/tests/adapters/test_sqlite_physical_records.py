@@ -7,6 +7,7 @@ distinction between "deleted" and "never seized" gets decided.
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -16,7 +17,7 @@ from adapters.persistence._values import from_json, to_json
 from adapters.persistence.sqlite_physical_record_repository import (
     SqlitePhysicalRecordRepository,
 )
-from core.domain.models.canonical import PhysicalRecord
+from core.domain.models.canonical import PhysicalRecord, ProvenanceReference
 from core.domain.models.values import UNOBSERVED, UndecodableValue
 from tests.adapters.conftest import a_run, an_ibd
 
@@ -121,11 +122,15 @@ def test_an_unstorable_value_is_refused() -> None:
 
 
 def test_rows_round_trip(records, stored) -> None:
+    """They come back as saved, plus a reference to the run and the file."""
     evidence_id, run_id = stored
     batch = [a_row(101, "Amal", 4000, "suspended"), a_row(103, "Kamal", 3200, "active")]
     records.save_many(batch, evidence_id, run_id)
 
-    assert records.records_for("finance", "accounts") == batch
+    from_run = ProvenanceReference(evidence_id, "ibd2sql", run_id, "accounts.ibd")
+    assert records.records_for("finance", "accounts") == [
+        replace(row, provenance=from_run) for row in batch
+    ]
 
 
 def test_an_empty_batch_is_a_no_op(records, stored, connection) -> None:

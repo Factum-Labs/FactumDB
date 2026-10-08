@@ -42,6 +42,7 @@ class SqliteEvidenceNormalizer:
             raise NotFoundError(f"case not found: {case_id}")
         return scoped_evidence(
             self._scopes.scope_for(case_id),
+            case_id=case_id,
             schemas=self._schemas,
             physical=self._physical,
             events=self._events,
@@ -49,26 +50,32 @@ class SqliteEvidenceNormalizer:
         )
 
 
-def scoped_evidence(scope: EvidenceScope, *, schemas, physical, events,
+def scoped_evidence(scope: EvidenceScope, *, case_id, schemas, physical, events,
                     transactions) -> NormalizedEvidence:
-    """The stored evidence of this case database, narrowed to one scope."""
+    """One case's stored evidence, narrowed to one scope.
+
+    Only the case's own evidence files are read, so another case kept in the
+    same database never becomes part of this one.
+    """
     in_scope = scope.includes
 
     kept_schemas = tuple(
-        schemas.schema_for(database, table)
-        for database, table in schemas.tables()
+        schemas.schema_for(database, table, case_id=case_id)
+        for database, table in schemas.tables(case_id=case_id)
         if in_scope(database, table)
     )
     kept_records = tuple(
         record
-        for database, table in sorted(physical.tables_with_physical_evidence())
+        for database, table in sorted(physical.tables_with_physical_evidence(case_id=case_id))
         if in_scope(database, table)
-        for record in physical.records_for(database, table)
+        for record in physical.records_for(database, table, case_id=case_id)
     )
-    kept_events = tuple(e for e in events.events() if in_scope(e.database, e.table))
+    kept_events = tuple(
+        e for e in events.events(case_id=case_id) if in_scope(e.database, e.table)
+    )
 
     kept_refs = {(e.source_file, e.log_position) for e in kept_events}
-    narrowed = (_narrow(marker, kept_refs) for marker in transactions.markers())
+    narrowed = (_narrow(marker, kept_refs) for marker in transactions.markers(case_id=case_id))
     kept_markers = tuple(marker for marker in narrowed if marker is not None)
 
     return NormalizedEvidence(kept_schemas, kept_records, kept_events, kept_markers)

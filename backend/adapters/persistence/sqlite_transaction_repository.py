@@ -19,8 +19,10 @@ markers() is the other half of the domain layer's EventSource protocol;
 events() is on the binlog event repository.
 """
 
-from typing import Sequence
+from typing import Optional, Sequence
 
+from adapters.persistence._in_case import in_case
+from adapters.persistence._provenance import provenance_from
 from core.application.ports.transaction_repository_port import (
     TransactionRepositoryPort,
 )
@@ -31,7 +33,15 @@ _COLUMNS = """
     status, source_file, start_position, end_position
 """
 
-_ORDER = "ORDER BY source_file, start_position"
+# Reads also fetch the name of the tool that saw each marker, which its
+# provenance needs (see _provenance.py).
+_SELECT = (
+    "SELECT " + ", ".join(f"t.{c.strip()}" for c in _COLUMNS.split(","))
+    + ", r.tool_name FROM transactions t"
+    " LEFT JOIN tool_runs r ON r.tool_run_id = t.tool_run_id"
+)
+
+_ORDER = "ORDER BY t.source_file, t.start_position"
 
 
 class SqliteTransactionRepository(TransactionRepositoryPort):
@@ -83,16 +93,15 @@ class SqliteTransactionRepository(TransactionRepositoryPort):
                 )
                 self._link_events(transaction_id, evidence_id, marker)
 
-    def markers(self) -> Sequence[TransactionMarker]:
+    def markers(self, *, case_id: Optional[str] = None) -> Sequence[TransactionMarker]:
         """Every transaction marker in the case, in log order."""
-        rows = self._connection.execute(
-            f"SELECT {_COLUMNS} FROM transactions {_ORDER}"
-        ).fetchall()
+        condition, args = in_case(case_id, "t.evidence_id")
+        rows = self._connection.execute(f"{_SELECT} WHERE {condition} {_ORDER}", args).fetchall()
         return [self._load(r) for r in rows]
 
     def list_by_evidence(self, evidence_id: str) -> Sequence[TransactionMarker]:
         rows = self._connection.execute(
-            f"SELECT {_COLUMNS} FROM transactions WHERE evidence_id = ? {_ORDER}",
+            f"{_SELECT} WHERE t.evidence_id = ? {_ORDER}",
             (evidence_id,),
         ).fetchall()
         return [self._load(r) for r in rows]
@@ -104,12 +113,8 @@ class SqliteTransactionRepository(TransactionRepositoryPort):
         evidence file, the same way list_deleted() does for physical rows.
         """
         rows = self._connection.execute(
-            f"""
-            SELECT {_prefixed('t')} FROM transactions t
-            JOIN evidence_files e ON e.evidence_id = t.evidence_id
-            WHERE e.case_id = ? AND t.status = 'incomplete'
-            ORDER BY t.source_file, t.start_position
-            """,
+            f"{_SELECT} JOIN evidence_files e ON e.evidence_id = t.evidence_id "
+            f"WHERE e.case_id = ? AND t.status = 'incomplete' {_ORDER}",
             (case_id,),
         ).fetchall()
         return [self._load(r) for r in rows]
@@ -174,13 +179,10 @@ class SqliteTransactionRepository(TransactionRepositoryPort):
             gtid=row["gtid"],
             xid=row["xid"],
             thread_id=row["thread_id"],
+            provenance=provenance_from(row, row["source_file"], row["start_position"]),
         )
 
 
 def _transaction_id(evidence_id: str, source_file: str, start_position: int) -> str:
     """A transaction starts at one place in one file, so that names it."""
     return f"{evidence_id}:{source_file}@{start_position}"
-
-
-def _prefixed(alias: str) -> str:
-    return ", ".join(f"{alias}.{c.strip()}" for c in _COLUMNS.split(","))

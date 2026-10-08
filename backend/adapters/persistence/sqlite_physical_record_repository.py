@@ -16,8 +16,10 @@ records_for() and tables_with_physical_evidence() are domain layer protocol
 methods, so this class can be passed straight to the reconciliation service.
 """
 
-from typing import FrozenSet, Sequence, Tuple
+from typing import FrozenSet, Optional, Sequence, Tuple
 
+from adapters.persistence._in_case import in_case
+from adapters.persistence._provenance import provenance_from
 from adapters.persistence._values import from_json, to_json
 from core.application.ports.physical_record_repository_port import (
     PhysicalRecordRepositoryPort,
@@ -28,6 +30,15 @@ _COLUMNS = """
     record_id, evidence_id, tool_run_id, database_name, table_name,
     values_json, is_deleted, page_no, page_offset
 """
+
+# Reads also fetch the tool's name and the evidence file's name, which a
+# row's provenance needs (see _provenance.py).
+_SELECT = (
+    "SELECT " + ", ".join(f"p.{c.strip()}" for c in _COLUMNS.split(","))
+    + ", t.tool_name, e.filename FROM physical_records p"
+    " LEFT JOIN tool_runs t ON t.tool_run_id = p.tool_run_id"
+    " LEFT JOIN evidence_files e ON e.evidence_id = p.evidence_id"
+)
 
 
 class SqlitePhysicalRecordRepository(PhysicalRecordRepositoryPort):
@@ -87,17 +98,19 @@ class SqlitePhysicalRecordRepository(PhysicalRecordRepositoryPort):
                 rows,
             )
 
-    def records_for(self, database: str, table: str) -> Sequence[PhysicalRecord]:
+    def records_for(self, database: str, table: str, *,
+                    case_id: Optional[str] = None) -> Sequence[PhysicalRecord]:
         """Every row for one table, deleted ones included.
 
         Deleted rows are included on purpose: a row that survives only as a
         deleted remnant is a finding, not noise, and the reconciliation
         service needs to see it to say so.
         """
+        condition, args = in_case(case_id, "p.evidence_id")
         rows = self._connection.execute(
-            f"SELECT {_COLUMNS} FROM physical_records "
-            "WHERE database_name = ? AND table_name = ? ORDER BY record_id",
-            (database, table),
+            f"{_SELECT} WHERE p.database_name = ? AND p.table_name = ? AND {condition} "
+            "ORDER BY p.record_id",
+            (database, table, *args),
         ).fetchall()
         return [_row_to_record(r) for r in rows]
 
@@ -109,19 +122,15 @@ class SqlitePhysicalRecordRepository(PhysicalRecordRepositoryPort):
         joins through evidence_files rather than duplicating the column.
         """
         rows = self._connection.execute(
-            """
-            SELECT p.record_id, p.evidence_id, p.tool_run_id, p.database_name,
-                   p.table_name, p.values_json, p.is_deleted, p.page_no, p.page_offset
-            FROM physical_records p
-            JOIN evidence_files e ON e.evidence_id = p.evidence_id
-            WHERE e.case_id = ? AND p.is_deleted = 1
-            ORDER BY p.database_name, p.table_name, p.record_id
-            """,
+            f"{_SELECT} WHERE e.case_id = ? AND p.is_deleted = 1 "
+            "ORDER BY p.database_name, p.table_name, p.record_id",
             (case_id,),
         ).fetchall()
         return [_row_to_record(r) for r in rows]
 
-    def tables_with_physical_evidence(self) -> FrozenSet[Tuple[str, str]]:
+    def tables_with_physical_evidence(
+        self, *, case_id: Optional[str] = None
+    ) -> FrozenSet[Tuple[str, str]]:
         """Every (database, table) a tablespace was actually seized for.
 
         This is what lets the reconciliation service tell two very different
@@ -135,12 +144,14 @@ class SqlitePhysicalRecordRepository(PhysicalRecordRepositoryPort):
         reported as "we were never given the file". So the tables come from
         the schemas as well, since every seized .ibd has its schema extracted.
         """
+        condition, args = in_case(case_id)
         rows = self._connection.execute(
-            """
-            SELECT database_name, table_name FROM schemas
+            f"""
+            SELECT database_name, table_name FROM schemas WHERE {condition}
             UNION
-            SELECT database_name, table_name FROM physical_records
-            """
+            SELECT database_name, table_name FROM physical_records WHERE {condition}
+            """,
+            (*args, *args),
         ).fetchall()
         return frozenset((r["database_name"], r["table_name"]) for r in rows)
 
@@ -165,4 +176,5 @@ def _row_to_record(row) -> PhysicalRecord:
         is_deleted=bool(row["is_deleted"]),
         page_no=row["page_no"],
         page_offset=row["page_offset"],
+        provenance=provenance_from(row, row["filename"]),
     )
