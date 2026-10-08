@@ -15,6 +15,7 @@ from adapters.persistence.sqlite_extraction_repository import (
 from adapters.persistence.sqlite_integrity_repository import SqliteIntegrityRepository
 from adapters.persistence.sqlite_normalization_repository import SqliteNormalizationRepository
 from adapters.persistence.sqlite_physical_record_repository import SqlitePhysicalRecordRepository
+from adapters.persistence.sqlite_report_repository import SqliteReportRepository
 from adapters.persistence.sqlite_schema_repository import SqliteSchemaRepository
 from adapters.persistence.sqlite_tool_run_repository import SqliteToolRunRepository
 from adapters.persistence.sqlite_transaction_repository import SqliteTransactionRepository
@@ -31,6 +32,7 @@ class SqliteApplicationStores:
     scopes: SqliteEvidenceScopeRepository
     normalizer: SqliteEvidenceNormalizer
     domain: SqliteDomainRepository
+    reports: SqliteReportRepository
 
     def schemas_for_case(self, case_id: str) -> "CaseSchemaCatalog":
         """The schema catalog of one case, for naming that case's @N columns.
@@ -88,4 +90,5 @@ def build_sqlite_application_stores(connection, *, now=None) -> SqliteApplicatio
     )
     return SqliteApplicationStores(
         cases, evidence, tool_runs, schemas, extraction, scopes, normalizer, domain,
+        SqliteReportRepository(shared, **clock),
     )

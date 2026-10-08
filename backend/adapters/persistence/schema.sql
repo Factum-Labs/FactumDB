@@ -183,3 +183,14 @@ CREATE TABLE IF NOT EXISTS analysis_results (
     saved_at    TEXT NOT NULL,
     PRIMARY KEY (case_id, stage)
 ) STRICT;
+CREATE TABLE IF NOT EXISTS reports (
+    report_id   TEXT PRIMARY KEY,
+    case_id     TEXT NOT NULL REFERENCES cases(case_id),
+    format      TEXT NOT NULL CHECK (format IN ('json', 'csv', 'html', 'pdf')),
+    version     INTEGER NOT NULL CHECK (version >= 1),
+    location    TEXT NOT NULL,
+    files_json  TEXT NOT NULL CHECK (json_valid(files_json)),
+    analysed_at TEXT,
+    created_at  TEXT NOT NULL,
+    UNIQUE (case_id, format, version)
+) STRICT;

@@ -175,4 +175,4 @@ def test_schema_can_be_created_twice(connection) -> None:
     tables = connection.execute(
         "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'"
     ).fetchone()[0]
-    assert tables == 15
+    assert tables == 16
