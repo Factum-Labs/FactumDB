@@ -1,7 +1,10 @@
 //! Desktop transport. Forensic operations stay in the Python application.
+mod native_verification;
+#[cfg(windows)]
+mod windows_hello;
 use serde_json::{json, Value};
 use std::{
-    io::{BufRead, BufReader, Write},
+    io::BufReader,
     path::PathBuf,
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     sync::{Arc, Mutex},
@@ -25,14 +28,15 @@ impl Drop for BackendProcess {
 }
 impl BackendProcess {
     fn start(source: PathBuf, workspace: PathBuf) -> Result<Self, String> {
-        let mut roots = vec![source.parent().unwrap().join("runtime/windows")];
+        let platform = if cfg!(windows) { "windows" } else { "linux" };
+        let mut roots = vec![source.parent().unwrap().join("runtime").join(platform)];
         if cfg!(debug_assertions) {
-            roots.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/runtime/windows"));
+            roots.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/runtime").join(platform));
         }
         let bundle = roots
             .into_iter()
             .find(|p| p.join("manifest.json").is_file());
-        let candidates: Vec<(String, Vec<&str>)> = if let Some(root) = &bundle {
+        let candidates: Vec<(String, Vec<&str>)> = if let Some(root) = bundle.as_ref().filter(|_| cfg!(windows)) {
             vec![(
                 root.join("python/python.exe")
                     .to_string_lossy()
@@ -69,6 +73,9 @@ impl BackendProcess {
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::inherit());
+            if cfg!(windows) {
+                command.arg("--native-verification");
+            }
             if let Some(root) = &bundle {
                 command.env("FACTUMDB_BUNDLE_ROOT", root);
             }
@@ -99,26 +106,38 @@ impl BackendProcess {
         Err(format!("Cannot start the backend. Install Python 3.11+ or set FACTUMDB_PYTHON to its executable. {}", errors.join("; ")))
     }
     fn request(&mut self, command: String, payload: Value) -> Result<Value, String> {
+        self.request_with_verifier(command, payload, || {
+            Err("Windows Hello needs an active FactumDB window.".into())
+        })
+    }
+    fn request_with_verifier(
+        &mut self,
+        command: String,
+        payload: Value,
+        verify: impl FnMut() -> Result<(), String>,
+    ) -> Result<Value, String> {
         self.sequence += 1;
         let id = self.sequence.to_string();
-        let request = json!({"request_id": id, "command": command, "payload": payload});
-        writeln!(self.input, "{request}")
-            .and_then(|_| self.input.flush())
-            .map_err(|e| e.to_string())?;
-        let mut line = String::new();
-        if self
-            .output
-            .read_line(&mut line)
-            .map_err(|e| e.to_string())?
-            == 0
-        {
-            return Err("Python backend exited. Reopen FactumDB and check the configured Python installation.".into());
-        }
-        let response: Value =
-            serde_json::from_str(&line).map_err(|e| format!("Invalid backend response: {e}"))?;
-        if response["request_id"] != id {
-            return Err("Backend response correlation failed".into());
-        }
+        let response = native_verification::exchange(
+            &mut self.input,
+            &mut self.output,
+            &id,
+            &command,
+            payload,
+            verify,
+        );
+        let response = match response {
+            Ok(response) => response,
+            Err(error) => {
+                // A malformed private exchange must not leave Python waiting
+                // for an approval while later renderer requests enter the pipe.
+                if let Ok(mut child) = self.child.lock() {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
+                return Err(error);
+            }
+        };
         if response["ok"] != true {
             return Err(format!(
                 "{}: {}",
@@ -141,11 +160,16 @@ struct Backend {
 
 #[tauri::command]
 async fn backend_request(
+    window: tauri::WebviewWindow,
     state: tauri::State<'_, Backend>,
     command: String,
     payload: Value,
 ) -> Result<Value, String> {
     let backend = state.inner().clone();
+    #[cfg(windows)]
+    let window_handle = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
+    #[cfg(not(windows))]
+    let _ = window;
     tauri::async_runtime::spawn_blocking(move || {
         let mut slot = backend.process.lock().map_err(|e| e.to_string())?;
         if slot.is_none() {
@@ -153,7 +177,18 @@ async fn backend_request(
             *backend.child.lock().map_err(|e| e.to_string())? = Some(process.child.clone());
             *slot = Some(process);
         }
-        slot.as_mut().unwrap().request(command, payload)
+        slot.as_mut()
+            .unwrap()
+            .request_with_verifier(command, payload, || {
+                #[cfg(windows)]
+                {
+                    windows_hello::verify(window_handle)
+                }
+                #[cfg(not(windows))]
+                {
+                    Err("Native Windows verification is unavailable on this platform.".into())
+                }
+            })
     })
     .await
     .map_err(|e| e.to_string())?
@@ -253,6 +288,102 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn native_signup_exchange_validates_inputs_and_consumes_host_approval() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let workspace = std::env::temp_dir().join(format!(
+            "factumdb-native-auth-{}-{stamp}",
+            std::process::id()
+        ));
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../backend");
+        let mut process = BackendProcess::start(source.clone(), workspace.clone()).unwrap();
+        let signup = json!({"username": "NativeTest", "password": "Native signup password 123", "password_confirmation": "Native signup password 123"});
+        let no_prompt =
+            || -> Result<(), String> { panic!("Invalid inputs opened a native prompt") };
+        let mut invalid = signup.clone();
+        invalid["password_confirmation"] = json!("mismatch");
+        assert!(process
+            .request_with_verifier("auth_signup".into(), invalid, no_prompt)
+            .is_err());
+        let mut forged = signup.clone();
+        forged["device_verified"] = json!(true);
+        assert!(process
+            .request_with_verifier("auth_signup".into(), forged, no_prompt)
+            .is_err());
+        assert!(process
+            .request_with_verifier("auth_signup".into(), signup.clone(), || Err(
+                "Windows Hello cancelled".into()
+            ))
+            .unwrap_err()
+            .contains("cancelled"));
+        assert_eq!(
+            process.request("auth_status".into(), json!({})).unwrap()["user"],
+            Value::Null
+        );
+        let result = process
+            .request_with_verifier("auth_signup".into(), signup.clone(), || Ok(()))
+            .unwrap();
+        assert_eq!(result["user"]["username"], "NativeTest");
+        process.request("auth_logout".into(), json!({})).unwrap();
+        assert!(process
+            .request_with_verifier("auth_signup".into(), signup, no_prompt)
+            .unwrap_err()
+            .contains("already registered"));
+        assert!(process
+            .request(
+                "device_verification_response".into(),
+                json!({"result": "verified"})
+            )
+            .unwrap_err()
+            .contains("unknown_command"));
+        drop(process);
+        let mut restarted = BackendProcess::start(source, workspace.clone()).unwrap();
+        assert_eq!(
+            restarted.request("auth_status".into(), json!({})).unwrap()["user"],
+            Value::Null
+        );
+        restarted
+            .request(
+                "auth_login".into(),
+                json!({"username": "NativeTest", "password": "Native signup password 123"}),
+            )
+            .unwrap();
+        drop(restarted);
+        std::fs::remove_dir_all(workspace).unwrap();
+    }
+    fn seed_account(source: &std::path::Path, workspace: &std::path::Path) {
+        // Provision a password account in a test workspace without opening a
+        // device credential dialog in an unattended transport test.
+        let bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources/runtime/windows/python/python.exe");
+        let mut command = if cfg!(windows) && bundled.is_file() {
+            Command::new(bundled)
+        } else if let Ok(program) = std::env::var("FACTUMDB_PYTHON") {
+            Command::new(program)
+        } else if cfg!(windows) {
+            let mut command = Command::new("py");
+            command.arg("-3.11");
+            command
+        } else {
+            Command::new("python3")
+        };
+        let code = "import sys; sys.path.insert(0,sys.argv[1]); from sidecar.desktop import DesktopRuntime; from core.application.authentication import AuthenticationService; r=DesktopRuntime(sys.argv[2]); salt=bytes(range(16)); r.auth.accounts.create('Test','test',salt,AuthenticationService.digest('Transport password 123',salt),r.auth.device.identity()); r.close()";
+        let result = command
+            .args(["-B", "-c", code])
+            .arg(source)
+            .arg(workspace)
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
     #[test]
     fn python_transport_persists_a_case_and_runs_the_real_pipeline() {
         let stamp = std::time::SystemTime::now()
@@ -263,7 +394,18 @@ mod tests {
             std::env::temp_dir().join(format!("factumdb-transport-{}-{stamp}", std::process::id()));
         std::fs::create_dir_all(&workspace).unwrap();
         let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../backend");
+        seed_account(&source, &workspace);
         let mut process = BackendProcess::start(source.clone(), workspace.clone()).unwrap();
+        assert!(process
+            .request("list_cases".into(), json!({}))
+            .unwrap_err()
+            .contains("AuthenticationRequiredError"));
+        process
+            .request(
+                "auth_login".into(),
+                json!({"username": "Test", "password": "Transport password 123"}),
+            )
+            .unwrap();
         let created = process
             .request(
                 "create_case".into(),
@@ -342,6 +484,16 @@ mod tests {
             "Python resources were not copied by the Tauri build"
         );
         let mut restarted = BackendProcess::start(bundled, workspace.clone()).unwrap();
+        assert_eq!(
+            restarted.request("auth_status".into(), json!({})).unwrap()["user"],
+            Value::Null
+        );
+        restarted
+            .request(
+                "auth_login".into(),
+                json!({"username": "Test", "password": "Transport password 123"}),
+            )
+            .unwrap();
         assert_eq!(
             restarted
                 .request("get_case_data".into(), json!({"case_id": case_id}))

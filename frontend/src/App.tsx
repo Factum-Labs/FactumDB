@@ -3,6 +3,7 @@ import { useApp } from './store'
 import type { Screen } from './data/types'
 import { A, A_DARK, A_SOFT, GRN } from './lib/tokens'
 import { Logo } from './components/Logo'
+import { AuthScreen } from './screens/AuthScreen'
 
 import { CasesScreen, IntakeScreen, PipelineScreen, TimelineScreen, RecordHistoryScreen, ReconciliationScreen, GapsScreen, ProvenanceScreen, ReportScreen, SettingsScreen } from './screens/ConnectedScreens'
 
@@ -63,6 +64,8 @@ const SCREENS: Record<Screen, FC> = {
 }
 
 export default function App() {
+  const user = useApp(s => s.user)
+  const signOut = useApp(s => s.signOut)
   const data = useApp(s => s.data)
   const ready = useApp(s => s.ready)
   const busy = useApp(s => s.busy)
@@ -76,6 +79,8 @@ export default function App() {
 
   const [title, subtitle] = META[screen]
   const Screen = SCREENS[screen]
+
+  if (!user) return <AuthScreen />
 
   return (
     <div className="flex h-screen flex-col bg-page text-ink">
@@ -93,7 +98,8 @@ export default function App() {
           Read-only evidence mode
         </div>
         <div className="h-[14px] w-px bg-line" />
-        <div className="text-[11.5px] text-muted">Examiner: {data?.case.examiner ?? '—'}</div>
+        <div className="text-[11.5px] text-muted">Signed in: {user.username}</div>
+        <button disabled={busy} onClick={() => { void signOut() }} className="text-[11.5px] text-accent disabled:opacity-40">Sign out</button>
       </div>
 
       {/* Top tabs nav */}
@@ -142,10 +148,12 @@ export default function App() {
             )}
           </div>
 
-          <div className="flex-1 overflow-auto px-[18px] pb-10 pt-4">
+          <div className={'min-h-0 flex-1 overflow-auto px-[18px] pt-4 ' + (screen === 'pipeline' ? 'flex flex-col pb-4' : 'pb-10')}>
             {error && <div role="alert" className="mb-4 whitespace-pre-wrap rounded border border-red-300 bg-red-50 p-3 text-xs text-red-800">{error}{!ready && <button onClick={() => { void initialize() }} className="ml-3 underline">Retry connection</button>}</div>}
             {notice && <div role="status" className="mb-4 rounded border border-green-300 bg-green-50 p-3 text-xs text-green-800">{notice}</div>}
-            {ready ? <Screen /> : !error && <p className="text-sm text-muted">Connecting to the Python backend…</p>}
+            <div className={screen === 'pipeline' ? 'min-h-0 flex-1' : 'contents'}>
+              {ready ? <Screen /> : !error && <p className="text-sm text-muted">Connecting to the Python backend…</p>}
+            </div>
           </div>
 
           {/* Status bar */}

@@ -1,5 +1,11 @@
 # FactumDB SQLite Schema
 
+Examiner accounts are stored separately in the application catalog's `users`
+table, defined by `backend/adapters/persistence/accounts.sql`. That schema is
+initialized only for `catalog.db`; case databases and exports contain no account
+credentials. See [authentication](authentication.md) for the account schema and
+shared/native implementation.
+
 Engine revision 2 adds `cases.engine_revision` and `cases.reanalysis_required`.
 Opening an older database preserves evidence, working-copy hashes, normalized
 extraction tables and tool audit history, deletes incompatible analysis results

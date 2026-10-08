@@ -1,6 +1,6 @@
 """An engine upgrade keeps evidence and audit history but retires old verdicts."""
 import json
-from sidecar.desktop import DesktopRuntime
+from tests.application.auth_support import authenticated_runtime as DesktopRuntime
 from tests.application.test_desktop_runtime import create, evidence, tools, finish, call
 
 

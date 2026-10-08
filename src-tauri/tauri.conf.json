@@ -9,6 +9,11 @@
       "cwd": "../frontend"
     },
     "devUrl": "http://localhost:1420",
+    "additionalWatchFolders": [
+      "../backend/core",
+      "../backend/adapters",
+      "../backend/sidecar"
+    ],
     "beforeBuildCommand": {
       "script": "npm run build",
       "cwd": "../frontend"
@@ -32,6 +37,20 @@
     }
   },
   "bundle": {
+    "linux": {
+      "deb": {
+        "depends": ["python3", "polkitd", "pkexec"],
+        "files": {
+          "/usr/share/polkit-1/actions/org.factumdb.signup.policy": "../backend/adapters/security/org.factumdb.signup.policy"
+        }
+      },
+      "rpm": {
+        "depends": ["python3", "polkit"],
+        "files": {
+          "/usr/share/polkit-1/actions/org.factumdb.signup.policy": "../backend/adapters/security/org.factumdb.signup.policy"
+        }
+      }
+    },
     "resources": {
       "../backend/core/": "backend/core/",
       "../backend/adapters/": "backend/adapters/",

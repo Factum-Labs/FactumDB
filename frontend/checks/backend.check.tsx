@@ -13,6 +13,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import { mockIPC, clearMocks } from '@tauri-apps/api/mocks'
 import { useApp } from '../src/store'
+import App from '../src/App'
 import { request, display, type CaseData, type Row } from '../src/lib/backend'
 import { CasesScreen, IntakeScreen, PipelineScreen, TimelineScreen, RecordHistoryScreen, ReconciliationScreen, GapsScreen, ProvenanceScreen, ReportScreen, SettingsScreen } from '../src/screens/ConnectedScreens'
 
@@ -22,13 +23,14 @@ const backend = resolve('../backend')
 const python = process.env.FACTUMDB_PYTHON ?? (process.platform === 'win32' ? 'py' : 'python3')
 const script = [
   'import sys',
-  'from sidecar.desktop import DesktopRuntime',
+  'from tests.application.auth_support import authenticated_runtime as DesktopRuntime',
   'from sidecar.protocol import serve',
   'runtime = DesktopRuntime(sys.argv[1])',
   'from pathlib import Path',
   'from types import SimpleNamespace',
   'from tests.application.test_desktop_runtime import tools',
   'tools(runtime, Path(sys.argv[1]), SimpleNamespace(setattr=lambda obj, name, value: setattr(obj, name, value)))',
+  'runtime.auth.logout({})',
   'router = runtime.router()',
   'def seed(payload):',
   '    from tests.fixtures.datasets import DS02',
@@ -72,10 +74,19 @@ let copy: string | undefined
 const deadline = setTimeout(() => { child.kill(); throw new Error('Frontend integration check timed out') }, 30_000)
 const originalSnapshotHook = React.useSyncExternalStore
 try {
+  React.useSyncExternalStore = (subscribe, getSnapshot) => originalSnapshotHook(subscribe, getSnapshot, getSnapshot)
   await useApp.getState().initialize()
+  assert.equal(useApp.getState().authChecked, true)
+  assert.equal(useApp.getState().ready, false)
+  assert.equal(useApp.getState().user, null)
+  assert.match(renderToStaticMarkup(<App />), /Sign in to FactumDB/)
+  await assert.rejects(request('list_cases'), /AuthenticationRequiredError/)
+  assert.equal(await useApp.getState().authenticate('UIExaminer', 'UI examiner password 123', 'mismatch'), false)
+  assert.equal(await useApp.getState().authenticate('UIExaminer', 'UI examiner password 123', 'UI examiner password 123'), true)
   assert.equal(useApp.getState().ready, true, useApp.getState().error ?? '')
-  assert.equal(await useApp.getState().createCase('UI integration', 'Examiner'), true)
+  assert.equal(await useApp.getState().createCase('UI integration'), true)
   const caseId = useApp.getState().data!.case.case_id
+  assert.equal(useApp.getState().data!.case.examiner, 'UIExaminer')
   const tablespace = join(workspace, 'accounts.ibd')
   const log = join(workspace, 'binlog.000001')
   writeFileSync(tablespace, 'test tablespace')
@@ -136,7 +147,17 @@ try {
   assert.equal(display({ __decimal__: '4000.10' }), '4000.10')
   assert.equal(display({ __unobserved__: true }), '[not observed]')
   assert.equal(display(null), 'NULL')
-  console.log('PASS: frontend workflow, backend errors, cancellation, SQLite export, and all ten screen renderings.')
+  await useApp.getState().signOut()
+  assert.equal(useApp.getState().data, null)
+  assert.deepEqual(useApp.getState().cases, [])
+  assert.equal(useApp.getState().settings, null)
+  assert.match(renderToStaticMarkup(<App />), /Sign in to FactumDB/)
+  await assert.rejects(request('get_case_data', { case_id: caseId }), /AuthenticationRequiredError/)
+  assert.equal(await useApp.getState().authenticate('UIExaminer', 'bad password 123'), false)
+  assert.equal(await useApp.getState().authenticate('UIExaminer', 'UI examiner password 123'), true)
+  await useApp.getState().openCase(caseId)
+  assert.equal(useApp.getState().data!.case.case_id, caseId)
+  console.log('PASS: account signup, sign-in/out, guarded access, examiner identity, frontend workflow, SQLite export, and all ten screens.')
 } finally {
   clearTimeout(deadline)
   React.useSyncExternalStore = originalSnapshotHook

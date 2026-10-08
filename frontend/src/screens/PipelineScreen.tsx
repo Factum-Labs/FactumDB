@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useApp } from '../store'
 import { display, object, request, rows, type Attempt, type Row } from '../lib/backend'
 
@@ -98,6 +98,47 @@ function ToolLog({ tool, caseId }: { tool: Row; caseId: string }) {
   </div>
 }
 
+function ExecutionLog({ tools, caseId }: { tools: Row[]; caseId: string }) {
+  const viewport = useRef<HTMLDivElement>(null)
+  const content = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const scrollArea = viewport.current
+    const logContent = content.current
+    if (!scrollArea || !logContent) return
+    let frame: number | undefined
+    const followOutput = () => {
+      if (frame !== undefined) cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        scrollArea.scrollTop = scrollArea.scrollHeight
+        frame = undefined
+      })
+    }
+    // Output previews arrive asynchronously inside ToolLog, independently of
+    // the pipeline stage updates. Observe both those edits and resized panels.
+    const mutations = new MutationObserver(followOutput)
+    mutations.observe(logContent, { childList: true, subtree: true, characterData: true })
+    const sizes = new ResizeObserver(followOutput)
+    sizes.observe(scrollArea)
+    sizes.observe(logContent)
+    followOutput()
+    return () => {
+      mutations.disconnect()
+      sizes.disconnect()
+      if (frame !== undefined) cancelAnimationFrame(frame)
+    }
+  }, [caseId])
+  return <section aria-labelledby="execution-heading" className="flex min-h-0 flex-col overflow-hidden rounded-md bg-ink px-3 py-[11px] text-line lg:flex-1">
+    <h2 id="execution-heading" className="mb-2 shrink-0 text-[10px] font-semibold uppercase tracking-[.07em] text-dim">Execution log</h2>
+    <div ref={viewport} tabIndex={0} aria-label="Tool execution output" className="scroll-dark min-h-0 max-h-[min(330px,50dvh)] overflow-auto pr-2 lg:max-h-none lg:flex-1">
+      <div ref={content} className="min-w-0 [overflow-wrap:anywhere]">
+        {!tools.length && <p className="font-mono text-[11px] leading-[1.65] text-dim">Tool commands and output will appear as analysis runs.</p>}
+        {tools.length > 20 && <p className="mb-3 text-[11px]">Showing the latest 20 tool runs. Earlier runs are available in provenance.</p>}
+        {tools.slice(-20).map(tool => <ToolLog key={String(tool.tool_run_id)} caseId={caseId} tool={tool} />)}
+      </div>
+    </div>
+  </section>
+}
+
 export function PipelineScreen() {
   const state = useApp()
   const data = state.data
@@ -141,8 +182,8 @@ export function PipelineScreen() {
     { label: 'Unresolved', value: data.analysis.reconciliation ? comparisons.filter(r => r.result === 'Unresolved').length : '—' },
     { label: 'Coverage gaps', value: data.analysis.grouping ? gaps : '—', tone: gaps ? 'text-amber' : '' },
   ]
-  return <div className="grid max-w-[1240px] items-start gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
-    <section aria-labelledby="pipeline-heading" className="min-w-0 overflow-hidden rounded-md border border-line bg-panel">
+  return <div className="grid min-h-0 max-w-[1240px] items-start gap-4 lg:h-full lg:grid-cols-[minmax(0,1fr)_minmax(280px,400px)] lg:grid-rows-[minmax(0,1fr)]">
+    <section aria-labelledby="pipeline-heading" className="min-h-0 min-w-0 overflow-auto rounded-md border border-line bg-panel lg:max-h-full">
       <div className="flex flex-wrap items-center justify-between gap-2.5 px-3 py-[9px]">
         <h2 id="pipeline-heading" className="text-[12px] font-semibold">Processing pipeline</h2>
         <div className="flex flex-wrap gap-2">
@@ -175,21 +216,14 @@ export function PipelineScreen() {
       </div>
       {!hasEvidence && <p className="border-t border-line px-4 py-3 text-xs text-muted">Register at least one .ibd or binary log file before analysis. An index alone is insufficient.</p>}
     </section>
-    <aside className="min-w-0 space-y-3" aria-label="Analysis summary">
-      <dl className="grid grid-cols-2 gap-2">
+    <aside className="flex min-h-0 min-w-0 flex-col gap-3 lg:h-full" aria-label="Analysis summary">
+      <dl className="grid shrink-0 grid-cols-2 gap-2">
         {metrics.map(metric => <div key={metric.label} className="rounded-md border border-line bg-panel px-[11px] py-[9px]">
           <dt className="text-[10px] font-semibold uppercase tracking-[.07em] text-dim">{metric.label}</dt>
           <dd className={'mt-0.5 font-mono text-[18px] font-semibold ' + (metric.tone ?? 'text-ink')}>{metric.value}</dd>
         </div>)}
       </dl>
-      <section aria-labelledby="execution-heading" className="rounded-md bg-ink px-3 py-[11px] text-line">
-        <h2 id="execution-heading" className="mb-2 text-[10px] font-semibold uppercase tracking-[.07em] text-dim">Execution log</h2>
-        <div tabIndex={0} aria-label="Tool execution output" className="scroll-dark max-h-[330px] overflow-auto pr-2">
-          {!toolRuns.length && <p className="font-mono text-[11px] leading-[1.65] text-dim">Tool commands and output will appear as analysis runs.</p>}
-          {toolRuns.length > 20 && <p className="mb-3 text-[11px]">Showing the latest 20 tool runs. Earlier runs are available in provenance.</p>}
-          {toolRuns.slice(-20).map(tool => <ToolLog key={String(tool.tool_run_id)} caseId={data.case.case_id} tool={tool} />)}
-        </div>
-      </section>
+      <ExecutionLog tools={toolRuns} caseId={data.case.case_id} />
     </aside>
   </div>
 }

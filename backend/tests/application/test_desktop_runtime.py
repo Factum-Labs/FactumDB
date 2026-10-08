@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from core.application.orchestration.models import StageAttempt, StageStatus
-from sidecar.desktop import DesktopRuntime
+from tests.application.auth_support import authenticated_runtime as DesktopRuntime
 from sidecar.protocol import SidecarRequest
 from sidecar.views import _present
 from tests.application.test_tool_integration import BINLOG, ROWS, SDI
@@ -125,6 +125,8 @@ def test_full_analysis_restart_provenance_export_and_case_isolation(runtime, tmp
         assert destination.exists()
         assert not response(runtime, "export_case", case_id=first, format=format, path=str(destination))["ok"]
     exported = json.loads((tmp_path / "case.json").read_text(encoding="utf-8"))
+    assert "users" not in exported["tables"]
+    assert "auth_throttle" not in exported["tables"]
     assert exported["tables"]["analysis_results"]
     assert exported["tables"]["pipeline_runs"][0]["run"]["stages"][-1]["status"] == "succeeded"
     assert (tmp_path / "csv" / "reconciliation.csv").exists()
@@ -190,6 +192,66 @@ def test_nested_errors_preserve_request_correlation(runtime):
     assert not result["ok"]
     assert result["request_id"] == "test"
     assert result["error_code"] == "NotFoundError"
+
+
+def test_evidence_and_tool_actors_follow_sessions_and_survive_restart(runtime, tmp_path, monkeypatch):
+    from tests.application.auth_support import PASSWORD
+
+    case_id = create(runtime)
+    registrar = runtime.auth.require_actor()
+    source = tmp_path / "actors.ibd"
+    source.write_bytes(b"test evidence")
+    assert not response(runtime, "register_evidence", case_id=case_id, source_path=str(source),
+                        actor_id="forged", actor_username="Forged")["ok"]
+    registered = call(runtime, "register_evidence", case_id=case_id, source_path=str(source))
+    assert {key: registered[key] for key in registrar} == registrar
+    call(runtime, "auth_logout")
+    call(runtime, "auth_signup", username="Reviewer", password=PASSWORD,
+         password_confirmation=PASSWORD)
+    analyst = runtime.auth.require_actor()
+    assert analyst["actor_id"] != registrar["actor_id"]
+    verified = call(runtime, "verify_evidence", case_id=case_id,
+                    evidence_id=registered["evidence_id"])
+    assert {key: verified[key] for key in registrar} == registrar
+    tools(runtime, tmp_path, monkeypatch)
+    assert finish(runtime, case_id)["complete"]
+    view = call(runtime, "get_case_data", case_id=case_id)
+    assert view["tables"]["tool_runs"]
+    assert all({key: tool[key] for key in analyst} == analyst
+               for tool in view["tables"]["tool_runs"])
+    path = tmp_path / "actors.json"
+    call(runtime, "export_case", case_id=case_id, format="JSON", path=str(path))
+    exported = json.loads(path.read_text(encoding="utf-8"))["tables"]
+    assert exported["evidence_files"][0]["actor_username"] == "Examiner"
+    assert all(tool["actor_username"] == "Reviewer" for tool in exported["tool_runs"])
+    reopened = DesktopRuntime(runtime.root)
+    try:
+        assert reopened.auth.require_actor() == registrar
+        assert call(reopened, "get_case_data", case_id=case_id)["tables"]["tool_runs"] == view["tables"]["tool_runs"]
+    finally:
+        reopened.close()
+
+
+def test_actor_column_migration_leaves_old_records_unknown(runtime, tmp_path, monkeypatch):
+    from adapters.persistence.sqlite_database import initialise
+
+    case_id = create(runtime)
+    source = tmp_path / "legacy.ibd"
+    source.write_bytes(b"legacy evidence")
+    registered = call(runtime, "register_evidence", case_id=case_id, source_path=str(source))
+    tools(runtime, tmp_path, monkeypatch)
+    assert finish(runtime, case_id)["complete"]
+    connection, stores, _ = runtime.session(case_id)
+    # Simulate the schema before actor fields existed, without changing its evidence.
+    for table in ("evidence_files", "tool_runs"):
+        for column in ("actor_id", "actor_username"):
+            connection.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+    initialise(connection)
+    item = stores.evidence.get(case_id, registered["evidence_id"])
+    assert item.actor_id is None and item.actor_username is None
+    assert all(run.actor_id is None and run.actor_username is None
+               for run in stores.tool_runs.list_by_evidence(item.id))
+    assert item.source_sha256 == registered["source_sha256"]
 
 
 def test_javascript_projection_keeps_large_integer_exact():

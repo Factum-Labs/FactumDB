@@ -8,6 +8,11 @@ paths. **Use bundled tools** restores these paths after custom overrides.
 No separate Python, MySQL server or Visual C++ runtime installation is needed.
 The installer uses Tauri's WebView2 bootstrapper if WebView2 is missing.
 
+The Ubuntu 24.04 x86-64 `.deb` installer also includes MySQL 8.4.11 utilities
+and ibd2sql, with automatic tool paths. apt supplies Python and desktop libraries.
+See [Linux bundling](linux-bundle.md) for installation, building in WSL, and
+headless verification.
+
 ### Development
 
 Install Node.js, Rust with the platform's Tauri build prerequisites, and Python
@@ -26,13 +31,18 @@ bundled interpreter when staged. Development without a bundle tries
 interpreter, set `FACTUMDB_PYTHON` to its executable path before starting Tauri.
 Python needs no third-party packages for application operation.
 
+Tauri development watches the backend's `core`, `adapters` and `sidecar` folders
+and restarts the app after changes. Reloading the frontend alone leaves the
+persistent Python process running its previously loaded code.
+
 Running the frontend's Vite server alone displays a desktop connection message.
 Backend actions require the Tauri desktop app.
 
 ## Configure extraction utilities
 
-Windows supplies these paths automatically. Open **Settings** to choose other
-tool versions when needed for your evidence. On other platforms, save paths to:
+Windows and Linux installers supply these paths automatically. Open **Settings**
+to choose other tool versions when needed for your evidence. Without a bundle,
+save paths to:
 
 | Setting | Required utility |
 | --- | --- |
@@ -53,7 +63,8 @@ Initial paths can also come from `FACTUMDB_INNOCHECKSUM_PATH`,
 
 ## Examine a case
 
-1. Create a case with a name and examiner, or open a saved case.
+1. Sign in, then create a named case or open a saved case. The signed-in account
+   supplies the examiner identity automatically.
 2. Register evidence using Browse Files or an absolute file path. Supported names
    are `*.ibd`, `binlog.NNNNNN`, `mysql-bin.NNNNNN`, `binlog.index` and
    `mysql-bin.index`.

@@ -66,6 +66,8 @@ def _evidence_result(evidence: EvidenceFile) -> dict[str, object]:
         "working_copy_path": evidence.working_copy_path,
         "working_copy_sha256": evidence.working_copy_sha256,
         "acquisition_method": evidence.acquisition_method,
+        "actor_id": evidence.actor_id,
+        "actor_username": evidence.actor_username,
         "verified": evidence.is_verified(),
     }
 

@@ -33,6 +33,9 @@ class ToolRunAuditService:
         hasher: FileHasher,
         ids: IdGenerator,
         clock: Clock,
+        *,
+        actor_id: str | None = None,
+        actor_username: str | None = None,
     ) -> None:
         self._cases = cases
         self._evidence = evidence
@@ -41,6 +44,7 @@ class ToolRunAuditService:
         self._hasher = hasher
         self._ids = ids
         self._clock = clock
+        self._actor_id, self._actor_username = actor_id, actor_username
 
     def start(self, request: StartToolRunRequest) -> ToolRun:
         if self._cases.get(request.case_id) is None:
@@ -60,6 +64,8 @@ class ToolRunAuditService:
             executable_sha256=self._hasher.sha256(request.executable_path),
             arguments=request.arguments,
             started_at=self._clock.now(),
+            actor_id=self._actor_id,
+            actor_username=self._actor_username,
         )
         self._runs.save(run)
         return run

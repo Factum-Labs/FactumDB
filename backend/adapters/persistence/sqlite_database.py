@@ -50,6 +50,12 @@ def initialise(connection):
     executescript, so running this on an existing database is safe.
     """
     connection.executescript(SCHEMA_FILE.read_text())
+    # Existing records retain unknown actors; never infer them from the current session.
+    for table in ("evidence_files", "tool_runs"):
+        actor_columns = {r[1] for r in connection.execute(f"PRAGMA table_info({table})")}
+        for name in ("actor_id", "actor_username"):
+            if name not in actor_columns:
+                connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} TEXT")
     columns = {r[1] for r in connection.execute("PRAGMA table_info(cases)")}
     if "examiner_notes" not in columns:
         connection.execute("ALTER TABLE cases ADD COLUMN examiner_notes TEXT NOT NULL DEFAULT ''")

@@ -4,7 +4,7 @@ import json
 from adapters.persistence._results import encode
 from adapters.persistence.case_export import case_export
 from tests.application.test_desktop_runtime import create, call, response, evidence, tools, finish
-from sidecar.desktop import DesktopRuntime
+from tests.application.auth_support import authenticated_runtime as DesktopRuntime
 from tests.fixtures.datasets import DS02
 from tests.fixtures.pipeline import run_pipeline
 

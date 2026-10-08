@@ -35,6 +35,8 @@ class EvidenceFile:
     working_copy_path: str | None = None
     working_copy_sha256: str | None = None
     acquisition_method: str = ""
+    actor_id: str | None = None
+    actor_username: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "id", _required(self.id, "evidence id"))
@@ -143,6 +145,8 @@ class ToolRun:
     exit_code: int | None = None
     stdout: RawOutputReference | None = None
     stderr: RawOutputReference | None = None
+    actor_id: str | None = None
+    actor_username: str | None = None
 
     def __post_init__(self) -> None:
         for value, label in (

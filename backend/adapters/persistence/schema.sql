@@ -26,7 +26,9 @@ CREATE TABLE IF NOT EXISTS evidence_files (
     working_copy_path   TEXT,
     working_copy_sha256 TEXT,
     acquisition_method  TEXT NOT NULL DEFAULT '',
-    registered_at       TEXT NOT NULL
+    registered_at       TEXT NOT NULL,
+    actor_id            TEXT,
+    actor_username      TEXT
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_evidence_case ON evidence_files(case_id);
@@ -50,7 +52,9 @@ CREATE TABLE IF NOT EXISTS tool_runs (
     stdout_size_bytes INTEGER,
     stderr_path       TEXT,
     stderr_sha256     TEXT,
-    stderr_size_bytes INTEGER
+    stderr_size_bytes INTEGER,
+    actor_id          TEXT,
+    actor_username    TEXT
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_tool_runs_evidence ON tool_runs(evidence_id);

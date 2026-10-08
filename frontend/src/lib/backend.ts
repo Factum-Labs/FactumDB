@@ -28,6 +28,7 @@ export interface ToolSettings {
   mysqlbinlog_path: string; python_path: string; include_deleted: boolean
 }
 export interface Settings { workspace: string; tools: ToolSettings; bundled_tools?: Partial<ToolSettings> }
+export interface AuthStatus { user: { username: string } | null }
 
 export async function request<T>(command: string, payload: Record<string, unknown> = {}): Promise<T> {
   if (!isTauri()) throw new Error('Open FactumDB in the desktop app to connect to the backend. Run npm run tauri:dev from the project root.')

@@ -7,32 +7,44 @@ import sys
 from pathlib import Path
 
 from adapters.filesystem import (
-    FilesystemCaseWorkspace, FilesystemEvidenceInspector, FilesystemRawOutputStore,
-    FilesystemWorkingCopyManager, Sha256FileHasher,
+    FilesystemCaseWorkspace,
+    FilesystemEvidenceInspector,
+    FilesystemRawOutputStore,
+    FilesystemWorkingCopyManager,
+    Sha256FileHasher,
 )
 from adapters.filesystem._paths import contained, safe_component
 from adapters.persistence.case_export import write_csv, write_json
+from adapters.persistence.sqlite_accounts import SqliteAccountStore
 from adapters.persistence.sqlite_case_repository import SqliteCaseRepository
 from adapters.persistence.sqlite_database import open_case_database
 from adapters.persistence.sqlite_integration import build_sqlite_application_stores
 from adapters.persistence.sqlite_pipeline_repository import SqlitePipelineRepository
+from adapters.security import device_security
+from core.application.authentication import AuthenticationService
 from core.application.defaults import UtcClock, UuidGenerator
 from core.application.errors import ConflictError, NotFoundError, PrerequisiteError
 from core.application.models import CreateCaseRequest
 from core.application.use_cases.audit import ToolRunAuditService
 from core.application.use_cases.cases import CreateCaseUseCase
 from sidecar.commands import COMMAND_FIELDS, _validate
-from sidecar.composition import PipelineDependencies, build_application_services, build_tool_adapters
+from sidecar.composition import (
+    PipelineDependencies,
+    build_application_services,
+    build_tool_adapters,
+)
 from sidecar.main import build_router
+from sidecar.native_verification import NativeVerificationBridge
 from sidecar.protocol import CommandRouter, SidecarRequest, serve
-from sidecar.views import case_view, analysis_detail
+from sidecar.views import analysis_detail, case_view
 
 
 class DesktopRuntime:
-    def __init__(self, root):
+    def __init__(self, root, *, device=None):
         self.root = Path(root).expanduser().resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self.catalog = open_case_database(self.root / "catalog.db")
+        self.auth = AuthenticationService(SqliteAccountStore(self.catalog), device or device_security())
         self.cases = SqliteCaseRepository(self.catalog)
         self.workspace = FilesystemCaseWorkspace(self.root / "cases")
         self.ids, self.clock = UuidGenerator(), UtcClock()
@@ -94,9 +106,11 @@ class DesktopRuntime:
 
     def services(self, case_id):
         _, stores, pipelines = self.session(case_id)
+        actor = self.auth.require_actor()
         audit = ToolRunAuditService(
             stores.cases, stores.evidence, stores.tool_runs,
             FilesystemRawOutputStore(self.root / "cases"), self.hasher, self.ids, self.clock,
+            **actor,
         )
         adapters = build_tool_adapters(stores.schemas_for_case, audit=audit, **self.settings)
         return build_application_services(
@@ -105,6 +119,7 @@ class DesktopRuntime:
                 copies=FilesystemWorkingCopyManager(self.root / "cases"), hasher=self.hasher,
                 extraction=stores.extraction, normalizer=stores.normalizer, domain=stores.domain,
                 pipelines=pipelines, progress=_QuietProgress(), ids=self.ids, clock=self.clock,
+                **actor,
             ), adapters, workspaces=self.workspace, inspector=FilesystemEvidenceInspector(),
         )
 
@@ -129,7 +144,11 @@ class DesktopRuntime:
         return result
 
     def create_case(self, payload):
-        values = _validate(payload, COMMAND_FIELDS["create_case"])
+        # The authenticated account is authoritative, even if an older client
+        # includes an examiner field. Never trust a caller-supplied identity.
+        fields = ("case_name", "examiner") if "examiner" in payload else ("case_name",)
+        values = _validate(payload, fields)
+        values["examiner"] = self.auth.require_user()["username"]
         response = CreateCaseUseCase(self.cases, self.workspace, self.ids, self.clock).execute(
             CreateCaseRequest(**values),
         )
@@ -251,10 +270,20 @@ class DesktopRuntime:
                 "truncated": len(raw) > 256 * 1024, "sha256": output.sha256, "path": output.path}
 
     def router(self):
-        router = CommandRouter()
+        public = {"health", "auth_status", "auth_signup", "auth_login", "auth_logout"}
+
+        def authorize(command):
+            if command not in public:
+                self.auth.require_user()
+
+        router = CommandRouter(before_dispatch=authorize)
+        router.register("auth_status", self.auth.status)
+        router.register("auth_signup", self.auth.signup)
+        router.register("auth_login", self.auth.login)
+        router.register("auth_logout", self.auth.logout)
         router.register("health", lambda payload: {
             "name": "FactumDB", "status": "ready", "protocol": 1,
-            "application_configured": True, "workspace": str(self.root),
+            "application_configured": True,
         })
         router.register("create_case", self.create_case)
         router.register("list_cases", self.list_cases)
@@ -282,10 +311,18 @@ class _QuietProgress:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", required=True)
+    parser.add_argument(
+        "--native-verification", action="store_true",
+        help="Enable the private Tauri Windows Hello exchange",
+    )
     args = parser.parse_args()
-    runtime = DesktopRuntime(args.workspace)
+    bridge = NativeVerificationBridge(sys.stdin, sys.stdout) if args.native_verification else None
+    runtime = DesktopRuntime(
+        args.workspace,
+        device=device_security(verify_device=bridge.verify if bridge else None),
+    )
     try:
-        serve(sys.stdin, sys.stdout, runtime.router())
+        serve(sys.stdin, sys.stdout, runtime.router(), native_verification=bridge)
     finally:
         runtime.close()
 

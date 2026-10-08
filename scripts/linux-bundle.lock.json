@@ -1,0 +1,23 @@
+{
+  "target": "x86_64-unknown-linux-gnu",
+  "artifacts": {
+    "mysql": {
+      "version": "8.4.11",
+      "url": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.11-linux-glibc2.28-x86_64-minimal.tar.xz",
+      "filename": "mysql-8.4.11-linux-glibc2.28-x86_64-minimal.tar.xz",
+      "sha256": "383f54e124d5f325d67f0c6912a8f96814eedc761a17ea30112e52fa4cc6b143"
+    },
+    "mysql_source": {
+      "version": "8.4.11",
+      "url": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.11.tar.gz",
+      "filename": "mysql-8.4.11.tar.gz",
+      "sha256": "eb3051164d625dd346a8203f76e0d5d5d9aec51dbe9d51788e39ec6b3f1394c2"
+    },
+    "ibd2sql": {
+      "version": "e6e8c380e6060f74e32fc7032bcf479347f1de12",
+      "url": "https://codeload.github.com/ddcw/ibd2sql/zip/e6e8c380e6060f74e32fc7032bcf479347f1de12",
+      "filename": "ibd2sql-e6e8c380.zip",
+      "sha256": "b55cdf229c41972a0c8878a1bf165bd1a44209d5163e667ff2cf4a52dd3877e2"
+    }
+  }
+}

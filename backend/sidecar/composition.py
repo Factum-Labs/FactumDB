@@ -61,6 +61,8 @@ class PipelineDependencies:
     progress: ProgressPublisher
     ids: IdGenerator
     clock: Clock
+    actor_id: str | None = None
+    actor_username: str | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -87,6 +89,7 @@ def build_application_services(
         create_case=CreateCaseUseCase(d.cases, workspaces, d.ids, d.clock),
         register_evidence=RegisterEvidenceUseCase(
             d.cases, d.evidence, inspector, d.hasher, d.ids, d.clock,
+            actor_id=d.actor_id, actor_username=d.actor_username,
         ),
         verify_evidence=VerifyEvidenceUseCase(d.cases, d.evidence, d.copies, d.hasher),
         pipeline=build_analysis_pipeline(d, adapters),

@@ -1,8 +1,11 @@
 import { create } from 'zustand'
 import type { Screen } from './data/types'
-import { request, type CaseData, type CaseSummary, type PipelineRun, type Settings, type ToolSettings } from './lib/backend'
+import { request, type AuthStatus, type CaseData, type CaseSummary, type PipelineRun, type Settings, type ToolSettings } from './lib/backend'
 
 interface AppState {
+  user: AuthStatus['user']; authChecked: boolean
+  authenticate: (username: string, password: string, confirmation?: string) => Promise<boolean>
+  signOut: () => Promise<void>
   screen: Screen; data: CaseData | null; cases: CaseSummary[]; settings: Settings | null
   busy: boolean; ready: boolean; error: string | null; notice: string | null
   pipelineComplete: boolean; stagesDone: number; runningStage: number | null; cancelRequested: boolean
@@ -11,7 +14,7 @@ interface AppState {
   initialize: () => Promise<void>
   refresh: () => Promise<void>
   openCase: (id: string) => Promise<void>
-  createCase: (name: string, examiner: string) => Promise<boolean>
+  createCase: (name: string) => Promise<boolean>
   registerEvidence: (paths: string[]) => Promise<boolean>
   verifyEvidence: (id: string) => Promise<void>
   runStage: () => Promise<void>
@@ -28,6 +31,12 @@ interface AppState {
 }
 
 let initializing: Promise<void> | undefined
+const signedOut: Partial<AppState> = {
+  user: null, data: null, cases: [], settings: null, ready: false, screen: 'cases',
+  pipelineComplete: false, stagesDone: 0, runningStage: null, cancelRequested: false,
+  selectedTx: '', selectedRecord: '', selectedTool: '', expandedGroups: [], reportFormat: 'JSON',
+  error: null, notice: null,
+}
 export const useApp = create<AppState>((set, get) => {
   const apply = (data: CaseData) => set({
     data, pipelineComplete: data.run?.complete ?? false,
@@ -84,27 +93,45 @@ export const useApp = create<AppState>((set, get) => {
     })
   }
   return {
+    user: null, authChecked: false,
     screen: 'cases', data: null, cases: [], settings: null, busy: false, ready: false, error: null, notice: null,
     pipelineComplete: false, stagesDone: 0, runningStage: null, cancelRequested: false,
     selectedTx: '', selectedRecord: '', selectedTool: '', reportFormat: 'JSON', expandedGroups: [],
     go: screen => { if (!get().busy || screen !== 'cases') set({ screen }) },
-    setError: error => set({ error: error instanceof Error ? error.message : String(error), notice: null }),
+    setError: error => {
+      const message = error instanceof Error ? error.message : String(error)
+      set({ ...(message.startsWith('AuthenticationRequiredError:') ? signedOut : {}), error: message, notice: null })
+    },
     initialize: () => {
       if (get().ready) return Promise.resolve()
       if (!initializing) initializing = action(async () => {
-        const settings = await request<Settings>('get_settings')
-        const cases = await request<CaseSummary[]>('list_cases')
+        const auth = await request<AuthStatus>('auth_status')
+        set({ user: auth.user, authChecked: true })
+        if (!auth.user) return
+        const [settings, cases] = await Promise.all([request<Settings>('get_settings'), request<CaseSummary[]>('list_cases')])
         set({ settings, cases, ready: true })
       }).then(() => { initializing = undefined })
       return initializing
     },
+    authenticate: (username, password, confirmation) => action(async () => {
+      const auth = await request<AuthStatus>(confirmation === undefined ? 'auth_login' : 'auth_signup', {
+        username, password, ...(confirmation === undefined ? {} : { password_confirmation: confirmation }),
+      })
+      set({ user: auth.user, authChecked: true })
+      const [settings, cases] = await Promise.all([request<Settings>('get_settings'), request<CaseSummary[]>('list_cases')])
+      set({ settings, cases, ready: true })
+    }),
+    signOut: () => action(async () => {
+      await request('auth_logout')
+      set(signedOut)
+    }).then(() => {}),
     refresh: () => action(refresh).then(() => {}),
     openCase: id => action(async () => {
       apply(await request<CaseData>('get_case_data', { case_id: id }))
       set({ screen: 'intake', selectedTx: '', selectedRecord: '', selectedTool: '', expandedGroups: [] })
     }).then(() => {}),
-    createCase: (name, examiner) => action(async () => {
-      const result = await request<{ case_id: string }>('create_case', { case_name: name, examiner })
+    createCase: name => action(async () => {
+      const result = await request<{ case_id: string }>('create_case', { case_name: name })
       apply(await request<CaseData>('get_case_data', { case_id: result.case_id }))
       await refresh()
       set({ screen: 'intake', selectedTx: '', selectedRecord: '', selectedTool: '', expandedGroups: [] })

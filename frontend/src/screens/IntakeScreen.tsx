@@ -175,6 +175,7 @@ export function IntakeScreen() {
       {active && <p className="rounded-md border border-line bg-panel px-3 py-2 text-[11px] text-muted">Finish or cancel the active pipeline before registering additional evidence.</p>}
       {detail && <details open className="rounded-md border border-line bg-panel p-3 text-[11px]">
         <summary className="cursor-pointer font-medium">Evidence paths and hashes</summary>
+        <p className="mt-2 text-muted">Registered by: {detail.actor_username == null ? 'Not recorded (older evidence)' : display(detail.actor_username)}{detail.actor_id != null ? ` · Actor ID: ${display(detail.actor_id)}` : ''}</p>
         <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-all font-mono">{JSON.stringify(detail, null, 2)}</pre>
         <button type="button" className={button + ' mt-3'} disabled={locked || detail.verification_status === 'verified'} onClick={() => { void useApp.getState().verifyEvidence(String(detail.evidence_id)) }}>Verify working copy</button>
       </details>}

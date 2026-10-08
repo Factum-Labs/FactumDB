@@ -1,7 +1,7 @@
 """Examiner notes survive reopen and exports, independently of analysis."""
 import json
 
-from sidecar.desktop import DesktopRuntime
+from tests.application.auth_support import authenticated_runtime as DesktopRuntime
 from tests.application.test_desktop_runtime import call, create, evidence, finish, response, tools
 
 

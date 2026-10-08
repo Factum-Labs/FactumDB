@@ -24,7 +24,7 @@ from core.domain.models.evidence import EvidenceFile, EvidenceKind, Verification
 _COLUMNS = """
     evidence_id, case_id, kind, filename, source_path, size_bytes,
     source_sha256, verification_status, working_copy_path,
-    working_copy_sha256, acquisition_method, registered_at
+    working_copy_sha256, acquisition_method, registered_at, actor_id, actor_username
 """
 
 
@@ -37,7 +37,7 @@ class SqliteEvidenceRepository(EvidenceRepositoryPort):
     def save(self, evidence: EvidenceFile) -> None:
         self._connection.execute(
             f"INSERT OR REPLACE INTO evidence_files ({_COLUMNS}) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 evidence.id,
                 evidence.case_id,
@@ -51,6 +51,8 @@ class SqliteEvidenceRepository(EvidenceRepositoryPort):
                 evidence.working_copy_sha256,
                 evidence.acquisition_method,
                 to_text(evidence.registered_at),
+                evidence.actor_id,
+                evidence.actor_username,
             ),
         )
         self._connection.commit()
@@ -133,4 +135,6 @@ def _row_to_evidence(row) -> EvidenceFile:
         working_copy_path=row["working_copy_path"],
         working_copy_sha256=row["working_copy_sha256"],
         acquisition_method=row["acquisition_method"],
+        actor_id=row["actor_id"],
+        actor_username=row["actor_username"],
     )

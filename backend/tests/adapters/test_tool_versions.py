@@ -55,3 +55,9 @@ def test_versions_are_read_once_and_only_when_first_needed() -> None:
     assert versions.get("mysqlbinlog") == versions.get("mysqlbinlog") == "8.4.11"
     assert reads == [1]
     assert versions.get("ibd2sdi", "unknown") == "unknown"
+
+
+@patch("subprocess.run", side_effect=FileNotFoundError("[WinError 2]"))
+def test_missing_executable_names_tool_and_how_to_fix_it(run) -> None:
+    with pytest.raises(RuntimeError, match="innochecksum.*file not found.*Settings"):
+        InnochecksumAdapter("C:/missing/innochecksum.exe").version()

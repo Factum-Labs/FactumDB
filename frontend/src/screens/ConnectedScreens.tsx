@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useApp } from '../store'
 import { display, object, pickExportPath, request, rows, type Json, type Row, type ToolSettings } from '../lib/backend'
 import { Badge } from '../components/Badge'
@@ -30,8 +30,8 @@ function ProvenanceLinks({ value }: { value: Json | undefined }) {
     useApp.getState().selectTool(id); useApp.getState().go('prov')
   }}>Inspect source tool run · {id.slice(0, 8)}</Button>)}</div>
 }
-function Table({ data, columns, onSelect, selected }: {
-  data: Row[]; columns: [string, string][]; onSelect?: (row: Row) => void; selected?: (row: Row) => boolean
+function Table({ data, columns, onSelect, selected, actionLabel = 'View' }: {
+  data: Row[]; columns: [string, string][]; onSelect?: (row: Row) => void; selected?: (row: Row) => boolean; actionLabel?: string
 }) {
   const [page, setPage] = useState(0)
   const size = 100
@@ -45,7 +45,7 @@ function Table({ data, columns, onSelect, selected }: {
     </tr></thead><tbody>{data.slice(current * size, (current + 1) * size).map((row, index) =>
       <tr key={current * size + index} className={'border-t border-line ' + (selected?.(row) ? 'bg-accent-soft' : '')}>
         {columns.map(([key]) => <td key={key} className="max-w-xs break-words px-3 py-2 font-mono">{display(row[key])}</td>)}
-        {onSelect && <td className="px-3 py-2"><button className="text-accent underline" onClick={() => onSelect(row)}>View</button></td>}
+        {onSelect && <td className="px-3 py-2"><button type="button" className="text-accent underline" onClick={() => onSelect(row)}>{actionLabel}</button></td>}
       </tr>)}</tbody></table>
     {pages > 1 && <div className="flex items-center gap-3 border-t border-line p-2 text-xs">
       <button disabled={current === 0} onClick={() => setPage(current - 1)}>Previous</button>
@@ -58,16 +58,16 @@ function Table({ data, columns, onSelect, selected }: {
 export function CasesScreen() {
   const cases = useApp(s => s.cases)
   const [name, setName] = useState('')
-  const [examiner, setExaminer] = useState('')
+  const examiner = useApp(s => s.user?.username ?? '')
   const [filter, setFilter] = useState('')
   const create = async (event: FormEvent) => {
     event.preventDefault()
-    if (await useApp.getState().createCase(name, examiner)) { setName(''); setExaminer('') }
+    if (await useApp.getState().createCase(name)) setName('')
   }
   return <div className="space-y-4">
     <form className={panel + ' flex flex-wrap items-end gap-3'} onSubmit={create}>
       <label className="flex flex-col gap-1 text-xs">Case name<input className={input} required value={name} onChange={e => setName(e.target.value)} /></label>
-      <label className="flex flex-col gap-1 text-xs">Examiner<input className={input} required value={examiner} onChange={e => setExaminer(e.target.value)} /></label>
+      <label className="flex flex-col gap-1 text-xs">Examiner<input className={input} readOnly value={examiner} /></label>
       <Button type="submit" disabled={!name.trim() || !examiner.trim()}>Create case</Button>
       <Button onClick={() => { void useApp.getState().refresh() }}>Refresh cases</Button>
     </form>
@@ -112,7 +112,7 @@ export function ReconciliationScreen() {
   const all = rows(data?.analysis.reconciliation?.rows)
   const counts = Object.keys(RESULT_TONE).map(result => [result, all.filter(r => r.result === result).length] as const)
   return <div className="space-y-4">
-    <div className="grid grid-cols-6 gap-2">{counts.map(([result, count]) => <div key={result} className={panel}><p className="font-mono text-xl">{count}</p><Badge tone={RESULT_TONE[result as ReconResult]}>{result}</Badge></div>)}</div>
+    <div className="grid grid-cols-6 gap-2">{counts.map(([result, count]) => <div key={result} className={panel}><p className="font-mono text-xl font-semibold">{count}</p><Badge tone={RESULT_TONE[result as ReconResult]}>{result}</Badge></div>)}</div>
     <label className="flex items-center gap-2 text-xs">Filter result<select className={input} value={filter} onChange={e => setFilter(e.target.value)}><option value="">All results</option>{counts.map(([r]) => <option key={r}>{r}</option>)}</select></label>
     <Table data={all.filter(r => !filter || r.result === filter)} columns={[['record_id', 'Record'], ['field', 'Field'], ['log_display', 'Log-derived'], ['phys_display', 'Physical'], ['result', 'Result'], ['rule_id', 'Rule']]} onSelect={setDetail} />
     {detail && <div className="space-y-2"><Button onClick={() => useApp.getState().openRecord(String(detail.record_id))}>Open record history</Button>{loaded.detail ? <><ProvenanceLinks value={loaded.detail.provenance} /><Detail value={loaded.detail} title="Comparison values, rule and source provenance" /></> : <p role="status" className="text-sm text-muted">{loaded.error ?? 'Loading comparison…'}</p>}</div>}
@@ -139,8 +139,18 @@ export function ProvenanceScreen() {
   const [stream, setStream] = useState('stdout')
   const [preview, setPreview] = useState<{ text: string; truncated: boolean; sha256?: string } | null>(null)
   const [loading, setLoading] = useState(false)
+  const detail = useRef<HTMLDetailsElement>(null)
   const toolRuns = data?.tables.tool_runs ?? []
   const current = toolRuns.find(t => t.tool_run_id === selected) ?? toolRuns[0]
+  const inspectRun = (run: Row) => {
+    useApp.getState().selectTool(String(run.tool_run_id))
+    // Also reveal the default/current selection: its id may not change.
+    if (detail.current) detail.current.open = true
+    requestAnimationFrame(() => {
+      detail.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      detail.current?.focus({ preventScroll: true })
+    })
+  }
   useEffect(() => { setPreview(null) }, [current?.tool_run_id, stream, data?.case.case_id])
   const read = async () => {
     if (!current || !data) return
@@ -150,8 +160,12 @@ export function ProvenanceScreen() {
     finally { setLoading(false) }
   }
   return <div className="space-y-4">
-    <Table data={toolRuns} columns={[['tool_name', 'Utility'], ['tool_version', 'Version'], ['status', 'Status'], ['exit_code', 'Exit'], ['evidence_id', 'Evidence'], ['started_at', 'Started']]} onSelect={r => useApp.getState().selectTool(String(r.tool_run_id))} selected={r => r.tool_run_id === current?.tool_run_id} />
-    {current && <><Detail value={current} title="Command, executable hash and raw output hashes" />
+    <Table data={toolRuns} columns={[['tool_name', 'Utility'], ['tool_version', 'Version'], ['status', 'Status'], ['exit_code', 'Exit'], ['evidence_id', 'Evidence'], ['started_at', 'Started']]} actionLabel="Inspect run" onSelect={inspectRun} selected={r => r.tool_run_id === current?.tool_run_id} />
+    {current && <><details ref={detail} tabIndex={-1} className={panel}>
+      <summary className="cursor-pointer text-xs font-medium">{display(current.tool_name)} · Command, executable hash and raw output hashes</summary>
+      <p className="mt-2 text-xs text-muted">Run by: {current.actor_username == null ? 'Not recorded (older run)' : display(current.actor_username)}{current.actor_id != null ? ` · Actor ID: ${display(current.actor_id)}` : ''}</p>
+      <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">{JSON.stringify(current, null, 2)}</pre>
+    </details>
       <div className="flex items-center gap-3"><select aria-label="Output stream" className={input} value={stream} onChange={e => setStream(e.target.value)}><option>stdout</option><option>stderr</option></select>
         <Button disabled={loading} onClick={() => { void read() }}>{loading ? 'Loading…' : 'Read raw output'}</Button></div>
       {preview && <div className={panel}><p className="mb-2 break-all font-mono text-xs">SHA-256: {preview.sha256 ?? 'No output recorded'}{preview.truncated ? ' · Preview limited to 256 KiB' : ''}</p>

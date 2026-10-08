@@ -37,7 +37,7 @@ _COLUMNS = """
     executable_path, executable_sha256, arguments_json, status,
     started_at, finished_at, exit_code,
     stdout_path, stdout_sha256, stdout_size_bytes,
-    stderr_path, stderr_sha256, stderr_size_bytes
+    stderr_path, stderr_sha256, stderr_size_bytes, actor_id, actor_username
 """
 
 
@@ -50,7 +50,7 @@ class SqliteToolRunRepository(ToolRunRepositoryPort):
     def save(self, run: ToolRun) -> None:
         self._connection.execute(
             f"INSERT OR REPLACE INTO tool_runs ({_COLUMNS}) "
-            "VALUES (" + ", ".join(["?"] * 18) + ")",
+            "VALUES (" + ", ".join(["?"] * 20) + ")",
             (
                 run.id,
                 run.case_id,
@@ -66,6 +66,8 @@ class SqliteToolRunRepository(ToolRunRepositoryPort):
                 run.exit_code,
                 *_output_columns(run.stdout),
                 *_output_columns(run.stderr),
+                run.actor_id,
+                run.actor_username,
             ),
         )
         self._connection.commit()
@@ -167,4 +169,6 @@ def _row_to_tool_run(row) -> ToolRun:
         exit_code=row["exit_code"],
         stdout=_read_output(row, "stdout"),
         stderr=_read_output(row, "stderr"),
+        actor_id=row["actor_id"],
+        actor_username=row["actor_username"],
     )
