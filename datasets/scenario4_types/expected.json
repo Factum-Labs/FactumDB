@@ -1,0 +1,644 @@
+{
+  "scenario": "scenario4_types",
+  "acquired": "2026-10-05",
+  "mysql_version": "8.4.11",
+  "timestamp_time_zone": "Asia/Colombo (+05:30)",
+  "evidence": [
+    {
+      "file": "attachments.ibd",
+      "bytes": 114688,
+      "sha256": "6e3df0b4f98e403b30c032f11df63189c0a1430be199fd2cb5612a73495c2e44"
+    },
+    {
+      "file": "mysql-bin.000024",
+      "bytes": 526,
+      "sha256": "0fce93bfda3849712f9c2698cde79ce4d8ec34334fcf8780c4ce7ea7721bb0b0"
+    },
+    {
+      "file": "mysql-bin.000025",
+      "bytes": 198,
+      "sha256": "6799edd631a3f8a9ca9e60c09984e8f757da9c83b76b8c9f29cc173aa63c0d72"
+    },
+    {
+      "file": "mysql-bin.000026",
+      "bytes": 221,
+      "sha256": "2ef17325eda63520548216da9cd41d81f6e10fd6c3c1a0471ee82e53ecac9813"
+    },
+    {
+      "file": "mysql-bin.000027",
+      "bytes": 481,
+      "sha256": "406638471c4c798a31e3adb059ac231a8bf5828f57079df2006a37fddfe651b1"
+    },
+    {
+      "file": "mysql-bin.000028",
+      "bytes": 198,
+      "sha256": "98713b68b23a289f0d85a39e2666fa0363bbe7b2be374b5d516320bed22f44f7"
+    },
+    {
+      "file": "mysql-bin.000029",
+      "bytes": 245,
+      "sha256": "b5a9749833ec71eca8449ee1b35911e88cdc0c0eed2c0c43c344f25a18fe2a60"
+    },
+    {
+      "file": "mysql-bin.000030",
+      "bytes": 198,
+      "sha256": "c5e50a1e988a5ad56f2bca058a35829d5c51d597706156b8c765828b1f172ac5"
+    },
+    {
+      "file": "mysql-bin.000031",
+      "bytes": 245,
+      "sha256": "94d6525d53c3fe90c1577c167e82e7ab91b6ad7814f949c29541aa65a74b2243"
+    },
+    {
+      "file": "mysql-bin.000032",
+      "bytes": 198,
+      "sha256": "50d9215b6b7d889e7cc866037898557da234c702b578d79138d22c997f1e62a8"
+    },
+    {
+      "file": "mysql-bin.000033",
+      "bytes": 198,
+      "sha256": "b84d968478f0f44b6e60f4f5f8a35aa9981e8b3cd3d8b9dfd34b4a0937764831"
+    },
+    {
+      "file": "mysql-bin.000034",
+      "bytes": 198,
+      "sha256": "f748bf3ce5040f0a3fc1e0f1c267b25389e8fa4707136949f6d1f59794fb14d3"
+    },
+    {
+      "file": "mysql-bin.000035",
+      "bytes": 198,
+      "sha256": "8d46ea5ed97c5c2e3c220370a3c9bed0c70acde7eba5376e8300608d40b06d17"
+    },
+    {
+      "file": "mysql-bin.000036",
+      "bytes": 198,
+      "sha256": "2929724821a2be1dcb45bfeb27ed6605f8646c850b0c4c321b25defc857881cb"
+    },
+    {
+      "file": "mysql-bin.000037",
+      "bytes": 245,
+      "sha256": "46276bfc66fa933c01d7a22b3d4d54fa12d28b116fce01838d1ac3363c3c7e3e"
+    },
+    {
+      "file": "mysql-bin.000038",
+      "bytes": 198,
+      "sha256": "ec420cd80e836e89e3b58f864774027b0ddaed1625eeb4e0cd71da54d75eb15f"
+    },
+    {
+      "file": "mysql-bin.000039",
+      "bytes": 245,
+      "sha256": "b7716ad1f87c6e5c5e2dfcb54446106e837e9c4a18fcc65279ec2a2c2630da5f"
+    },
+    {
+      "file": "mysql-bin.000040",
+      "bytes": 198,
+      "sha256": "44c4a4655ec5a6cfa840c80de15e42a2f7ab1cee07fe38b0a4cd5159a02babb3"
+    },
+    {
+      "file": "mysql-bin.000041",
+      "bytes": 245,
+      "sha256": "1929c26dbf538937210c92919133a795290c65ac450d87840976a9af43387eb8"
+    },
+    {
+      "file": "mysql-bin.000042",
+      "bytes": 198,
+      "sha256": "4e87c4be9a53650261dfaa86e15193793eca6650c7a49c0a746e3930489e7f11"
+    },
+    {
+      "file": "mysql-bin.000043",
+      "bytes": 245,
+      "sha256": "ee5bebb2cf8c6a13f0413b16a1648b95f1c47dd1c183e33d0569aea0b9eb5e59"
+    },
+    {
+      "file": "mysql-bin.000044",
+      "bytes": 7091,
+      "sha256": "d0e744169f542b483d870f7a2bc188e24be53298d0b1048004532e34d2443dfc"
+    },
+    {
+      "file": "mysql-bin.000045",
+      "bytes": 198,
+      "sha256": "9a5c1bc718439ee6b735253be233d00881b769d7773817c898be0b266d70ab45"
+    },
+    {
+      "file": "mysql-bin.index",
+      "bytes": 704,
+      "sha256": "e77da2dfcb996c42df199ad167b3ddef088f59edf225fc9bbadd7d4f7baf35ae"
+    },
+    {
+      "file": "order_items.ibd",
+      "bytes": 114688,
+      "sha256": "7d32800a3c4ca4cd5ec07675e793792d8f3447aefc7a992319eff8db7d8dee20"
+    },
+    {
+      "file": "payments.ibd",
+      "bytes": 114688,
+      "sha256": "e977f3bc0e35f15ebe2567e5fb135018bf862d71571e3a7b9aaab8f79120080c"
+    }
+  ],
+  "columns": {
+    "shop.payments": [
+      "payment_id",
+      "customer",
+      "currency",
+      "amount",
+      "fee",
+      "status",
+      "paid_on",
+      "updated_at",
+      "created_at",
+      "is_flagged",
+      "note"
+    ],
+    "shop.order_items": [
+      "order_id",
+      "line_no",
+      "sku",
+      "qty"
+    ],
+    "shop.attachments": [
+      "attachment_id",
+      "content",
+      "meta"
+    ]
+  },
+  "page_rows": {
+    "shop.payments": {
+      "live": [
+        [
+          1,
+          "Amal",
+          "LKR",
+          "4000.10",
+          "1.250",
+          "paid",
+          "2026-10-03",
+          "2026-10-03 09:15:00",
+          "2026-10-03 09:15:00",
+          1,
+          "checked"
+        ],
+        [
+          30,
+          "Kamal",
+          "USD",
+          "3200.75",
+          "0.500",
+          "refunded",
+          "2026-10-01",
+          "2026-10-03 09:17:00",
+          "2026-10-03 09:17:00",
+          0,
+          "paid early"
+        ]
+      ],
+      "deleted": [
+        [
+          2,
+          "Nimal",
+          "LKR",
+          "7500.50",
+          "2.000",
+          "paid",
+          "2026-10-03",
+          "2026-10-03 09:16:00",
+          "2026-10-03 09:16:00",
+          0,
+          null
+        ],
+        [
+          3,
+          "Kamal",
+          "USD",
+          "3200.75",
+          "0.500",
+          "paid",
+          "2026-10-01",
+          "2026-10-03 09:17:00",
+          "2026-10-03 09:17:00",
+          0,
+          "paid early"
+        ],
+        [
+          2,
+          "Nimal",
+          "LKR",
+          "7500.50",
+          null,
+          "paid",
+          "2026-10-03",
+          "2026-10-03 09:16:00",
+          "2026-10-03 09:16:00",
+          0,
+          null
+        ],
+        [
+          2,
+          "Nimal",
+          "LKR",
+          "7500.50",
+          null,
+          "pending",
+          null,
+          "2026-10-03 09:16:00",
+          "2026-10-03 09:16:00",
+          0,
+          null
+        ],
+        [
+          1,
+          "Amal",
+          "LKR",
+          "5000.00",
+          "1.250",
+          "pending",
+          null,
+          "2026-10-03 09:15:00",
+          "2026-10-03 09:15:00",
+          0,
+          "first payment"
+        ]
+      ]
+    },
+    "shop.order_items": {
+      "live": [
+        [
+          100,
+          1,
+          "SKU-A",
+          3
+        ],
+        [
+          100,
+          3,
+          "SKU-B",
+          1
+        ]
+      ],
+      "deleted": [
+        [
+          101,
+          1,
+          "SKU-A",
+          5
+        ],
+        [
+          100,
+          2,
+          "SKU-B",
+          1
+        ]
+      ]
+    },
+    "shop.attachments": {
+      "live": [
+        [
+          1,
+          "<binary>",
+          "{\"pages\": 3, \"signed\": false}"
+        ]
+      ],
+      "deleted": []
+    }
+  },
+  "row_events": {
+    "shop.payments": {
+      "INSERT": 3,
+      "UPDATE": 7,
+      "DELETE": 1
+    },
+    "shop.order_items": {
+      "INSERT": 3,
+      "UPDATE": 2,
+      "DELETE": 1
+    },
+    "shop.attachments": {
+      "INSERT": 1,
+      "UPDATE": 1,
+      "DELETE": 0
+    }
+  },
+  "transactions": {
+    "committed": 14
+  },
+  "warnings": {
+    "SCHEMA_NOT_FOUND": 1
+  },
+  "coverage": {
+    "complete": true,
+    "missing_files": []
+  },
+  "records": {
+    "payments:1": {
+      "rollup": [
+        "Exact",
+        "Strong"
+      ],
+      "fields": {
+        "record presence": [
+          "Exact"
+        ],
+        "payment_id": [
+          "Exact",
+          "Strong"
+        ],
+        "customer": [
+          "Exact",
+          "Strong"
+        ],
+        "currency": [
+          "Exact",
+          "Strong"
+        ],
+        "amount": [
+          "Exact",
+          "Strong"
+        ],
+        "fee": [
+          "Exact",
+          "Strong"
+        ],
+        "status": [
+          "Exact",
+          "Strong"
+        ],
+        "paid_on": [
+          "Exact",
+          "Strong"
+        ],
+        "updated_at": [
+          "Exact",
+          "Strong"
+        ],
+        "created_at": [
+          "Exact",
+          "Strong"
+        ],
+        "is_flagged": [
+          "Exact",
+          "Strong"
+        ],
+        "note": [
+          "Exact",
+          "Strong"
+        ]
+      }
+    },
+    "payments:2": {
+      "rollup": [
+        "Exact"
+      ],
+      "fields": {
+        "record presence": [
+          "Exact"
+        ],
+        "payment_id": [
+          "Exact"
+        ],
+        "customer": [
+          "Exact"
+        ],
+        "currency": [
+          "Exact"
+        ],
+        "amount": [
+          "Exact"
+        ],
+        "fee": [
+          "Exact"
+        ],
+        "status": [
+          "Exact"
+        ],
+        "paid_on": [
+          "Exact"
+        ],
+        "updated_at": [
+          "Exact"
+        ],
+        "created_at": [
+          "Exact"
+        ],
+        "is_flagged": [
+          "Exact"
+        ],
+        "note": [
+          "Exact"
+        ]
+      }
+    },
+    "payments:30": {
+      "rollup": [
+        "Exact"
+      ],
+      "fields": {
+        "record presence": [
+          "Exact"
+        ],
+        "payment_id": [
+          "Exact"
+        ],
+        "customer": [
+          "Exact"
+        ],
+        "currency": [
+          "Exact"
+        ],
+        "amount": [
+          "Exact"
+        ],
+        "fee": [
+          "Exact"
+        ],
+        "status": [
+          "Exact"
+        ],
+        "paid_on": [
+          "Exact"
+        ],
+        "updated_at": [
+          "Exact"
+        ],
+        "created_at": [
+          "Exact"
+        ],
+        "is_flagged": [
+          "Exact"
+        ],
+        "note": [
+          "Exact"
+        ]
+      }
+    },
+    "payments:3": {
+      "rollup": [
+        "Exact",
+        "Strong"
+      ],
+      "fields": {
+        "record presence": [
+          "Exact",
+          "Strong"
+        ],
+        "payment_id": [
+          "Exact",
+          "Strong"
+        ],
+        "customer": [
+          "Exact",
+          "Strong"
+        ],
+        "currency": [
+          "Exact",
+          "Strong"
+        ],
+        "amount": [
+          "Exact",
+          "Strong"
+        ],
+        "fee": [
+          "Exact",
+          "Strong"
+        ],
+        "status": [
+          "Exact",
+          "Strong"
+        ],
+        "paid_on": [
+          "Exact",
+          "Strong"
+        ],
+        "updated_at": [
+          "Exact",
+          "Strong"
+        ],
+        "created_at": [
+          "Exact",
+          "Strong"
+        ],
+        "is_flagged": [
+          "Exact",
+          "Strong"
+        ],
+        "note": [
+          "Exact",
+          "Strong"
+        ]
+      },
+      "may_be_merged_into": "payments:30"
+    },
+    "order_items:100|1": {
+      "rollup": [
+        "Exact"
+      ],
+      "fields": {
+        "record presence": [
+          "Exact"
+        ],
+        "order_id": [
+          "Exact"
+        ],
+        "line_no": [
+          "Exact"
+        ],
+        "sku": [
+          "Exact"
+        ],
+        "qty": [
+          "Exact"
+        ]
+      }
+    },
+    "order_items:100|3": {
+      "rollup": [
+        "Exact"
+      ],
+      "fields": {
+        "record presence": [
+          "Exact"
+        ],
+        "order_id": [
+          "Exact"
+        ],
+        "line_no": [
+          "Exact"
+        ],
+        "sku": [
+          "Exact"
+        ],
+        "qty": [
+          "Exact"
+        ]
+      }
+    },
+    "order_items:100|2": {
+      "rollup": [
+        "Exact",
+        "Strong"
+      ],
+      "fields": {
+        "record presence": [
+          "Exact",
+          "Strong"
+        ],
+        "order_id": [
+          "Exact",
+          "Strong"
+        ],
+        "line_no": [
+          "Exact",
+          "Strong"
+        ],
+        "sku": [
+          "Exact",
+          "Strong"
+        ],
+        "qty": [
+          "Exact",
+          "Strong"
+        ]
+      },
+      "may_be_merged_into": "order_items:100|3"
+    },
+    "order_items:101|1": {
+      "rollup": [
+        "Exact"
+      ],
+      "fields": {
+        "record presence": [
+          "Exact"
+        ],
+        "order_id": [
+          "Exact"
+        ],
+        "line_no": [
+          "Exact"
+        ],
+        "sku": [
+          "Exact"
+        ],
+        "qty": [
+          "Exact"
+        ]
+      }
+    },
+    "attachments:1": {
+      "rollup": [
+        "Partial"
+      ],
+      "fields": {
+        "record presence": [
+          "Exact"
+        ],
+        "attachment_id": [
+          "Exact"
+        ],
+        "content": [
+          "Unsupported"
+        ],
+        "meta": [
+          "Unsupported"
+        ]
+      }
+    }
+  }
+}
