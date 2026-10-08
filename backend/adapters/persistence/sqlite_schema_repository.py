@@ -21,6 +21,7 @@ correlation services with nothing in between.
 
 from typing import Optional, Sequence, Tuple
 
+from adapters.persistence._in_case import in_case
 from core.application.ports.schema_repository_port import SchemaRepositoryPort
 from core.domain.models.canonical import Column, Schema
 
@@ -92,7 +93,8 @@ class SqliteSchemaRepository(SchemaRepositoryPort):
 
         return schema_id
 
-    def schema_for(self, database: str, table: str) -> Optional[Schema]:
+    def schema_for(self, database: str, table: str, *,
+                   case_id: Optional[str] = None) -> Optional[Schema]:
         """The schema for one table, or None if we do not have it.
 
         Returning None matters. A binlog can name a table whose .ibd was never
@@ -102,31 +104,38 @@ class SqliteSchemaRepository(SchemaRepositoryPort):
         most recently stored one wins. That is the right choice for a lookup
         used during correlation: the newest extraction is the one matching the
         evidence currently being analysed.
+
+        With a case_id only that case's files are looked at, so another case
+        holding a table of the same name cannot supply its columns.
         """
+        condition, args = in_case(case_id)
         row = self._connection.execute(
-            """
+            f"""
             SELECT schema_id, database_name, table_name, mysql_version_id
             FROM schemas
-            WHERE database_name = ? AND table_name = ?
+            WHERE database_name = ? AND table_name = ? AND {condition}
             ORDER BY rowid DESC
             LIMIT 1
             """,
-            (database, table),
+            (database, table, *args),
         ).fetchone()
 
         return self._load(row) if row is not None else None
 
-    def tables(self) -> Sequence[Tuple[str, str]]:
+    def tables(self, *, case_id: Optional[str] = None) -> Sequence[Tuple[str, str]]:
         """Every (database, table) a schema is available for.
 
         Sorted so the list is the same on every run.
         """
+        condition, args = in_case(case_id)
         rows = self._connection.execute(
-            """
+            f"""
             SELECT DISTINCT database_name, table_name
             FROM schemas
+            WHERE {condition}
             ORDER BY database_name, table_name
-            """
+            """,
+            args,
         ).fetchall()
         return [(r["database_name"], r["table_name"]) for r in rows]
 

@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS tool_runs (
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_tool_runs_evidence ON tool_runs(evidence_id);
+CREATE INDEX IF NOT EXISTS idx_tool_runs_case ON tool_runs(case_id);
 CREATE TABLE IF NOT EXISTS schemas (
     schema_id        TEXT PRIMARY KEY,
     evidence_id      TEXT NOT NULL REFERENCES evidence_files(evidence_id),
@@ -83,6 +84,8 @@ CREATE TABLE IF NOT EXISTS physical_records (
 
 CREATE INDEX IF NOT EXISTS idx_physical_table ON physical_records(database_name, table_name);
 CREATE INDEX IF NOT EXISTS idx_physical_deleted ON physical_records(is_deleted);
+CREATE INDEX IF NOT EXISTS idx_physical_evidence
+    ON physical_records(evidence_id, database_name, table_name);
 CREATE TABLE IF NOT EXISTS binlog_events (
     event_id       TEXT PRIMARY KEY,
     evidence_id    TEXT NOT NULL REFERENCES evidence_files(evidence_id),
@@ -116,12 +119,17 @@ CREATE TABLE IF NOT EXISTS transactions (
     start_position INTEGER NOT NULL,
     end_position   INTEGER NOT NULL
 ) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_transactions_evidence ON transactions(evidence_id, source_file);
 CREATE TABLE IF NOT EXISTS transaction_events (
     transaction_id TEXT NOT NULL REFERENCES transactions(transaction_id),
     event_id       TEXT NOT NULL REFERENCES binlog_events(event_id),
     event_order    INTEGER NOT NULL,
     PRIMARY KEY (transaction_id, event_id)
 ) STRICT;
+
+-- Also what the foreign key check uses for every binlog event deleted.
+CREATE INDEX IF NOT EXISTS idx_transaction_events_event ON transaction_events(event_id);
 CREATE TABLE IF NOT EXISTS integrity_results (
     integrity_id     TEXT PRIMARY KEY,
     evidence_id      TEXT NOT NULL REFERENCES evidence_files(evidence_id),
@@ -132,6 +140,8 @@ CREATE TABLE IF NOT EXISTS integrity_results (
     page_counts_json TEXT CHECK (page_counts_json IS NULL OR json_valid(page_counts_json)),
     raw_summary      TEXT
 ) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_integrity_evidence ON integrity_results(evidence_id);
 CREATE TABLE IF NOT EXISTS warnings (
     warning_id   TEXT PRIMARY KEY,
     case_id      TEXT NOT NULL REFERENCES cases(case_id),
@@ -152,6 +162,8 @@ CREATE TABLE IF NOT EXISTS binlog_inventory (
     present_files_json TEXT NOT NULL CHECK (json_valid(present_files_json)),
     missing_files_json TEXT NOT NULL CHECK (json_valid(missing_files_json))
 ) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_inventory_evidence ON binlog_inventory(evidence_id);
 CREATE TABLE IF NOT EXISTS case_scopes (
     case_id    TEXT PRIMARY KEY REFERENCES cases(case_id),
     scope_json TEXT NOT NULL CHECK (json_valid(scope_json)),

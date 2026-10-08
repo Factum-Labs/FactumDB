@@ -32,11 +32,29 @@ class SqliteApplicationStores:
     normalizer: SqliteEvidenceNormalizer
     domain: SqliteDomainRepository
 
-    def schemas_for_case(self, case_id: str) -> SqliteSchemaRepository:
-        """Return this case database's catalog after rejecting cross-case use."""
+    def schemas_for_case(self, case_id: str) -> "CaseSchemaCatalog":
+        """The schema catalog of one case, for naming that case's @N columns.
+
+        Restricted to the case's own evidence, so another case in the same
+        database cannot supply a table's columns.
+        """
         if self.cases.get(case_id) is None:
             raise LookupError(f"case not found in this database: {case_id}")
-        return self.schemas
+        return CaseSchemaCatalog(self.schemas, case_id)
+
+
+class CaseSchemaCatalog:
+    """The domain's SchemaCatalog, seen from one case."""
+
+    def __init__(self, schemas: SqliteSchemaRepository, case_id: str):
+        self._schemas = schemas
+        self._case_id = case_id
+
+    def schema_for(self, database, table):
+        return self._schemas.schema_for(database, table, case_id=self._case_id)
+
+    def tables(self):
+        return self._schemas.tables(case_id=self._case_id)
 
 
 def build_sqlite_application_stores(connection, *, now=None) -> SqliteApplicationStores:
