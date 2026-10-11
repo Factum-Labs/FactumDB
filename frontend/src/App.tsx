@@ -1,9 +1,12 @@
 import { useEffect, type FC } from 'react'
 import { useApp } from './store'
 import type { Screen } from './data/types'
-import { A, A_DARK, A_SOFT, GRN } from './lib/tokens'
+import { A, A_SOFT, GRN } from './lib/tokens'
 import { Logo } from './components/Logo'
+import { navigationButton } from './components/buttonStyles'
 import { AuthScreen } from './screens/AuthScreen'
+import { LockedScreen } from './screens/LockedScreen'
+import { useSessionLock } from './lib/useSessionLock'
 
 import { CasesScreen, IntakeScreen, PipelineScreen, TimelineScreen, RecordHistoryScreen, ReconciliationScreen, GapsScreen, ProvenanceScreen, ReportScreen, SettingsScreen } from './screens/ConnectedScreens'
 
@@ -17,38 +20,21 @@ const META: Record<Screen, [string, string]> = {
   gaps: ['Evidence gaps', 'Limitations that constrain the conclusions'],
   prov: ['Provenance', 'Trace a finding back to its source artefact'],
   report: ['Report export', 'Reproducible output for examiner review'],
-  settings: ['Settings', 'Utility paths, versions and workspace'],
+  settings: ['Settings', 'Account, preferences and workspace'],
 }
 
-const NAV_GROUPS: { title: string; items: { id: Screen; label: string; code: string }[] }[] = [
-  {
-    title: 'Case',
-    items: [
-      { id: 'cases', label: 'Cases', code: 'CS' },
-      { id: 'intake', label: 'Evidence', code: 'EV' },
-    ],
-  },
-  {
-    title: 'Analysis',
-    items: [
-      { id: 'pipeline', label: 'Pipeline', code: 'PL' },
-      { id: 'timeline', label: 'Transactions', code: 'TX' },
-      { id: 'record', label: 'Record history', code: 'RH' },
-      { id: 'recon', label: 'Reconciliation', code: 'RC' },
-      { id: 'gaps', label: 'Gaps & warnings', code: 'GP' },
-      { id: 'prov', label: 'Provenance', code: 'PV' },
-    ],
-  },
-  {
-    title: 'Output',
-    items: [
-      { id: 'report', label: 'Report', code: 'RP' },
-      { id: 'settings', label: 'Settings', code: 'ST' },
-    ],
-  },
+const NAV: { id: Screen; label: string }[] = [
+  { id: 'cases', label: 'Cases' },
+  { id: 'intake', label: 'Evidence' },
+  { id: 'pipeline', label: 'Pipeline' },
+  { id: 'timeline', label: 'Transactions' },
+  { id: 'record', label: 'Record history' },
+  { id: 'recon', label: 'Reconciliation' },
+  { id: 'gaps', label: 'Gaps & warnings' },
+  { id: 'prov', label: 'Provenance' },
+  { id: 'report', label: 'Report' },
+  { id: 'settings', label: 'Settings' },
 ]
-
-const NAV_FLAT = NAV_GROUPS.flatMap((g) => g.items)
 
 const SCREENS: Record<Screen, FC> = {
   cases: CasesScreen,
@@ -64,7 +50,10 @@ const SCREENS: Record<Screen, FC> = {
 }
 
 export default function App() {
+  useSessionLock()
+  const locked = useApp(s => s.locked)
   const user = useApp(s => s.user)
+  const displayName = useApp(s => s.settings?.profile?.display_name)
   const signOut = useApp(s => s.signOut)
   const data = useApp(s => s.data)
   const ready = useApp(s => s.ready)
@@ -81,6 +70,7 @@ export default function App() {
   const Screen = SCREENS[screen]
 
   if (!user) return <AuthScreen />
+  if (locked) return <LockedScreen />
 
   return (
     <div className="flex h-screen flex-col bg-page text-ink">
@@ -98,13 +88,14 @@ export default function App() {
           Read-only evidence mode
         </div>
         <div className="h-[14px] w-px bg-line" />
-        <div className="text-[11.5px] text-muted">Signed in: {user.username}</div>
+        <div className="text-[11.5px] text-muted">Signed in: {displayName ? `${displayName} (${user.username})` : user.username}</div>
+        <button onClick={() => { void useApp.getState().lockSession() }} className="text-[11.5px] text-accent">Lock</button>
         <button disabled={busy} onClick={() => { void signOut() }} className="text-[11.5px] text-accent disabled:opacity-40">Sign out</button>
       </div>
 
       {/* Top tabs nav */}
       <div className="flex flex-none items-center gap-0.5 overflow-x-auto border-b border-line bg-panel px-2.5">
-        {NAV_FLAT.map((n) => {
+        {NAV.map((n) => {
           const on = screen === n.id
           return (
             <button
@@ -135,12 +126,11 @@ export default function App() {
             </div>
             <div className="flex-1" />
             {/* Export is only offered once the pipeline has produced results. */}
-            {pipelineComplete && (
+            {pipelineComplete && screen !== 'report' && (
               <div className="flex items-center gap-[7px]">
                 <button
                   onClick={() => go('report')}
-                  className="h-[27px] rounded px-[11px] text-[11.5px] font-medium text-white hover:brightness-110"
-                  style={{ background: A, border: `1px solid ${A_DARK}` }}
+                  className={navigationButton}
                 >
                   Export report
                 </button>
@@ -150,7 +140,9 @@ export default function App() {
 
           <div className={'min-h-0 flex-1 overflow-auto px-[18px] pt-4 ' + (screen === 'pipeline' ? 'flex flex-col pb-4' : 'pb-10')}>
             {error && <div role="alert" className="mb-4 whitespace-pre-wrap rounded border border-red-300 bg-red-50 p-3 text-xs text-red-800">{error}{!ready && <button onClick={() => { void initialize() }} className="ml-3 underline">Retry connection</button>}</div>}
-            {notice && <div role="status" className="mb-4 rounded border border-green-300 bg-green-50 p-3 text-xs text-green-800">{notice}</div>}
+            {notice && <div role="status" className="mb-4 flex items-center gap-3 rounded border border-green-300 bg-green-50 p-3 text-xs text-green-800">
+              <span>{notice}</span><button type="button" aria-label="Dismiss status message" className="ml-auto shrink-0 underline" onClick={() => useApp.setState({ notice: null })}>Dismiss</button>
+            </div>}
             <div className={screen === 'pipeline' ? 'min-h-0 flex-1' : 'contents'}>
               {ready ? <Screen /> : !error && <p className="text-sm text-muted">Connecting to the Python backend…</p>}
             </div>

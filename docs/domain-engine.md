@@ -147,7 +147,6 @@ They are close but not authoritative — see the audit in the implementation pla
 - Add `database` to `RecordRef` and `ruleId` to `ReconRow`.
 - Fix `classify()`: `Unsupported` has severity 0, so a record whose every field is
   Unsupported currently renders as `'agreeing'` — it was never compared at all.
-- Rename `R-CONFLICT-02` → `R-RECON-003` in `caseData.ts`.
 
 `npm run check:graph` must stay green throughout.
 

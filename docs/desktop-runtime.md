@@ -63,6 +63,13 @@ Initial paths can also come from `FACTUMDB_INNOCHECKSUM_PATH`,
 
 ## Examine a case
 
+On the **Cases** page, **Delete** permanently removes a case after you type its
+name to confirm. It removes the case database, working copies, outputs, logs and
+reports inside the case folder. Original evidence and exports outside that folder
+remain untouched. There is no recovery option. Deletion is disabled during busy
+operations; cases with original evidence inside their own folder cannot be deleted
+until those originals are moved out.
+
 1. Sign in, then create a named case or open a saved case. The signed-in account
    supplies the examiner identity automatically.
 2. Register evidence using Browse Files or an absolute file path. Supported names
@@ -90,6 +97,10 @@ obsolete. Export remains disabled until the changed evidence has been analysed.
 Evidence registration is blocked while a pipeline is active.
 
 ## Storage and packaging
+
+See [Settings and workspace recovery](settings.md) for examiner profiles,
+password changes, session locking, timezone display and full
+workspace backup/restore.
 
 Tauri's application data directory holds `catalog.db`, `settings.json` and
 `cases/<case-id>/case.db`. Each case has separate working-copy and raw-output

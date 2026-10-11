@@ -19,7 +19,7 @@ from core.application.use_cases.extraction import (
     RecordBinlogInventoryUseCase,
 )
 from core.domain.models.evidence import EvidenceKind, VerificationStatus
-from tests.adapters.conftest import a_binlog, an_ibd
+from tests.adapters.conftest import an_ibd
 from tests.adapters.test_sqlite_normalization import case  # noqa: F401 - fixture
 from tests.application.fakes import FixedClock
 

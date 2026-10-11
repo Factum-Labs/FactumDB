@@ -21,14 +21,22 @@ export interface CaseData {
   tables: Record<string, Row[]>
   analysis: Record<string, Row>
   findings: Row[]
+  finding_rules?: Record<string, { title: string; explanation: string; service: string }>
   run: PipelineRun | null
 }
 export interface ToolSettings {
   innochecksum_path: string; ibd2sdi_path: string; ibd2sql_path: string
   mysqlbinlog_path: string; python_path: string; include_deleted: boolean
 }
-export interface Settings { workspace: string; tools: ToolSettings; bundled_tools?: Partial<ToolSettings> }
-export interface AuthStatus { user: { username: string } | null }
+export interface Preferences {
+  lock_minutes: number; time_mode: 'utc' | 'local' | 'custom'; utc_offset_minutes: number
+}
+export interface ExaminerProfile { display_name?: string; organization?: string; examiner_id?: string }
+export interface Settings { workspace: string; tools: ToolSettings; bundled_tools?: Partial<ToolSettings>; preferences?: Preferences; profile?: ExaminerProfile }
+export interface AuthStatus { user: { username: string } | null; locked?: boolean }
+export interface StorageUsage { total_bytes: number; free_bytes: number; categories: Record<string, number>; cases: Record<string, number> }
+export interface BackupPreview { created_at: string; case_count: number; total_bytes: number; sha256: string; original_evidence_included: boolean }
+export const defaultPreferences: Preferences = { lock_minutes: 15, time_mode: 'utc', utc_offset_minutes: 0 }
 
 export async function request<T>(command: string, payload: Record<string, unknown> = {}): Promise<T> {
   if (!isTauri()) throw new Error('Open FactumDB in the desktop app to connect to the backend. Run npm run tauri:dev from the project root.')
@@ -36,6 +44,8 @@ export async function request<T>(command: string, payload: Record<string, unknow
 }
 export const pickEvidence = () => invoke<string[]>('pick_evidence')
 export const pickExportPath = (format: string) => invoke<string | null>('pick_export_path', { format })
+export const pickBackupPath = (restore: boolean) => invoke<string | null>('pick_backup_path', { restore })
+export const openWorkspace = () => invoke<void>('open_workspace')
 
 export function rows(value: Json | undefined): Row[] {
   return Array.isArray(value) ? value.filter((r): r is Row => r !== null && typeof r === 'object' && !Array.isArray(r)) : []

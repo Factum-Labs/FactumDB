@@ -2,8 +2,11 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import { isTauri } from '@tauri-apps/api/core'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { Badge } from '../components/Badge'
+import { StatusMessage } from '../components/StatusMessage'
+import { navigationButton } from '../components/buttonStyles'
 import { display, pickEvidence, request, type CaseData, type Row } from '../lib/backend'
 import { useApp } from '../store'
+import { useTablePage } from '../lib/useTablePage'
 
 const input = 'h-[29px] w-full rounded border border-line-input bg-panel px-[9px] text-[12px] text-ink focus:border-accent-light'
 const button = 'h-[26px] rounded border border-line-input bg-panel px-2.5 text-[11.5px] text-ink hover:bg-page disabled:cursor-not-allowed disabled:opacity-40'
@@ -55,7 +58,7 @@ export function IntakeScreen() {
   const busy = useApp(s => s.busy)
   const [path, setPath] = useState('')
   const [selected, setSelected] = useState('')
-  const [page, setPage] = useState(0)
+  const [page, setPage] = useTablePage('evidence')
   const [hovering, setHovering] = useState(false)
   const [working, setWorking] = useState(false)
   const dropZone = useRef<HTMLDivElement>(null)
@@ -63,7 +66,7 @@ export function IntakeScreen() {
   const caseId = data?.case.case_id
   const active = !!data?.run && !data.run.stopped
   const locked = busy || active || working
-  useEffect(() => { setPath(''); setSelected(''); setPage(0) }, [caseId])
+  useEffect(() => { setPath(''); setSelected('') }, [caseId])
   useEffect(() => {
     if (!isTauri() || !caseId) return
     let disposed = false
@@ -84,7 +87,7 @@ export function IntakeScreen() {
       .catch(error => { if (!disposed) useApp.getState().setError(error) })
     return () => { disposed = true; unlisten?.() }
   }, [caseId])
-  if (!data) return <div className="rounded-md border border-line bg-panel p-4 text-sm text-muted">Open or create a case to register evidence.</div>
+  if (!data) return <StatusMessage>Open or create a case to register evidence.</StatusMessage>
   const evidence = data.tables.evidence_files ?? []
   const verified = evidence.filter(e => e.verification_status === 'verified').length
   const detail = evidence.find(e => e.evidence_id === selected)
@@ -157,9 +160,9 @@ export function IntakeScreen() {
         </div>
         {!evidence.length && <p className="px-3 py-4 text-[12px] text-muted">Browse or drop files to register evidence.</p>}
         {pages > 1 && <div className="flex items-center gap-3 px-3 py-2 text-[11px] text-muted">
-          <button type="button" className={button} disabled={current === 0} onClick={() => setPage(current - 1)}>Previous</button>
+          <button type="button" className={navigationButton} disabled={current === 0} onClick={() => setPage(current - 1)}>Previous</button>
           <span>Page {current + 1} of {pages} · {evidence.length} files</span>
-          <button type="button" className={button} disabled={current + 1 === pages} onClick={() => setPage(current + 1)}>Next</button>
+          <button type="button" className={navigationButton} disabled={current + 1 === pages} onClick={() => setPage(current + 1)}>Next</button>
         </div>}
       </section>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -170,7 +173,7 @@ export function IntakeScreen() {
             <button type="submit" className={button} disabled={locked || !path.trim()}>Register file</button>
           </form>
         </details>
-        <button type="button" className={button} disabled={busy || working || !evidence.length} onClick={() => useApp.getState().go('pipeline')}>Open pipeline</button>
+        <button type="button" className={navigationButton} disabled={busy || working || !evidence.length} onClick={() => useApp.getState().go('pipeline')}>Open pipeline</button>
       </div>
       {active && <p className="rounded-md border border-line bg-panel px-3 py-2 text-[11px] text-muted">Finish or cancel the active pipeline before registering additional evidence.</p>}
       {detail && <details open className="rounded-md border border-line bg-panel p-3 text-[11px]">

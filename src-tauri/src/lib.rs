@@ -31,31 +31,36 @@ impl BackendProcess {
         let platform = if cfg!(windows) { "windows" } else { "linux" };
         let mut roots = vec![source.parent().unwrap().join("runtime").join(platform)];
         if cfg!(debug_assertions) {
-            roots.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/runtime").join(platform));
+            roots.push(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("resources/runtime")
+                    .join(platform),
+            );
         }
         let bundle = roots
             .into_iter()
             .find(|p| p.join("manifest.json").is_file());
-        let candidates: Vec<(String, Vec<&str>)> = if let Some(root) = bundle.as_ref().filter(|_| cfg!(windows)) {
-            vec![(
-                root.join("python/python.exe")
-                    .to_string_lossy()
-                    .into_owned(),
-                vec![],
-            )]
-        } else {
-            match std::env::var("FACTUMDB_PYTHON") {
-                Ok(path) => vec![(path, vec![])],
-                Err(_) if cfg!(windows) => {
-                    vec![
-                        ("py".into(), vec!["-3.11"]),
-                        ("py".into(), vec!["-3"]),
-                        ("python".into(), vec![]),
-                    ]
+        let candidates: Vec<(String, Vec<&str>)> =
+            if let Some(root) = bundle.as_ref().filter(|_| cfg!(windows)) {
+                vec![(
+                    root.join("python/python.exe")
+                        .to_string_lossy()
+                        .into_owned(),
+                    vec![],
+                )]
+            } else {
+                match std::env::var("FACTUMDB_PYTHON") {
+                    Ok(path) => vec![(path, vec![])],
+                    Err(_) if cfg!(windows) => {
+                        vec![
+                            ("py".into(), vec!["-3.11"]),
+                            ("py".into(), vec!["-3"]),
+                            ("python".into(), vec![]),
+                        ]
+                    }
+                    Err(_) => vec![("python3".into(), vec![])],
                 }
-                Err(_) => vec![("python3".into(), vec![])],
-            }
-        };
+            };
         if cfg!(windows) && !cfg!(debug_assertions) && bundle.is_none() {
             return Err("The Windows runtime bundle is missing. Reinstall FactumDB.".into());
         }
@@ -243,6 +248,53 @@ async fn pick_export_path(app: tauri::AppHandle, format: String) -> Result<Optio
     .map_err(|e| e.to_string())?
 }
 
+#[tauri::command]
+async fn pick_backup_path(app: tauri::AppHandle, restore: bool) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dialog = app
+            .dialog()
+            .file()
+            .add_filter("FactumDB backup", &["fdbbackup"]);
+        let file = if restore {
+            dialog
+                .set_title("Select workspace backup")
+                .blocking_pick_file()
+        } else {
+            dialog
+                .set_title("Save workspace backup")
+                .set_file_name("workspace.fdbbackup")
+                .blocking_save_file()
+        };
+        file.map(|file| {
+            file.into_path()
+                .map(|p| p.to_string_lossy().into_owned())
+                .map_err(|e| e.to_string())
+        })
+        .transpose()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn open_workspace(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Backend>,
+) -> Result<(), String> {
+    let settings = backend_request(window, state, "get_settings".into(), json!({})).await?;
+    let path = settings["workspace"]
+        .as_str()
+        .ok_or("Workspace unavailable")?;
+    #[cfg(windows)]
+    let mut command = Command::new("explorer.exe");
+    #[cfg(target_os = "linux")]
+    let mut command = Command::new("xdg-open");
+    #[cfg(target_os = "macos")]
+    let mut command = Command::new("open");
+    command.arg(path).spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -266,7 +318,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             backend_request,
             pick_evidence,
-            pick_export_path
+            pick_export_path,
+            pick_backup_path,
+            open_workspace
         ])
         .build(tauri::generate_context!())
         .expect("error while building FactumDB")

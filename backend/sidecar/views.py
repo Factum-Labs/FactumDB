@@ -5,7 +5,7 @@ import json
 from adapters.persistence.case_export import _TABLES, _row
 from core.application.errors import NotFoundError
 from sidecar.commands import _pipeline_result
-from core.domain.rules import describe
+from core.domain.rules import RULES, describe
 from core.engine import ENGINE_REVISION, ANALYSIS_FORMAT_VERSION
 
 
@@ -31,7 +31,10 @@ def _findings(value, found):
                    json.dumps(value.get('provenance', []), sort_keys=True))
             if key not in found:
                 finding = dict(value)
-                finding["description"] = describe(value["rule_id"], value.get("context", {}))
+                if value["rule_id"] in RULES:
+                    finding["description"] = describe(value["rule_id"], value.get("context", {}))
+                else:
+                    finding.setdefault("description", value["rule_id"])
                 found[key] = finding
             return
         for item in value.values():
@@ -74,6 +77,9 @@ def case_view(case_id, connection, stores, pipelines):
             result["histories"] = _project(connection, case_id, stage, "histories", ("record", "method"),
                 {"step_count": "json_array_length(j.value, '$.steps')"})
         elif stage == "reconciliation":
+            result["records"] = _project(connection, case_id, stage, "records",
+                ("record", "rollup", "rollup_rule_id", "rollup_label", "triggers"),
+                {"field_count": "json_array_length(j.value, '$.fields')"})
             result["rows"] = _project(connection, case_id, stage, "rows",
                 ("record_id", "field", "log_display", "phys_display", "result", "rule_id"))
             result["coverage"] = _part(connection, case_id, stage, "$.coverage")
@@ -96,6 +102,12 @@ def case_view(case_id, connection, stores, pipelines):
         "table_counts": counts,
         "analysis": _present(results),
         "findings": _present(list(findings.values())),
+        "finding_rules": {
+            rule_id: {"title": RULES[rule_id].title, "explanation": RULES[rule_id].statement,
+                      "service": RULES[rule_id].service}
+            for rule_id in sorted({finding["rule_id"] for finding in findings.values()})
+            if rule_id in RULES
+        },
         "run": _pipeline_result(run) if run else None,
     }
 

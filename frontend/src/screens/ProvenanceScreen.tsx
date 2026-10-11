@@ -1,1 +1,0 @@
-export { ProvenanceScreen } from './ConnectedScreens'
