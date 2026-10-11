@@ -1,5 +1,5 @@
 import { useHistoryPage } from "../lib/useHistoryPage";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Badge } from "../components/Badge";
 import { StatusMessage } from "../components/StatusMessage";
 import { navigationButton } from "../components/buttonStyles";
@@ -15,7 +15,6 @@ import {
 import { useApp } from "../store";
 import { useAnalysisDetail } from "../lib/useAnalysisDetail";
 import { useTablePage } from "../lib/useTablePage";
-import { useRevealRow } from "../lib/useRevealRow";
 import { useTimeDisplay } from "../lib/timeDisplay";
 
 const button = navigationButton;
