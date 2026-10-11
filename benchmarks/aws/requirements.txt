@@ -1,0 +1,3 @@
+# Test tooling only; application runtime dependencies remain unchanged.
+psutil==6.0.0
+pytest==9.1.1
