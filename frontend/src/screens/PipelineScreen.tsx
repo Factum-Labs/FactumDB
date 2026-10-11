@@ -169,7 +169,7 @@ export function PipelineScreen() {
     decode_binary_logs: `${evidence.filter(e => e.kind === 'binlog').length} logs, ${missing} missing`,
     group_transactions: `${transactions.length} transactions`,
     correlate_records: `${records.length} records linked`,
-    reconstruct_state: `${rows(data.analysis.reconstruction?.histories).length} histories`,
+    reconstruct_state: `${data.analysis.reconstruction?.history_count ?? rows(data.analysis.reconstruction?.histories).length} histories`,
     reconcile_records: `${comparisons.length} comparisons`,
   }
   const metrics = [

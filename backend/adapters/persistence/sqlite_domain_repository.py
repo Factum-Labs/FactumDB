@@ -145,6 +145,9 @@ class SqliteDomainRepository:
                 "(case_id, stage, result_json, saved_at) VALUES (?, ?, ?, ?)",
                 (case_id, stage, json.dumps(encode(result)), to_text(self._now())),
             )
+            if stage == "reconstruction":
+                from adapters.persistence.sqlite_history_summary_repository import HistorySummaries
+                HistorySummaries(self._connection).rebuild(case_id)
             if stage == "reconciliation":
                 self._connection.execute("UPDATE cases SET reanalysis_required = 0 WHERE case_id = ?", (case_id,))
 

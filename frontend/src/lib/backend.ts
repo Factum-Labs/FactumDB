@@ -56,3 +56,6 @@ export function display(value: Json | undefined): string {
   }
   return JSON.stringify(value)
 }
+
+export interface HistoryTables { tables: { database: string; table: string; count: number }[]; total: number }
+export interface HistoryPage { items: Row[]; total: number; offset: number; limit: number }

@@ -71,8 +71,9 @@ def case_view(case_id, connection, stores, pipelines):
             result["records"] = _project(connection, case_id, stage, "records", ("record", "method"))
             result["edges"] = _project(connection, case_id, stage, "edges", ("tx_id", "record_id", "event_type"))
         elif stage == "reconstruction":
-            result["histories"] = _project(connection, case_id, stage, "histories", ("record", "method"),
-                {"step_count": "json_array_length(j.value, '$.steps')"})
+            result["history_count"] = connection.execute(
+                "SELECT json_array_length(result_json, '$.histories') FROM analysis_results WHERE case_id = ? AND stage = 'reconstruction'", (case_id,)).fetchone()[0]
+            result["histories_paginated"] = True
         elif stage == "reconciliation":
             result["rows"] = _project(connection, case_id, stage, "rows",
                 ("record_id", "field", "log_display", "phys_display", "result", "rule_id"))
@@ -119,7 +120,7 @@ def _project(connection, case_id, stage, array, fields, extra=None):
     )]
 
 
-def analysis_detail(connection, case_id, kind, identity, field=None):
+def analysis_detail(connection, case_id, kind, identity, field=None, qualified_table=None):
     stage, array, path = {
         "history": ("reconstruction", "histories", "$.record.id"),
         "transaction": ("grouping", "transactions", "$.id"),
@@ -128,8 +129,8 @@ def analysis_detail(connection, case_id, kind, identity, field=None):
     row = connection.execute(
         "SELECT j.value FROM analysis_results a, json_each(a.result_json, ?) j "
         "WHERE a.case_id = ? AND a.stage = ? AND json_extract(j.value, ?) = ? "
-        "AND (? IS NULL OR json_extract(j.value, '$.field') = ?) LIMIT 1",
-        (f"$.{array}", case_id, stage, path, identity, field, field),
+        "AND (? IS NULL OR json_extract(j.value, '$.field') = ?) AND (? IS NULL OR json_extract(j.value, '$.record.table') = ?) LIMIT 1",
+        (f"$.{array}", case_id, stage, path, identity, field, field, qualified_table, qualified_table),
     ).fetchone()
     if row is None:
         raise NotFoundError(f"{kind} not found in this case: {identity}")

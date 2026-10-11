@@ -218,3 +218,23 @@ CREATE TABLE IF NOT EXISTS reports (
     created_at  TEXT NOT NULL,
     UNIQUE (case_id, format, version)
 ) STRICT;
+
+CREATE TABLE IF NOT EXISTS history_summaries (
+ case_id TEXT NOT NULL REFERENCES cases(case_id), ordinal INTEGER NOT NULL,
+ database_name TEXT NOT NULL, qualified_table_name TEXT NOT NULL,
+ record_id TEXT NOT NULL, record_json TEXT NOT NULL, method TEXT NOT NULL,
+ step_count INTEGER NOT NULL, PRIMARY KEY(case_id, ordinal)
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_history_table ON history_summaries
+ (case_id, database_name, qualified_table_name, ordinal);
+CREATE TABLE IF NOT EXISTS history_summary_ready (case_id TEXT PRIMARY KEY REFERENCES cases(case_id)) STRICT;
+CREATE TRIGGER IF NOT EXISTS history_delete AFTER DELETE ON analysis_results
+WHEN OLD.stage = 'reconstruction' BEGIN
+ DELETE FROM history_summaries WHERE case_id = OLD.case_id;
+ DELETE FROM history_summary_ready WHERE case_id = OLD.case_id;
+END;
+CREATE TRIGGER IF NOT EXISTS history_update AFTER UPDATE ON analysis_results
+WHEN OLD.stage = 'reconstruction' BEGIN
+ DELETE FROM history_summaries WHERE case_id = OLD.case_id;
+ DELETE FROM history_summary_ready WHERE case_id = OLD.case_id;
+END;

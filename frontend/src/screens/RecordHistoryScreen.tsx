@@ -1,3 +1,4 @@
+import { useHistoryPage } from '../lib/useHistoryPage'
 import { useMemo, useState } from 'react'
 import { Badge } from '../components/Badge'
 import { RESULT_TONE, type ReconResult } from '../data/types'
@@ -191,26 +192,35 @@ function HistoryDetail({ history, data }: { history: Row; data: CaseData }) {
 export function RecordHistoryScreen() {
   const data = useApp(s => s.data)
   const selected = useApp(s => s.selectedRecord)
-  const histories = useMemo(() => rows(data?.analysis.reconstruction?.histories), [data?.analysis.reconstruction?.histories])
-  const index = Math.max(0, histories.findIndex(history => object(history.record).id === selected))
-  const current = histories[index]
+  const selectedTable = useApp(s => s.selectedRecordTable)
+  const list = useHistoryPage(data)
+  const histories = list.items
+  const current = histories.find(h => object(h.record).id === selected && (!selectedTable || object(h.record).table === selectedTable)) ?? histories[0]
   const loaded = useAnalysisDetail(data?.case.case_id, 'history', current, data?.analysis.reconstruction?.details_deferred === true)
-  const page = Math.floor(index / 100)
-  const pages = Math.max(1, Math.ceil(histories.length / 100))
-  if (!data || !current) return <div className="rounded-md border border-line bg-panel p-4 text-sm text-muted">No results available yet.</div>
+  const page = list.offset / 100
+  const pages = Math.max(1, Math.ceil(list.total / 100))
+  if (!data) return <div className="rounded-md border border-line bg-panel p-4 text-sm text-muted">No results available yet.</div>
   return <div className="grid max-w-[1180px] items-start gap-4 lg:grid-cols-[250px_minmax(0,1fr)]">
     <section className="min-w-0 overflow-hidden rounded-md border border-line bg-panel" aria-labelledby="correlated-records-heading">
       <h2 id="correlated-records-heading" className="border-b border-line px-3 py-[9px] text-[12px] font-semibold">Correlated records</h2>
-      <div className="max-h-[640px] overflow-auto">{histories.slice(page * 100, (page + 1) * 100).map(history => {
+      <label className="block px-3 py-2 text-[11px]">Table
+        <select aria-label="Filter record histories by table" className="mt-1 w-full rounded border border-line-input bg-panel p-1" value={list.filter} onChange={e => list.changeFilter(e.target.value)}>
+          <option value="">All tables</option>
+          {list.tables.map(t => <option key={t.table} value={t.table}>{t.table} ({t.count})</option>)}
+        </select>
+      </label>
+      {list.error && <p role="alert" className="px-3">{list.error}</p>}
+      {list.loading ? <p role="status" className="px-3">Loading histories...</p> : !histories.length ? <p className="px-3">No histories for this selection.</p> : null}
+      <div className="max-h-[640px] overflow-auto">{histories.map(history => {
         const record = object(history.record)
         const count = history.step_count ?? rows(history.steps).length
-        return <button type="button" key={String(record.id)} aria-pressed={record.id === object(current.record).id} onClick={() => useApp.getState().selectRecord(String(record.id))}
-          className={'block w-full border-b border-l-2 border-line-soft px-3 py-[9px] text-left hover:bg-thead ' + (record.id === object(current.record).id ? 'border-l-accent bg-accent-soft' : 'border-l-transparent bg-panel')}>
+        return <button type="button" key={`${record.table}:${record.id}`} aria-pressed={record.id === object(current?.record).id && record.table === object(current?.record).table} onClick={() => useApp.getState().selectRecord(String(record.id), String(record.table))}
+          className={'block w-full border-b border-l-2 border-line-soft px-3 py-[9px] text-left hover:bg-thead ' + (record.id === object(current?.record).id && record.table === object(current?.record).table ? 'border-l-accent bg-accent-soft' : 'border-l-transparent bg-panel')}>
           <span className="block break-all font-mono text-[12px]">{display(record.table)}</span><span className="mt-0.5 block text-[11px] text-muted">{display(record.key)} · {display(count)} steps</span>
         </button>
       })}</div>
-      {pages > 1 && <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-muted"><button type="button" className={button} disabled={page === 0} onClick={() => useApp.getState().selectRecord(String(object(histories[(page - 1) * 100].record).id))}>Previous</button><span>{page + 1} / {pages}</span><button type="button" className={button} disabled={page + 1 === pages} onClick={() => useApp.getState().selectRecord(String(object(histories[(page + 1) * 100].record).id))}>Next</button></div>}
+      {pages > 1 && <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-muted"><button type="button" className={button} disabled={page === 0} onClick={() => list.changePage((page - 1) * 100)}>Previous</button><span>{page + 1} / {pages} / {list.total} records</span><button type="button" className={button} disabled={page + 1 === pages} onClick={() => list.changePage((page + 1) * 100)}>Next</button></div>}
     </section>
-    {loaded.detail ? <HistoryDetail key={`${data.case.case_id}:${object(current.record).id}`} history={loaded.detail} data={{ ...data, findings: [...data.findings, ...loaded.findings] }} /> : <p role="status" className="text-sm text-muted">{loaded.error ?? 'Loading record history…'}</p>}
+    {current && !list.loading && loaded.detail ? <HistoryDetail key={`${data.case.case_id}:${object(current.record).table}:${object(current.record).id}`} history={loaded.detail} data={{ ...data, findings: [...data.findings, ...loaded.findings] }} /> : <p role="status" className="text-sm text-muted">{loaded.error ?? 'Loading record history…'}</p>}
   </div>
 }

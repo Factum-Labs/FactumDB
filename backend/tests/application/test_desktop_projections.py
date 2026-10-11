@@ -23,11 +23,13 @@ def test_overview_defers_complete_details_without_changing_exports(tmp_path):
         assert view["tables"]["analysis_results"] == []
         assert view["table_counts"]["analysis_results"] == 4
         assert len(json.dumps(view)) < len(json.dumps(archive)) / 3
-        assert "steps" not in view["analysis"]["reconstruction"]["histories"][0]
+        assert "histories" not in view["analysis"]["reconstruction"]
+        assert view["analysis"]["reconstruction"]["history_count"] == len(result.reconstruction.histories)
+        assert "steps" not in call(runtime, "get_history_page", case_id=case_id)["items"][0]
         assert "events" not in view["analysis"]["grouping"]["transactions"][0]
         assert "findings" not in view["analysis"]["reconciliation"]["rows"][0]
         history = result.reconstruction.histories[0]
-        detail = call(runtime, "get_analysis_detail", case_id=case_id, kind="history", identity=history.record.id)
+        detail = call(runtime, "get_analysis_detail", case_id=case_id, kind="history", identity=history.record.id, qualified_table=history.record.table)
         assert {k: v for k, v in detail["detail"].items() if k != "events"} == encode(history)
         assert detail["findings"] and all("description" in f for f in detail["findings"])
         tx = result.grouping.transactions[0]
@@ -49,7 +51,7 @@ def test_deferred_history_keeps_observed_log_images(tmp_path, monkeypatch):
         tools(runtime, tmp_path, monkeypatch)
         assert finish(runtime, case_id)["complete"]
         view = call(runtime, "get_case_data", case_id=case_id)
-        record = view["analysis"]["reconstruction"]["histories"][0]["record"]
+        record = call(runtime, "get_history_page", case_id=case_id)["items"][0]["record"]
         detail = call(runtime, "get_analysis_detail", case_id=case_id, kind="history", identity=record["id"])["detail"]
         assert detail["events"]
         assert detail["events"][0]["database"] == record["database"]

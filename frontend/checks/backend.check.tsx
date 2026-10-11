@@ -122,7 +122,17 @@ try {
   assert.equal(seeded.analysis.reconstruction.details_deferred, true)
   // Server rendering has no effects. Fetch selected details through the same
   // IPC used by the screens, then render their loaded states.
-  const historySummary = (seeded.analysis.reconstruction.histories as Row[])[0]
+  const historyPage = await request<{ items: Row[] }>('get_history_page', { case_id: seeded.case.case_id })
+  const historySummary = historyPage.items[0]
+  const choices = await request<{ tables: { database: string; table: string; count: number }[]; total: number }>('get_history_tables', { case_id: caseId })
+  assert.equal(choices.total, seeded.analysis.reconstruction.history_count)
+  const choice = choices.tables[0]
+  const filtered = await request<{ items: Row[]; total: number }>('get_history_page', { case_id: caseId, database: choice.database, table: choice.table, limit: 100 })
+  assert.equal(filtered.total, choice.count)
+  assert.ok(filtered.items.every(item => (item.record as Row).table === choice.table))
+  const located = await request<{ table: string; offset: number }>('locate_history_record', { case_id: caseId, identity: (historySummary.record as Row).id, qualified_table: (historySummary.record as Row).table })
+  assert.equal(located.table, (historySummary.record as Row).table)
+  assert.equal(located.offset, 0)
   const transactionSummary = (seeded.analysis.grouping.transactions as Row[])[0]
   const history = await request<{ detail: Row; findings: Row[] }>('get_analysis_detail', {
     case_id: caseId, kind: 'history', identity: (historySummary.record as Row).id,

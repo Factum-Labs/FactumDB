@@ -9,6 +9,7 @@ interface AppState {
   screen: Screen; data: CaseData | null; cases: CaseSummary[]; settings: Settings | null
   busy: boolean; ready: boolean; error: string | null; notice: string | null
   pipelineComplete: boolean; stagesDone: number; runningStage: number | null; cancelRequested: boolean
+  recordNavigation: number; selectedRecordTable: string;
   selectedTx: string; selectedRecord: string; selectedTool: string; reportFormat: string; expandedGroups: string[]
   go: (screen: Screen) => void
   initialize: () => Promise<void>
@@ -25,7 +26,7 @@ interface AppState {
   configure: (tools: ToolSettings) => Promise<void>
   exportCase: (path: string) => Promise<void>
   setError: (error: unknown) => void
-  selectTx: (id: string) => void; selectRecord: (id: string) => void; selectTool: (id: string) => void
+  selectTx: (id: string) => void; selectRecord: (id: string, table?: string) => void; selectTool: (id: string) => void
   setFormat: (f: string) => void; toggleGroup: (id: string) => void
   openTransaction: (id: string) => void; openRecord: (id: string) => void
 }
@@ -34,7 +35,7 @@ let initializing: Promise<void> | undefined
 const signedOut: Partial<AppState> = {
   user: null, data: null, cases: [], settings: null, ready: false, screen: 'cases',
   pipelineComplete: false, stagesDone: 0, runningStage: null, cancelRequested: false,
-  selectedTx: '', selectedRecord: '', selectedTool: '', expandedGroups: [], reportFormat: 'JSON',
+  recordNavigation: 0, selectedRecordTable: '', selectedTx: '', selectedRecord: '', selectedTool: '', expandedGroups: [], reportFormat: 'JSON',
   error: null, notice: null,
 }
 export const useApp = create<AppState>((set, get) => {
@@ -96,7 +97,7 @@ export const useApp = create<AppState>((set, get) => {
     user: null, authChecked: false,
     screen: 'cases', data: null, cases: [], settings: null, busy: false, ready: false, error: null, notice: null,
     pipelineComplete: false, stagesDone: 0, runningStage: null, cancelRequested: false,
-    selectedTx: '', selectedRecord: '', selectedTool: '', reportFormat: 'JSON', expandedGroups: [],
+    recordNavigation: 0, selectedRecordTable: '', selectedTx: '', selectedRecord: '', selectedTool: '', reportFormat: 'JSON', expandedGroups: [],
     go: screen => { if (!get().busy || screen !== 'cases') set({ screen }) },
     setError: error => {
       const message = error instanceof Error ? error.message : String(error)
@@ -176,10 +177,10 @@ export const useApp = create<AppState>((set, get) => {
       const result = await request<{ path: string }>('export_case', { case_id: caseId(), format: get().reportFormat, path })
       set({ notice: 'Export saved to ' + result.path })
     }).then(() => {}),
-    selectTx: selectedTx => set({ selectedTx }), selectRecord: selectedRecord => set({ selectedRecord }),
+    selectTx: selectedTx => set({ selectedTx }), selectRecord: (selectedRecord, table = '') => set({ selectedRecord, selectedRecordTable: table }),
     selectTool: selectedTool => set({ selectedTool }), setFormat: reportFormat => set({ reportFormat }),
     toggleGroup: id => set(s => ({ expandedGroups: s.expandedGroups.includes(id) ? s.expandedGroups.filter(g => g !== id) : [...s.expandedGroups, id] })),
     openTransaction: selectedTx => set({ screen: 'timeline', selectedTx }),
-    openRecord: selectedRecord => set({ screen: 'record', selectedRecord }),
+    openRecord: selectedRecord => set(s => ({ screen: 'record', selectedRecord, selectedRecordTable: '', recordNavigation: s.recordNavigation + 1 })),
   }
 })
