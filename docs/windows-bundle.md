@@ -22,6 +22,13 @@ require a download on first installation if Windows does not already supply it.
 Downloads are cached in `.bundle-cache/`. Staging fails on checksum mismatch.
 Generated files in `src-tauri/resources/` and the cache are ignored by Git.
 
+For development, run `npm run tauri:dev`. The Tauri pre-launch command checks
+the Windows runtime manifest and every listed runtime file before starting Vite.
+If the bundle is missing, incomplete, or pinned to different artifacts, it runs
+the same staging script automatically. Cached downloads are reused. This also
+applies to `cargo tauri dev`; no tool paths need to be entered manually.
+Use `npm run dev:prepare` to repair the generated runtime without launching the app.
+
 The Visual C++ DLLs come from the licensed Visual Studio redistributable
 directory, **not** from Windows System32. The pinned build uses
 `14.44.35112/x64/Microsoft.VC143.CRT`. If Build Tools lives elsewhere, set

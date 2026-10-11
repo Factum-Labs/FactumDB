@@ -5,8 +5,8 @@
   "identifier": "lk.ac.uom.factumdb",
   "build": {
     "beforeDevCommand": {
-      "script": "npm run dev",
-      "cwd": "../frontend"
+      "script": "npm run dev:prepare && npm --prefix frontend run dev",
+      "cwd": ".."
     },
     "devUrl": "http://localhost:1420",
     "additionalWatchFolders": [

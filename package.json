@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "FactumDB — MySQL/InnoDB forensic examination workbench",
   "scripts": {
+    "dev:prepare": "node scripts/prepare_dev_runtime.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",

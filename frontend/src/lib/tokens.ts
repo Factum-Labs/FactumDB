@@ -7,27 +7,12 @@
 //   #282828  ink
 
 export const A = '#15696f' // accent (teal)
-export const A_DARK = '#0f4f54'
-export const A_LIGHT = '#63bdb5'
 export const A_SOFT = '#e2efee' // tinted fill for accent-toned surfaces
 export const GRN = '#2f8a72'
 export const AMB = 'oklch(0.62 0.13 75)' // amber — transaction "Incomplete"
 export const ORG = 'oklch(0.62 0.15 55)' // orange — reconciliation "Unresolved"
 export const RED = 'oklch(0.55 0.16 25)' // red — reconciliation "Conflicting"
 export const GRY = '#858585'
-
-// Neutral surfaces / rules, cool-grey to sit under the teal accent.
-export const PAGE = '#eef2f0'
-export const PANEL = '#ffffff'
-export const CHROME = '#e4ebe9'
-export const THEAD = '#f4f7f6'
-export const LINE = '#d5dedb'
-export const LINE_SOFT = '#e8eeec'
-export const LINE_MID = '#dde5e3'
-export const INK = '#282828'
-export const MUTED = '#6e6e6e'
-export const DIM = '#858585'
-export const HOVER = '#eaf0ee' // row / button hover wash
 
 // Brand palette, sampled from the FactumDB logo artwork. The mark's lens and
 // handle are BRAND_TEAL; the "F" and the "DB" of the wordmark are BRAND_SLATE;
@@ -60,11 +45,3 @@ export const TONES: Record<BadgeTone, Tone> = {
   info: { color: '#15696f', bg: '#e2efee', border: '#b4d9d5' },
   unresolved: { color: 'oklch(0.45 0.12 50)', bg: 'oklch(0.96 0.035 60)', border: 'oklch(0.88 0.07 55)' },
 }
-
-export const dot = (c: string): React.CSSProperties => ({
-  width: 7,
-  height: 7,
-  borderRadius: '50%',
-  flex: 'none',
-  background: c,
-})

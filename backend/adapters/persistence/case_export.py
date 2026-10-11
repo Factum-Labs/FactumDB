@@ -37,6 +37,7 @@ from adapters.persistence.sqlite_report_repository import SqliteReportRepository
 from core.application.errors import NotFoundError
 from core.domain.models.values import UNOBSERVED, UndecodableValue
 from core.engine import ENGINE_REVISION, ANALYSIS_FORMAT_VERSION
+from core.application.preferences import report_times, time_label
 
 FORMAT = "factumdb-case-export"
 FORMAT_VERSION = 2
@@ -130,10 +131,14 @@ def case_export(connection, case_id: str, *, now=_utc_now) -> dict:
     }
 
 
-def write_json(connection, case_id: str, path, *, now=_utc_now) -> Path:
+def write_json(connection, case_id: str, path, *, now=_utc_now, preferences=None, examiner_profile=None) -> Path:
     """The whole case in one new file, recorded as the next JSON version."""
     moment = now()
     document = case_export(connection, case_id, now=lambda: moment)
+    if preferences is not None:
+        document["presentation"] = {"timezone": time_label(preferences), "examiner_profile": examiner_profile or {},
+                                    "display_times": report_times(document["tables"], preferences),
+                                    "note": "Original timestamps remain unchanged in tables."}
     path = Path(path)
     with open(path, "x", encoding="utf-8") as out:      # "x" never overwrites
         json.dump(document, out, indent=2, sort_keys=True, ensure_ascii=False)
@@ -162,7 +167,7 @@ def _row(row) -> dict:
 # ── CSV ──────────────────────────────────────────────────────────────────────
 
 
-def write_csv(connection, case_id: str, folder, *, now=_utc_now) -> list:
+def write_csv(connection, case_id: str, folder, *, now=_utc_now, preferences=None, examiner_profile=None) -> list:
     """One CSV file per kind of data, in a new folder. Returns the files written.
 
     The folder is recorded as the next CSV version, with about.txt included.
@@ -177,6 +182,10 @@ def write_csv(connection, case_id: str, folder, *, now=_utc_now) -> list:
         for name, table in (("evidence", "evidence_files"), ("tool_runs", "tool_runs"),
                             ("integrity", "integrity_results"), ("warnings", "warnings"))
     ]
+    if preferences is not None:
+        written.append(_write(folder / "display_times.csv", ["table", "row", "field", "display", "timezone"],
+                              [{"table": table, **entry, "timezone": time_label(preferences)}
+                               for table, entries in report_times(tables, preferences).items() for entry in entries]))
     columns = _columns_by_table(tables)
     written += _row_files(folder, tables["physical_records"], columns)
     written += _event_files(folder, tables["binlog_events"], columns)
@@ -197,7 +206,10 @@ def write_csv(connection, case_id: str, folder, *, now=_utc_now) -> list:
 
     (folder / "about.txt").write_text(
         f"Format version: {FORMAT_VERSION}; engine revision: {ENGINE_REVISION}; "
-        f"analysis format version: {ANALYSIS_FORMAT_VERSION}\n\n" + _ABOUT, encoding="utf-8",
+        f"analysis format version: {ANALYSIS_FORMAT_VERSION}\n\n" +
+        (f"Display timezone: {time_label(preferences)}\nOriginal timestamps are unchanged.\n"
+         f"Exporting examiner profile: {json.dumps(examiner_profile or {}, ensure_ascii=False)}\n\n"
+         if preferences is not None else "") + _ABOUT, encoding="utf-8",
     )
     _record(connection, case_id, "csv", folder, [*written, folder / "about.txt"], moment)
     return written

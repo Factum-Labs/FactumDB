@@ -5,7 +5,7 @@ import { BRAND_SLATE, BRAND_TEAL, BRAND_TEAL_LIGHT } from '../lib/tokens'
  * rather than loaded as an image so it stays crisp at the small sizes the title
  * bar needs, and so it inherits the page's colour tokens.
  */
-export function LogoMark({ size = 26 }: { size?: number }) {
+function LogoMark({ size = 26 }: { size?: number }) {
   return (
     <svg
       width={size}

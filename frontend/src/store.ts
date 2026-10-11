@@ -3,10 +3,14 @@ import type { Screen } from './data/types'
 import { request, type AuthStatus, type CaseData, type CaseSummary, type PipelineRun, type Settings, type ToolSettings } from './lib/backend'
 
 interface AppState {
+  locked: boolean; lockSession: () => Promise<void>; unlockSession: (password: string) => Promise<boolean>
+  settingsCommand: <T>(command: string, payload?: Record<string, unknown>, notice?: string) => Promise<T | undefined>
   user: AuthStatus['user']; authChecked: boolean
   authenticate: (username: string, password: string, confirmation?: string) => Promise<boolean>
   signOut: () => Promise<void>
   screen: Screen; data: CaseData | null; cases: CaseSummary[]; settings: Settings | null
+  tablePages: Record<string, number>
+  setTablePage: (key: string, page: number) => void
   busy: boolean; ready: boolean; error: string | null; notice: string | null
   pipelineComplete: boolean; stagesDone: number; runningStage: number | null; cancelRequested: boolean
   selectedTx: string; selectedRecord: string; selectedTool: string; reportFormat: string; expandedGroups: string[]
@@ -15,6 +19,7 @@ interface AppState {
   refresh: () => Promise<void>
   openCase: (id: string) => Promise<void>
   createCase: (name: string) => Promise<boolean>
+  deleteCase: (id: string, confirmation: string) => Promise<boolean>
   registerEvidence: (paths: string[]) => Promise<boolean>
   verifyEvidence: (id: string) => Promise<void>
   runStage: () => Promise<void>
@@ -32,10 +37,12 @@ interface AppState {
 
 let initializing: Promise<void> | undefined
 const signedOut: Partial<AppState> = {
+  locked: false,
   user: null, data: null, cases: [], settings: null, ready: false, screen: 'cases',
   pipelineComplete: false, stagesDone: 0, runningStage: null, cancelRequested: false,
   selectedTx: '', selectedRecord: '', selectedTool: '', expandedGroups: [], reportFormat: 'JSON',
   error: null, notice: null,
+  tablePages: {},
 }
 export const useApp = create<AppState>((set, get) => {
   const apply = (data: CaseData) => set({
@@ -43,10 +50,14 @@ export const useApp = create<AppState>((set, get) => {
     stagesDone: data.run?.stages.filter(s => ['succeeded', 'skipped'].includes(s.status)).length ?? 0,
   })
   const refresh = async () => {
+    if (get().locked) return
     const id = get().data?.case.case_id
     const cases = await request<CaseSummary[]>('list_cases')
-    if (id) apply(await request<CaseData>('get_case_data', { case_id: id }))
-    set({ cases })
+    if (id) {
+      const data = await request<CaseData>('get_case_data', { case_id: id })
+      if (!get().locked) apply(data)
+    }
+    if (!get().locked) set({ cases })
   }
   const action = async (work: () => Promise<void>): Promise<boolean> => {
     if (get().busy) return false
@@ -71,6 +82,7 @@ export const useApp = create<AppState>((set, get) => {
       if (run.complete) return
       if (run.stopped) throw new Error('Retry the failed stage or start a new analysis run.')
       do {
+        if (get().locked) break
         const index = run.stages.findIndex(s => s.status === 'pending')
         set({ runningStage: index < 0 ? null : index })
         run = await request<PipelineRun>('run_next_stage', { run_id: run.run_id })
@@ -79,6 +91,7 @@ export const useApp = create<AppState>((set, get) => {
         set({ pipelineComplete: run.complete, stagesDone: run.stages.filter(s => ['succeeded', 'skipped'].includes(s.status)).length,
           runningStage: null, data: get().data ? { ...get().data!, run } : null })
         await refresh()
+        if (get().locked) break
         if (get().cancelRequested && !run.stopped) {
           await request('cancel_pipeline', { run_id: run.run_id })
           // The orchestrator records cancellation when the next boundary is entered.
@@ -87,26 +100,52 @@ export const useApp = create<AppState>((set, get) => {
           break
         }
       } while (all && !run.stopped)
-      if (run.complete) { set({ notice: 'Analysis complete. Results are saved in the case database.' }); onDone?.() }
+      if (run.complete) { set({ notice: 'Analysis complete. Results are saved in the case database.' }); if (!get().locked) onDone?.() }
       const failed = run.stages.find(s => s.status === 'failed')
       if (failed) get().setError(failed.attempts.at(-1)?.error_message ?? 'Analysis stage failed.')
     })
   }
   return {
+    locked: false,
+    lockSession: async () => {
+      set({ locked: true, error: null, notice: null })
+      try { await request('auth_lock') } catch (error) { get().setError(error) }
+    },
+    unlockSession: password => action(async () => {
+      const auth = await request<AuthStatus>('auth_unlock', { password })
+      set({ user: auth.user, locked: false })
+      const settings = await request<Settings>('get_settings')
+      set({ settings, ready: true })
+      await refresh()
+    }),
+    settingsCommand: async <T,>(command: string, payload: Record<string, unknown> = {}, notice?: string) => {
+      let result: T | undefined
+      await action(async () => {
+        result = await request<T>(command, payload)
+        if (command === 'configure_profile' || command === 'configure_preferences') set({ settings: result as Settings })
+        if (command === 'restore_workspace') set({ ...signedOut, notice: `Workspace restored. Rollback copy: ${(result as { rollback_path: string }).rollback_path}. Sign in with an account from the backup.` })
+        else if (notice) set({ notice })
+      })
+      return result
+    },
     user: null, authChecked: false,
+    tablePages: {},
+    setTablePage: (key, page) => set(state => ({ tablePages: { ...state.tablePages, [key]: page } })),
     screen: 'cases', data: null, cases: [], settings: null, busy: false, ready: false, error: null, notice: null,
     pipelineComplete: false, stagesDone: 0, runningStage: null, cancelRequested: false,
     selectedTx: '', selectedRecord: '', selectedTool: '', reportFormat: 'JSON', expandedGroups: [],
     go: screen => { if (!get().busy || screen !== 'cases') set({ screen }) },
     setError: error => {
       const message = error instanceof Error ? error.message : String(error)
-      set({ ...(message.startsWith('AuthenticationRequiredError:') ? signedOut : {}), error: message, notice: null })
+      const authentication = message.startsWith('AuthenticationRequiredError:')
+      set({ ...(authentication ? (message.includes('locked') ? { locked: true } : signedOut) : {}), error: message, notice: null })
     },
     initialize: () => {
       if (get().ready) return Promise.resolve()
       if (!initializing) initializing = action(async () => {
         const auth = await request<AuthStatus>('auth_status')
-        set({ user: auth.user, authChecked: true })
+        set({ user: auth.user, authChecked: true, locked: auth.locked ?? false })
+        if (auth.locked) return
         if (!auth.user) return
         const [settings, cases] = await Promise.all([request<Settings>('get_settings'), request<CaseSummary[]>('list_cases')])
         set({ settings, cases, ready: true })
@@ -135,6 +174,15 @@ export const useApp = create<AppState>((set, get) => {
       apply(await request<CaseData>('get_case_data', { case_id: result.case_id }))
       await refresh()
       set({ screen: 'intake', selectedTx: '', selectedRecord: '', selectedTool: '', expandedGroups: [] })
+    }),
+    deleteCase: (id, confirmation) => action(async () => {
+      await request('delete_case', { case_id: id, confirmation })
+      if (get().data?.case.case_id === id) set({
+        data: null, screen: 'cases', pipelineComplete: false, stagesDone: 0,
+        runningStage: null, cancelRequested: false, selectedTx: '', selectedRecord: '',
+        selectedTool: '', expandedGroups: [], tablePages: {},
+      })
+      set({ cases: get().cases.filter(item => item.id !== id), notice: 'Case permanently deleted.' })
     }),
     registerEvidence: paths => action(async () => {
       const failures: string[] = []

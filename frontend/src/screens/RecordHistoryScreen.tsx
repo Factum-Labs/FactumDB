@@ -1,11 +1,25 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Badge } from '../components/Badge'
+import { StatusMessage } from '../components/StatusMessage'
+import { navigationButton } from '../components/buttonStyles'
 import { RESULT_TONE, type ReconResult } from '../data/types'
 import { display, object, rows, type CaseData, type Json, type Row } from '../lib/backend'
 import { useApp } from '../store'
 import { useAnalysisDetail } from '../lib/useAnalysisDetail'
+import { useTablePage } from '../lib/useTablePage'
+import { useRevealRow } from '../lib/useRevealRow'
+import { useTimeDisplay } from '../lib/timeDisplay'
 
-const button = 'h-[26px] rounded border border-line-input bg-panel px-2.5 text-[11.5px] text-ink hover:bg-page disabled:cursor-not-allowed disabled:opacity-40'
+const button = navigationButton
+const paginationButton = navigationButton
+
+function Pagination({ page, pages, onPrevious, onNext }: { page: number; pages: number; onPrevious: () => void; onNext: () => void }) {
+  return <nav aria-label="Record history pagination" className="flex flex-wrap items-center justify-center gap-3 border-t border-line bg-thead px-3 py-2.5 text-xs">
+    <button type="button" className={paginationButton} disabled={page === 0} onClick={onPrevious}><span aria-hidden="true">‹</span>Previous</button>
+    <span aria-live="polite" aria-atomic="true" aria-label={`Page ${page + 1} of ${pages}`} className="flex h-[30px] items-center font-medium tabular-nums text-accent">{(page + 1).toLocaleString()} / {pages.toLocaleString()}</span>
+    <button type="button" className={paginationButton} disabled={page + 1 === pages} onClick={onNext}>Next<span aria-hidden="true">›</span></button>
+  </nav>
+}
 const methods: Record<string, string> = {
   primary_key_exact: 'Primary-key exact match', composite_primary_key_exact: 'Composite primary-key exact match',
   primary_key_update_continuity: 'Linked across a primary-key change', log_only_no_physical_counterpart: 'Log evidence only; no physical counterpart',
@@ -67,6 +81,7 @@ function Findings({ findings, data }: { findings: Row[]; data: CaseData }) {
 }
 
 function Step({ step, history, event, data, last, firstInsert = false }: { step: Row; history: Row; event?: Row; data: CaseData; last: boolean; firstInsert?: boolean }) {
+  const { time: formatStepTime } = useTimeDisplay()
   const kind = kinds[String(step.kind)] ?? { title: display(step.kind), note: '', color: 'bg-dim' }
   const changes = rows(step.changes)
   const provenance = object(step.provenance)
@@ -88,7 +103,7 @@ function Step({ step, history, event, data, last, firstInsert = false }: { step:
       <p className="mt-0.5 text-[11.5px] text-muted">{kind.note}</p>
       {firstInsert && <p className="mt-0.5 text-[11.5px] text-muted">This INSERT is the row’s first observed appearance in the imported logs. The row was absent immediately before it; earlier history is unknown.</p>}
       <p className="mt-1 text-[11px] text-muted">Step {display(step.index)} · rule <span className="font-mono">{display(step.rule_id)}</span>
-        {step.timestamp ? ` · ${display(step.timestamp)}` : ''}
+        {step.timestamp ? ` · ${formatStepTime(step.timestamp)}` : ''}
         {physical ? ` · Row ${display(step.presence_after)}` : step.kind === 'event' || step.kind === 'rolled_back_event' || step.kind === 'uncommitted_event' ? ` · Committed row presence: ${display(step.presence_before)} → ${display(step.presence_after)}` : ''}
       </p>
       {earliest && <><p className="mt-2 text-[11px] text-muted">Row {display(object(history.earliest_state).presence)}</p>{object(history.earliest_state).presence !== 'absent' && <ValueChips values={object(object(history.earliest_state).values)} />}</>}
@@ -111,7 +126,8 @@ function Step({ step, history, event, data, last, firstInsert = false }: { step:
 }
 
 function HistoryDetail({ history, data }: { history: Row; data: CaseData }) {
-  const [page, setPage] = useState(0)
+  const { label } = useTimeDisplay()
+  const [page, setPage] = useTablePage(`history:${String(object(history.record).id)}`)
   const record = object(history.record)
   const steps = rows(history.steps)
   const eventMap = useMemo(() => {
@@ -155,7 +171,7 @@ function HistoryDetail({ history, data }: { history: Row; data: CaseData }) {
     </section>
     <section aria-labelledby="history-timeline-heading" className="rounded-md border border-line bg-panel pb-3.5">
       <div className="flex flex-wrap items-center gap-3 border-b border-line-soft px-3.5 py-2.5">
-        <h2 id="history-timeline-heading" className="text-[12px] font-semibold">Record history</h2>
+        <h2 id="history-timeline-heading" className="text-[12px] font-semibold">Record history <span className="block text-[10px] font-normal text-muted">Timezone: {label}</span></h2>
         {[['bg-dim', 'Starting point / rolled back'], ['bg-accent', 'Committed / identity'], ['bg-amber', 'Uncommitted / gap'], ['bg-ok', 'Physical row']].map(([color, label]) => <span key={label} className="flex items-center gap-1.5 text-[11px] text-muted"><span aria-hidden="true" className={'h-[7px] w-[7px] rounded-full ' + color} />{label}</span>)}
       </div>
       {startsWithInsert && seed && <details className="mx-3.5 mt-3 text-[11px] text-muted">
@@ -164,8 +180,8 @@ function HistoryDetail({ history, data }: { history: Row; data: CaseData }) {
         <Findings findings={rows(seed.findings)} data={data} />
       </details>}
       <ol className="px-3.5 pt-1">{timelineSteps.slice(current * 100, (current + 1) * 100).map((step, index) => <Step key={String(step.index)} step={step} history={history} data={data} event={eventMap.get(eventKey(step.ref))} firstInsert={startsWithInsert && step === firstEvent} last={index === Math.min(100, timelineSteps.length - current * 100) - 1} />)}</ol>
-      {!timelineSteps.length && <p className="px-3.5 py-3 text-[11px] text-muted">No history steps available.</p>}
-      {pages > 1 && <div className="flex items-center gap-3 px-3.5 pt-3 text-[11px] text-muted"><button type="button" className={button} disabled={current === 0} onClick={() => setPage(current - 1)}>Previous</button><span>Page {current + 1} of {pages} · {timelineSteps.length} timeline entries</span><button type="button" className={button} disabled={current + 1 === pages} onClick={() => setPage(current + 1)}>Next</button></div>}
+      {!timelineSteps.length && <StatusMessage>No history steps available.</StatusMessage>}
+      {pages > 1 && <Pagination page={current} pages={pages} onPrevious={() => setPage(current - 1)} onNext={() => setPage(current + 1)} />}
     </section>
     <section className="overflow-hidden rounded-md border border-line bg-panel" aria-labelledby="history-states-heading">
       <h2 id="history-states-heading" className="border-b border-line px-3 py-[9px] text-[12px] font-semibold">Compare reconstructed states</h2>
@@ -181,7 +197,9 @@ function HistoryDetail({ history, data }: { history: Row; data: CaseData }) {
       <h2 className="text-[12px] font-semibold">Comparison with the physical row</h2>
       <p className="mt-1 text-[11px] text-muted">The reconciliation result for each field, including row presence.</p>
       <div className="mt-2 flex flex-wrap gap-2">{comparisons.map(comparison => <div key={String(comparison.field)} className="flex items-center gap-2 rounded border border-line px-2 py-1 text-[11px]"><span className="font-mono">{display(comparison.field)}</span><Badge tone={RESULT_TONE[String(comparison.result) as ReconResult] ?? 'neutral'}>{display(comparison.result)}</Badge></div>)}</div>
-      <button type="button" className={button + ' mt-2'} onClick={() => useApp.getState().go('recon')}>Open reconciliation</button>
+      <button type="button" className={button + ' mt-2'} onClick={() => {
+        useApp.getState().selectRecord(String(record.id)); useApp.getState().go('recon')
+      }}>Open reconciliation</button>
     </section>}
     <Findings findings={rows(history.findings)} data={data} />
     <details className="rounded-md border border-line bg-panel p-3 text-[11px]"><summary className="cursor-pointer font-medium">Full history, observed values and provenance</summary><pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-all font-mono">{JSON.stringify(history, null, 2)}</pre></details>
@@ -191,26 +209,31 @@ function HistoryDetail({ history, data }: { history: Row; data: CaseData }) {
 export function RecordHistoryScreen() {
   const data = useApp(s => s.data)
   const selected = useApp(s => s.selectedRecord)
+  const [page, setPage] = useTablePage('correlated-records')
   const histories = useMemo(() => rows(data?.analysis.reconstruction?.histories), [data?.analysis.reconstruction?.histories])
   const index = Math.max(0, histories.findIndex(history => object(history.record).id === selected))
   const current = histories[index]
+  const listRef = useRevealRow(String(object(current?.record).id ?? ''))
   const loaded = useAnalysisDetail(data?.case.case_id, 'history', current, data?.analysis.reconstruction?.details_deferred === true)
-  const page = Math.floor(index / 100)
   const pages = Math.max(1, Math.ceil(histories.length / 100))
-  if (!data || !current) return <div className="rounded-md border border-line bg-panel p-4 text-sm text-muted">No results available yet.</div>
+  const currentPage = Math.min(page, pages - 1)
+  useEffect(() => {
+    setPage(Math.floor(index / 100))
+  }, [selected, index, setPage])
+  if (!data || !current) return <StatusMessage>No results available yet.</StatusMessage>
   return <div className="grid max-w-[1180px] items-start gap-4 lg:grid-cols-[250px_minmax(0,1fr)]">
     <section className="min-w-0 overflow-hidden rounded-md border border-line bg-panel" aria-labelledby="correlated-records-heading">
       <h2 id="correlated-records-heading" className="border-b border-line px-3 py-[9px] text-[12px] font-semibold">Correlated records</h2>
-      <div className="max-h-[640px] overflow-auto">{histories.slice(page * 100, (page + 1) * 100).map(history => {
+      <div ref={listRef} className={pages > 1 ? 'h-[640px] overflow-auto' : 'max-h-[640px] overflow-auto'}>{histories.slice(currentPage * 100, (currentPage + 1) * 100).map(history => {
         const record = object(history.record)
         const count = history.step_count ?? rows(history.steps).length
-        return <button type="button" key={String(record.id)} aria-pressed={record.id === object(current.record).id} onClick={() => useApp.getState().selectRecord(String(record.id))}
+        return <button type="button" key={String(record.id)} data-selected={record.id === object(current.record).id} aria-pressed={record.id === object(current.record).id} onClick={() => useApp.getState().selectRecord(String(record.id))}
           className={'block w-full border-b border-l-2 border-line-soft px-3 py-[9px] text-left hover:bg-thead ' + (record.id === object(current.record).id ? 'border-l-accent bg-accent-soft' : 'border-l-transparent bg-panel')}>
           <span className="block break-all font-mono text-[12px]">{display(record.table)}</span><span className="mt-0.5 block text-[11px] text-muted">{display(record.key)} · {display(count)} steps</span>
         </button>
       })}</div>
-      {pages > 1 && <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-muted"><button type="button" className={button} disabled={page === 0} onClick={() => useApp.getState().selectRecord(String(object(histories[(page - 1) * 100].record).id))}>Previous</button><span>{page + 1} / {pages}</span><button type="button" className={button} disabled={page + 1 === pages} onClick={() => useApp.getState().selectRecord(String(object(histories[(page + 1) * 100].record).id))}>Next</button></div>}
+      {pages > 1 && <Pagination page={currentPage} pages={pages} onPrevious={() => setPage(currentPage - 1)} onNext={() => setPage(currentPage + 1)} />}
     </section>
-    {loaded.detail ? <HistoryDetail key={`${data.case.case_id}:${object(current.record).id}`} history={loaded.detail} data={{ ...data, findings: [...data.findings, ...loaded.findings] }} /> : <p role="status" className="text-sm text-muted">{loaded.error ?? 'Loading record history…'}</p>}
+    {loaded.detail ? <HistoryDetail key={`${data.case.case_id}:${object(current.record).id}`} history={loaded.detail} data={{ ...data, findings: [...data.findings, ...loaded.findings] }} /> : <StatusMessage error={!!loaded.error}>{loaded.error ?? 'Loading record history…'}</StatusMessage>}
   </div>
 }

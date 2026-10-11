@@ -1,11 +1,16 @@
 import { useMemo, useState } from 'react'
 import { Badge } from '../components/Badge'
+import { StatusMessage } from '../components/StatusMessage'
+import { navigationButton } from '../components/buttonStyles'
 import { display, object, rows, type CaseData, type Json, type Row } from '../lib/backend'
 import type { BadgeTone } from '../lib/tokens'
 import { useApp } from '../store'
 import { useAnalysisDetail } from '../lib/useAnalysisDetail'
+import { useTablePage } from '../lib/useTablePage'
+import { useRevealRow } from '../lib/useRevealRow'
+import { useTimeDisplay } from '../lib/timeDisplay'
 
-const button = 'h-[26px] rounded border border-line-input bg-panel px-2.5 text-[11.5px] text-ink hover:bg-page disabled:cursor-not-allowed disabled:opacity-40'
+const button = navigationButton
 const statusLabels: Record<string, string> = { committed: 'Committed', rolled_back: 'Rolled back', incomplete: 'Incomplete' }
 const statusTones: Record<string, BadgeTone> = { committed: 'ok', rolled_back: 'neutral', incomplete: 'warn' }
 const operationTones: Record<string, BadgeTone> = { INSERT: 'ok', UPDATE: 'info', DELETE: 'bad' }
@@ -72,13 +77,14 @@ function EventCard({ grouped, schemas, columns }: { grouped: Row; schemas: Row[]
           </tr>
         })}</tbody>
       </table>
-    </div> : <p className="mt-2 text-[11px] text-muted">No row images available.</p>}
-    {[...new Set(sources)].map(id => <button type="button" key={id} className="mt-2 mr-3 text-[11px] text-accent underline" onClick={() => inspect(id)}>Inspect source tool run · {id.slice(0, 8)}</button>)}
+    </div> : <StatusMessage>No row images available.</StatusMessage>}
+    {[...new Set(sources)].map(id => <button type="button" key={id} className={navigationButton + ' mt-2 mr-3'} onClick={() => inspect(id)}>Inspect source tool run · {id.slice(0, 8)}</button>)}
   </article>
 }
 
 function TransactionDetail({ transaction, data }: { transaction: Row; data: CaseData }) {
-  const [eventPage, setEventPage] = useState(0)
+  const { time } = useTimeDisplay()
+  const [eventPage, setEventPage] = useTablePage(`transaction-events:${String(transaction.id)}`)
   const [showProvenance, setShowProvenance] = useState(false)
   const events = rows(transaction.events)
   const pages = Math.max(1, Math.ceil(events.length / 100))
@@ -101,7 +107,7 @@ function TransactionDetail({ transaction, data }: { transaction: Row; data: Case
       <dl className="mt-3 grid grid-cols-2 gap-2.5 xl:grid-cols-4">
         {metadata.map(([label, value]) => <div key={label}>
           <dt className="text-[10px] font-semibold uppercase tracking-[.07em] text-dim">{label}</dt>
-          <dd className="mt-0.5 break-all font-mono text-[12px]">{display(value)}</dd>
+          <dd className="mt-0.5 break-all font-mono text-[12px]">{label === 'Committed' ? time(value) : display(value)}</dd>
         </div>)}
       </dl>
       {showProvenance && <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
@@ -112,7 +118,7 @@ function TransactionDetail({ transaction, data }: { transaction: Row; data: Case
     <section aria-labelledby="transaction-events-heading" className="overflow-hidden rounded-md border border-line bg-panel">
       <h2 id="transaction-events-heading" className="border-b border-line px-3 py-[9px] text-[12px] font-semibold">{transaction.status === 'committed' ? 'Events in commit order' : 'Events in log order'}</h2>
       {events.slice(currentPage * 100, (currentPage + 1) * 100).map((grouped, index) => <EventCard key={`${currentPage}:${index}`} grouped={grouped} schemas={data.tables.schemas ?? []} columns={data.tables.schema_columns ?? []} />)}
-      {!events.length && <p className="px-3 py-4 text-[11px] text-muted">No row events available.</p>}
+      {!events.length && <StatusMessage>No row events available.</StatusMessage>}
       {pages > 1 && <div className="flex items-center gap-3 border-t border-line px-3 py-2 text-[11px] text-muted">
         <button type="button" className={button} disabled={currentPage === 0} onClick={() => setEventPage(currentPage - 1)}>Previous</button>
         <span>Page {currentPage + 1} of {pages} · {events.length} events</span>
@@ -130,21 +136,23 @@ function TransactionDetail({ transaction, data }: { transaction: Row; data: Case
 }
 
 export function TimelineScreen() {
+  const { time, label } = useTimeDisplay()
   const data = useApp(s => s.data)
   const selected = useApp(s => s.selectedTx)
   const transactions = useMemo(() => rows(data?.analysis.grouping?.transactions), [data?.analysis.grouping?.transactions])
   const currentIndex = Math.max(0, transactions.findIndex(transaction => transaction.id === selected))
   const current = transactions[currentIndex]
+  const listRef = useRevealRow(String(current?.id ?? ''))
   const loaded = useAnalysisDetail(data?.case.case_id, 'transaction', current, data?.analysis.grouping?.details_deferred === true)
   const currentPage = Math.floor(currentIndex / 100)
   const pages = Math.max(1, Math.ceil(transactions.length / 100))
-  if (!data || !current) return <div className="rounded-md border border-line bg-panel p-4 text-sm text-muted">No results available yet.</div>
+  if (!data || !current) return <StatusMessage>No results available yet.</StatusMessage>
   return <div className="grid max-w-[1240px] items-start gap-4 lg:grid-cols-[268px_minmax(0,1fr)]">
     <section aria-labelledby="transactions-heading" className="min-w-0 overflow-hidden rounded-md border border-line bg-panel">
-      <h2 id="transactions-heading" className="border-b border-line px-3 py-[9px] text-[12px] font-semibold">Transactions</h2>
-      <div className="max-h-[640px] overflow-auto">
+      <h2 id="transactions-heading" className="border-b border-line px-3 py-[9px] text-[12px] font-semibold">Transactions <span className="block text-[10px] font-normal text-muted">Timezone: {label}</span></h2>
+      <div ref={listRef} className="max-h-[640px] overflow-auto">
         {transactions.slice(currentPage * 100, (currentPage + 1) * 100).map(transaction => <button type="button" key={String(transaction.id)}
-          aria-pressed={transaction.id === current.id} onClick={() => useApp.getState().selectTx(String(transaction.id))}
+          data-selected={transaction.id === current.id} aria-pressed={transaction.id === current.id} onClick={() => useApp.getState().selectTx(String(transaction.id))}
           className={'block w-full border-b border-l-2 border-line-soft px-3 py-[9px] text-left hover:bg-thead ' +
             (transaction.id === current.id ? 'border-l-accent bg-accent-soft' : 'border-l-transparent bg-panel')}>
           <span className="flex flex-wrap items-center gap-[7px]">
@@ -152,7 +160,7 @@ export function TimelineScreen() {
             <Badge tone={statusTones[String(transaction.status)] ?? 'neutral'}>{statusLabels[String(transaction.status)] ?? display(transaction.status)}</Badge>
           </span>
           <span className="mt-[3px] block text-[11px] text-muted">{summary(transaction)}</span>
-          <span className="mt-[3px] block break-all font-mono text-[10.5px] text-dimmer">{display(transaction.source_file)} · {display(transaction.commit_timestamp)}</span>
+          <span className="mt-[3px] block break-all font-mono text-[10.5px] text-dimmer">{display(transaction.source_file)} · {time(transaction.commit_timestamp)}</span>
         </button>)}
       </div>
       {pages > 1 && <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-muted">
@@ -161,6 +169,6 @@ export function TimelineScreen() {
         <button type="button" className={button} disabled={currentPage + 1 === pages} onClick={() => useApp.getState().selectTx(String(transactions[(currentPage + 1) * 100].id))}>Next</button>
       </div>}
     </section>
-    {loaded.detail ? <TransactionDetail key={`${data.case.case_id}:${current.id}`} transaction={loaded.detail} data={data} /> : <p role="status" className="text-sm text-muted">{loaded.error ?? 'Loading transaction…'}</p>}
+    {loaded.detail ? <TransactionDetail key={`${data.case.case_id}:${current.id}`} transaction={loaded.detail} data={data} /> : <StatusMessage error={!!loaded.error}>{loaded.error ?? 'Loading transaction…'}</StatusMessage>}
   </div>
 }

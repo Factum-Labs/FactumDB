@@ -6,7 +6,7 @@ import re
 import secrets
 import time
 from collections.abc import Mapping
-from typing import Protocol, TypedDict
+from typing import Any, NotRequired, Protocol, TypedDict
 
 
 class User(TypedDict):
@@ -22,6 +22,12 @@ class Account(User):
 
 class AuthStatus(TypedDict):
     user: User | None
+    locked: NotRequired[bool]
+
+
+class AccountDetails(TypedDict):
+    profile: dict[str, str]
+    preferences: dict[str, Any]
 
 
 class AuthenticationRequiredError(PermissionError):
@@ -44,12 +50,17 @@ class AccountStore(Protocol):
     ) -> None: ...
     def throttle(self) -> tuple[int, float]: ...
     def set_throttle(self, failures: int, until: float) -> None: ...
+    def details(self, key: str) -> AccountDetails: ...
+    def change_password(self, key: str, salt: bytes, digest: bytes) -> None: ...
 
 
 class AuthenticationService:
     def __init__(self, accounts: AccountStore, device: DeviceSecurity) -> None:
         self.accounts, self.device = accounts, device
         self.user: User | None = None
+        self.locked = False
+        self.last_activity = time.monotonic()
+        self.lock_minutes = 15
 
     @staticmethod
     def credentials(payload: Mapping[str, object], confirmation: bool = False) -> tuple[str, str]:
@@ -93,6 +104,8 @@ class AuthenticationService:
             username, username.lower(), salt, self.digest(password, salt), identity
         )
         self.user = {"username": username}
+        self.last_activity = time.monotonic()
+        self.lock_minutes = 15
         return self.status({})
 
     def login(self, payload: Mapping[str, object]) -> AuthStatus:
@@ -113,12 +126,81 @@ class AuthenticationService:
             raise AuthenticationError("Incorrect username or password for this device account")
         self.accounts.set_throttle(0, 0)
         self.user = {"username": account["username"]}
+        self.last_activity = time.monotonic()
+        self.locked = False
+        self.lock_minutes = self.accounts.details(username.lower())["preferences"].get(
+            "lock_minutes", 15
+        )
         return self.status({})
 
     def require_user(self) -> User:
         if self.user is None:
             raise AuthenticationRequiredError("Sign in before using FactumDB")
+        if self.lock_minutes and time.monotonic() - self.last_activity >= self.lock_minutes * 60:
+            self.locked = True
+        if self.locked:
+            raise AuthenticationRequiredError("Session locked. Enter your password to unlock.")
         return self.user
+
+    def verify_password(self, password: object) -> None:
+        if self.user is None or not isinstance(password, str) or not 1 <= len(password) <= 1024:
+            raise AuthenticationError("Enter your current password")
+        failures, until = self.accounts.throttle()
+        if until > time.time():
+            raise AuthenticationError("Too many attempts. Try again in 30 seconds")
+        account = self.accounts.find(self.user["username"].lower())
+        if (
+            account is None
+            or not hmac.compare_digest(
+                self.digest(password, account["salt"]), account["password_hash"]
+            )
+            or account["device_identity"] != self.device.identity()
+        ):
+            failures = (0 if until else failures) + 1
+            self.accounts.set_throttle(failures, time.time() + 30 if failures >= 5 else 0)
+            raise AuthenticationError("Incorrect password for this device account")
+        self.accounts.set_throttle(0, 0)
+
+    def change_password(self, payload: Mapping[str, object]) -> dict[str, bool]:
+        user = self.require_user()
+        if set(payload) != {"current_password", "new_password", "password_confirmation"}:
+            raise ValueError("Unsupported password fields")
+        _, new_password = self.credentials(
+            {
+                "username": user["username"],
+                "password": payload["new_password"],
+                "password_confirmation": payload["password_confirmation"],
+            },
+            confirmation=True,
+        )
+        self.verify_password(payload["current_password"])
+        salt = secrets.token_bytes(16)
+        self.accounts.change_password(
+            user["username"].lower(), salt, self.digest(new_password, salt)
+        )
+        return {"changed": True}
+
+    def lock(self, payload: Mapping[str, object]) -> dict[str, bool]:
+        if payload:
+            raise ValueError("No fields expected")
+        if self.user is not None:
+            self.locked = True
+        return {"locked": self.locked}
+
+    def unlock(self, payload: Mapping[str, object]) -> AuthStatus:
+        if set(payload) != {"password"}:
+            raise ValueError("Enter your password")
+        self.verify_password(payload["password"])
+        self.locked = False
+        self.last_activity = time.monotonic()
+        return self.status({})
+
+    def touch(self, payload: Mapping[str, object]) -> dict[str, bool]:
+        if payload:
+            raise ValueError("No fields expected")
+        self.require_user()
+        self.last_activity = time.monotonic()
+        return {"active": True}
 
     def require_actor(self) -> dict[str, str]:
         user = self.require_user()
@@ -130,10 +212,20 @@ class AuthenticationService:
     def status(self, payload: Mapping[str, object]) -> AuthStatus:
         if payload:
             raise ValueError("No fields expected")
+        if self.user is not None and (
+            self.locked
+            or (
+                self.lock_minutes
+                and time.monotonic() - self.last_activity >= self.lock_minutes * 60
+            )
+        ):
+            self.locked = True
+            return {"user": self.user, "locked": True}
         return {"user": self.user}
 
     def logout(self, payload: Mapping[str, object]) -> AuthStatus:
         if payload:
             raise ValueError("No fields expected")
         self.user = None
+        self.locked = False
         return self.status({})

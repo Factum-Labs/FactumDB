@@ -76,9 +76,3 @@ export const RESULT_TONE: Record<ReconResult, BadgeTone> = {
   Unresolved: 'unresolved',
   Unsupported: 'neutral',
 }
-
-export const TX_TONE: Record<TxStatus, BadgeTone> = {
-  Committed: 'ok',
-  'Rolled back': 'neutral',
-  Incomplete: 'warn',
-}
