@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useApp } from '../store'
+import { StatusMessage } from '../components/StatusMessage'
+import { navigationButton } from '../components/buttonStyles'
 import { display, object, request, rows, type Attempt, type Row } from '../lib/backend'
 
 const STAGES = [
@@ -142,7 +144,7 @@ function ExecutionLog({ tools, caseId }: { tools: Row[]; caseId: string }) {
 export function PipelineScreen() {
   const state = useApp()
   const data = state.data
-  if (!data) return <div className="rounded-md border border-line bg-panel p-4 text-sm text-muted">Open or create a case first.</div>
+  if (!data) return <StatusMessage>Open or create a case first.</StatusMessage>
   const run = data.run
   const evidence = data.tables.evidence_files ?? []
   const verified = evidence.filter(e => e.verification_status === 'verified').length
@@ -212,7 +214,7 @@ export function PipelineScreen() {
         {failed && <Action disabled={state.busy || failed.stage === 'verify_evidence'} onClick={() => { void state.retryPipeline() }}>Retry failed stage</Action>}
         {run?.stopped && <Action disabled={state.busy} onClick={() => { void state.resetPipeline() }}>Start new analysis</Action>}
         {run && !run.stopped && <Action disabled={state.cancelRequested} onClick={() => { void state.cancelPipeline() }}>{state.cancelRequested ? 'Cancellation requested' : 'Cancel at stage boundary'}</Action>}
-        {run?.complete && <Action onClick={() => state.go('report')}>Open report</Action>}
+        {run?.complete && <button type="button" className={navigationButton} disabled={state.busy} onClick={() => state.go('report')}>Open report</button>}
       </div>
       {!hasEvidence && <p className="border-t border-line px-4 py-3 text-xs text-muted">Register at least one .ibd or binary log file before analysis. An index alone is insufficient.</p>}
     </section>

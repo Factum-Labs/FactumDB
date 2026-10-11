@@ -14,7 +14,8 @@ import React from 'react'
 import { mockIPC, clearMocks } from '@tauri-apps/api/mocks'
 import { useApp } from '../src/store'
 import App from '../src/App'
-import { request, display, type CaseData, type Row } from '../src/lib/backend'
+import { request, display, defaultPreferences, type CaseData, type Row } from '../src/lib/backend'
+import { formatTime } from '../src/lib/timeDisplay'
 import { CasesScreen, IntakeScreen, PipelineScreen, TimelineScreen, RecordHistoryScreen, ReconciliationScreen, GapsScreen, ProvenanceScreen, ReportScreen, SettingsScreen } from '../src/screens/ConnectedScreens'
 
 const prefix = join(tmpdir(), 'factumdb-ui-check-')
@@ -87,6 +88,20 @@ try {
   assert.equal(await useApp.getState().createCase('UI integration'), true)
   const caseId = useApp.getState().data!.case.case_id
   assert.equal(useApp.getState().data!.case.examiner, 'UIExaminer')
+  await useApp.getState().settingsCommand('configure_profile', { display_name: 'UI Examiner', organization: 'Test lab', examiner_id: 'EX-1' })
+  assert.equal(useApp.getState().settings!.profile!.display_name, 'UI Examiner')
+  await useApp.getState().settingsCommand('configure_preferences', { ...defaultPreferences, time_mode: 'custom', utc_offset_minutes: 330 })
+  assert.equal(useApp.getState().settings!.preferences!.utc_offset_minutes, 330)
+  assert.match(formatTime('2026-10-11T23:30:00+00:00', useApp.getState().settings!.preferences!), /2026-10-12 05:00:00.*UTC\+05:30/)
+  await useApp.getState().lockSession()
+  assert.equal(useApp.getState().locked, true)
+  const lockedHtml = renderToStaticMarkup(<App />)
+  assert.match(lockedHtml, /Session locked/)
+  assert.ok(!lockedHtml.includes('UI integration'))
+  assert.equal(await useApp.getState().unlockSession('incorrect'), false)
+  assert.equal(useApp.getState().locked, true)
+  assert.equal(await useApp.getState().unlockSession('UI examiner password 123'), true)
+  assert.equal(useApp.getState().data!.case.case_id, caseId)
   const tablespace = join(workspace, 'accounts.ibd')
   const log = join(workspace, 'binlog.000001')
   writeFileSync(tablespace, 'test tablespace')
@@ -105,6 +120,7 @@ try {
   await useApp.getState().runAllStages()
   assert.equal(useApp.getState().pipelineComplete, true, useApp.getState().error ?? '')
   assert.equal(useApp.getState().stagesDone, 10)
+  assert.equal(useApp.getState().notice, 'Analysis complete. Results are saved in the case database.')
   const exportPath = join(workspace, 'report.json')
   await useApp.getState().exportCase(exportPath)
   assert.ok(existsSync(exportPath))
@@ -120,6 +136,20 @@ try {
   const seeded = await request<CaseData>('seed_test_results', { case_id: caseId })
   assert.equal(seeded.tables.analysis_results.length, 0)
   assert.equal(seeded.analysis.reconstruction.details_deferred, true)
+  const recordSummaries = seeded.analysis.reconciliation.records as Row[]
+  const fieldSummaries = seeded.analysis.reconciliation.rows as Row[]
+  assert.ok(recordSummaries.length > 0)
+  assert.ok(fieldSummaries.length > recordSummaries.length)
+  for (const record of recordSummaries) {
+    const fields = fieldSummaries.filter(field => field.record_id === (record.record as Row).id)
+    assert.equal(record.field_count, fields.length)
+    assert.ok(typeof record.rollup === 'string')
+    assert.ok(typeof record.rollup_rule_id === 'string')
+    const comparison = await request<{ detail: Row }>('get_analysis_detail', {
+      case_id: caseId, kind: 'comparison', identity: (record.record as Row).id, field: fields[0].field,
+    })
+    assert.equal(comparison.detail.result, fields[0].result)
+  }
   // Server rendering has no effects. Fetch selected details through the same
   // IPC used by the screens, then render their loaded states.
   const historyPage = await request<{ items: Row[] }>('get_history_page', { case_id: seeded.case.case_id })
@@ -151,8 +181,13 @@ try {
     assert.ok(html.length > 100, Component.name)
   }
   assert.match(renderToStaticMarkup(<TimelineScreen />), /committed/)
+  assert.match(renderToStaticMarkup(<TimelineScreen />), /UTC\+05:30/)
+  const settingsHtml = renderToStaticMarkup(<SettingsScreen />)
+  for (const section of ['Examiner profile', 'Change password', 'Storage &amp; backup', 'Automatically lock']) assert.ok(settingsHtml.includes(section), section)
   assert.match(renderToStaticMarkup(<RecordHistoryScreen />), /Committed log state/)
-  assert.match(renderToStaticMarkup(<ReconciliationScreen />), /log-derived|Log-derived/)
+  const reconciliationHtml = renderToStaticMarkup(<ReconciliationScreen />)
+  assert.match(reconciliationHtml, /Results count records/)
+  assert.equal((reconciliationHtml.match(/View comparisons/g) ?? []).length, recordSummaries.length)
   assert.equal(display({ __integer__: '9007199254740993' }), '9007199254740993')
   assert.equal(display({ __decimal__: '4000.10' }), '4000.10')
   assert.equal(display({ __unobserved__: true }), '[not observed]')
@@ -167,6 +202,21 @@ try {
   assert.equal(await useApp.getState().authenticate('UIExaminer', 'UI examiner password 123'), true)
   await useApp.getState().openCase(caseId)
   assert.equal(useApp.getState().data!.case.case_id, caseId)
+  assert.equal(useApp.getState().settings!.profile!.organization, 'Test lab')
+  await useApp.getState().settingsCommand('change_password', { current_password: 'UI examiner password 123', new_password: 'Changed UI password 456', password_confirmation: 'Changed UI password 456' })
+  assert.equal(useApp.getState().error, null)
+  await useApp.getState().signOut()
+  assert.equal(await useApp.getState().authenticate('UIExaminer', 'UI examiner password 123'), false)
+  assert.equal(await useApp.getState().authenticate('UIExaminer', 'Changed UI password 456'), true)
+  await useApp.getState().openCase(caseId)
+  const deletedName = useApp.getState().cases.find(item => item.id === caseId)!.name
+  assert.equal(await useApp.getState().deleteCase(caseId, 'Wrong confirmation'), false)
+  assert.equal(useApp.getState().data!.case.case_id, caseId)
+  assert.equal(await useApp.getState().deleteCase(caseId, deletedName), true)
+  assert.equal(useApp.getState().data, null)
+  assert.equal(useApp.getState().screen, 'cases')
+  assert.equal(useApp.getState().cases.some(item => item.id === caseId), false)
+  await assert.rejects(request('get_case_data', { case_id: caseId }), /NotFoundError/)
   console.log('PASS: account signup, sign-in/out, guarded access, examiner identity, frontend workflow, SQLite export, and all ten screens.')
 } finally {
   clearTimeout(deadline)

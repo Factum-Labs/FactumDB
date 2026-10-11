@@ -17,9 +17,6 @@ import type {
 
 // ── Severity ─────────────────────────────────────────────────────────────────
 
-/** A record is "flagged" if any of its fields classified as one of these. */
-export const FLAG_RESULTS: ReconResult[] = ['Conflicting', 'Unresolved']
-
 /** Higher wins. Conflicting outranks Unresolved, per the spec. */
 const SEVERITY: Record<ReconResult, number> = {
   Conflicting: 5,
@@ -30,7 +27,7 @@ const SEVERITY: Record<ReconResult, number> = {
   Unsupported: 0,
 }
 
-export const isFlagResult = (r: ReconResult) => r === 'Conflicting' || r === 'Unresolved'
+const isFlagResult = (r: ReconResult) => r === 'Conflicting' || r === 'Unresolved'
 
 // ── Node kinds ───────────────────────────────────────────────────────────────
 
@@ -63,7 +60,7 @@ export interface FlaggedGroup {
   records: GroupRecord[]
   /** Edges confined to this group's transactions and records. */
   edges: CorrelationEdge[]
-  /** Index into `reconRows` of the row that owns this group's toggle. */
+  /** First flagged row index, used to order groups consistently with the results. */
   anchorRowIndex: number
 }
 
@@ -98,7 +95,7 @@ function cmpKey(a: string, b: string): number {
 }
 
 /** Canonical transaction order: binlog file, then position within that file. */
-export function cmpTransaction(a: Transaction, b: Transaction): number {
+function cmpTransaction(a: Transaction, b: Transaction): number {
   if (a.order !== undefined && b.order !== undefined) return a.order - b.order || cmpStr(a.id, b.id)
   return cmpStr(a.binlogFile, b.binlogFile) || a.binlogPos - b.binlogPos || cmpStr(a.id, b.id)
 }
@@ -235,8 +232,7 @@ export function buildFlaggedGroups(
           cmpRecord(recordById.get(a.recordId)!, recordById.get(b.recordId)!),
       )
 
-    // The toggle lives on the first flagged field of the first record in
-    // canonical order — resolved back to that row's index in the table.
+    // Order groups by the first flagged field of their first record in canonical order.
     const firstFlagged = groupRecords.find((r) => r.flagged)!
     const anchorRowIndex = reconRows.findIndex(
       (row) => row.recordId === firstFlagged.record.id && isFlagResult(row.result),
@@ -258,29 +254,6 @@ export function buildFlaggedGroups(
   return groups.sort((a, b) => a.anchorRowIndex - b.anchorRowIndex || cmpStr(a.id, b.id))
 }
 
-/** Row-level decoration for the reconciliation table. */
-export interface RowDecoration {
-  /** Group whose toggle this row owns, if any. */
-  anchorOf: FlaggedGroup | null
-  /** Group that already covers this row's record, if the row is not the anchor. */
-  coveredBy: FlaggedGroup | null
-}
-
-export function decorateRows(rows: ReconRow[], groups: FlaggedGroup[]): RowDecoration[] {
-  const groupByFlaggedRecord = new Map<string, FlaggedGroup>()
-  for (const g of groups) {
-    for (const r of g.records) if (r.flagged) groupByFlaggedRecord.set(r.record.id, g)
-  }
-  const anchorByIndex = new Map<number, FlaggedGroup>()
-  for (const g of groups) anchorByIndex.set(g.anchorRowIndex, g)
-
-  return rows.map((row, i) => {
-    const anchorOf = anchorByIndex.get(i) ?? null
-    if (anchorOf) return { anchorOf, coveredBy: null }
-    return { anchorOf: null, coveredBy: groupByFlaggedRecord.get(row.recordId) ?? null }
-  })
-}
-
 // ── Deterministic layout ─────────────────────────────────────────────────────
 //
 // Node positions are computed directly from the canonical sort order above.
@@ -298,7 +271,7 @@ export const LAYOUT = {
   COL_GAP: 214,
 } as const
 
-export interface PositionedNode {
+interface PositionedNode {
   x: number
   y: number
   w: number
@@ -307,7 +280,7 @@ export interface PositionedNode {
   cy: number
 }
 
-export interface PositionedEdge {
+interface PositionedEdge {
   txId: string
   recordId: string
   eventType: EventType
@@ -316,7 +289,7 @@ export interface PositionedEdge {
   labelY: number
 }
 
-export interface GraphLayout {
+interface GraphLayout {
   width: number
   height: number
   txNodes: Map<string, PositionedNode>

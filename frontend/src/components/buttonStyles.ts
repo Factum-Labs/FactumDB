@@ -1,0 +1,1 @@
+export const navigationButton = 'inline-flex items-center justify-center gap-1.5 rounded border border-line bg-accent-soft px-3 py-1.5 font-sans text-xs font-medium text-accent hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40'

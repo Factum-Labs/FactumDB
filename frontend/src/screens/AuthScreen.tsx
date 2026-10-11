@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Logo } from '../components/Logo'
+import { StatusMessage } from '../components/StatusMessage'
 import { useApp } from '../store'
 
 export function AuthScreen() {
@@ -10,6 +11,7 @@ export function AuthScreen() {
   const busy = useApp(s => s.busy)
   const checked = useApp(s => s.authChecked)
   const error = useApp(s => s.error)
+  const notice = useApp(s => s.notice)
   const authenticate = useApp(s => s.authenticate)
   const initialize = useApp(s => s.initialize)
   const submit = async (event: FormEvent) => {
@@ -24,8 +26,9 @@ export function AuthScreen() {
       <h1 className="mt-5 text-xl font-semibold">{signup ? 'Create examiner account' : 'Sign in to FactumDB'}</h1>
       <p className="mt-2 text-sm text-muted">Use your local account to access cases and examine evidence.</p>
       {error && <p role="alert" className="mt-4 whitespace-pre-wrap rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-      {!checked ? <div className="mt-5 text-sm" role="status">
-        {busy ? 'Connecting to the desktop backend…' : <button onClick={() => { void initialize() }} className="text-accent underline">Retry connection</button>}
+      {notice && <p role="status" className="mt-4 break-all text-sm text-muted">{notice}</p>}
+      {!checked ? <div className="mt-5">
+        <StatusMessage>{busy ? 'Connecting to the desktop backend…' : <button onClick={() => { void initialize() }} className="text-accent underline">Retry connection</button>}</StatusMessage>
       </div> : <form onSubmit={submit} className="mt-5 flex flex-col gap-4">
         <fieldset disabled={busy} className="flex flex-col gap-4 disabled:opacity-60">
           <label className="flex flex-col gap-1 text-sm">Username

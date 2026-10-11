@@ -14,7 +14,6 @@ EvidenceRepository Protocol the use cases depend on, which is why there are
 both find_by_id/list_by_case and get/list_for_case.
 """
 
-import json
 from typing import Optional, Sequence
 
 from adapters.persistence._timestamps import from_text, to_text
