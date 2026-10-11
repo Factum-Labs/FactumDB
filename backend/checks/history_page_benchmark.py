@@ -28,6 +28,9 @@ def measure(connection, case_id, label, page_output=None):
     print(json.dumps(dict(fixture=label, total=old['total'], page=len(bundle['items']), legacy_ms=round(statistics.median(legacy_times), 2), bundled_ms=round(statistics.median(bundle_times), 2), legacy_bytes=len(json.dumps([old, single]).encode()), bundled_bytes=len(json.dumps(bundle).encode()))))
     if page_output:
         Path(page_output).write_text(json.dumps(bundle), encoding='utf-8')
+        for offset in (100, 200):
+            path = Path(page_output)
+            path.with_name(f'{path.stem}-{offset}{path.suffix}').write_text(json.dumps(repo.page(case_id, offset=offset, include_details=True)), encoding='utf-8')
 
 
 if __name__ == '__main__':

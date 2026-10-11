@@ -21,7 +21,10 @@ const legacy = measured ? { ...measured, items: measured.items.map((item, index)
 const server = createServer((request, response) => {
   if (request.url?.startsWith('/measured-')) {
     response.setHeader('Content-Type', 'application/json')
-    response.end(JSON.stringify(request.url === '/measured-legacy.json' ? legacy : measured))
+    const offset = Number(new URL(request.url, 'http://localhost').searchParams.get('offset'))
+    const file = process.env.FACTUMDB_HISTORY_PAGE?.replace(/\.json$/, `-${offset}.json`)
+    const actualPage = offset && file && existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { ...measured, offset }
+    response.end(JSON.stringify(request.url.startsWith('/measured-legacy.json') ? { ...legacy, offset } : actualPage))
     return
   }
   response.setHeader('Content-Type', (request.url === '/test.js' ? 'application/javascript' : request.url === '/style.css' ? 'text/css' : 'text/html') + '; charset=utf-8')
@@ -70,18 +73,26 @@ try {
   console.log(await evaluate('window.runHistoryChecks()'))
   await send('HeapProfiler.collectGarbage')
   const baseline = await send('Runtime.getHeapUsage')
-  const bytes = await evaluate('window.loadLongHistoryPage()')
+  const longCold = await evaluate('window.loadLongHistoryPage()')
   await send('HeapProfiler.collectGarbage')
   const loaded = await send('Runtime.getHeapUsage')
-  console.log(JSON.stringify({ fixture: '100 browser histories with 400 steps each', payload_bytes: bytes, baseline_heap_bytes: baseline.usedSize, loaded_heap_bytes: loaded.usedSize, heap_increase_bytes: loaded.usedSize - baseline.usedSize }))
+  console.log(JSON.stringify({ fixture: '100 browser histories with 400 steps each', payload_bytes: longCold.bytes, cold_page_ms: longCold.cold_page_ms, baseline_heap_bytes: baseline.usedSize, loaded_heap_bytes: loaded.usedSize, heap_increase_bytes: loaded.usedSize - baseline.usedSize }))
+  const longNavigation = await evaluate('window.fillAdjacentHistoryPages()')
+  await send('HeapProfiler.collectGarbage')
+  const longWindow = await send('Runtime.getHeapUsage')
+  console.log(JSON.stringify({ fixture: 'three long-history pages', one_page_heap_bytes: loaded.usedSize, three_page_heap_bytes: longWindow.usedSize, ...longNavigation }))
   if (measured) {
     await evaluate('window.loadMeasuredHistoryPage("legacy")')
     await send('HeapProfiler.collectGarbage')
     const old = await send('Runtime.getHeapUsage')
-    await evaluate('window.loadMeasuredHistoryPage("bundle")')
+    const cold = await evaluate('window.loadMeasuredHistoryPage("bundle")')
     await send('HeapProfiler.collectGarbage')
     const bundled = await send('Runtime.getHeapUsage')
-    console.log(JSON.stringify({ fixture: 'saved credit-union page', legacy_heap_bytes: old.usedSize, bundled_heap_bytes: bundled.usedSize, heap_increase_bytes: bundled.usedSize - old.usedSize }))
+    console.log(JSON.stringify({ fixture: 'saved credit-union page', ...cold, legacy_heap_bytes: old.usedSize, bundled_heap_bytes: bundled.usedSize, heap_increase_bytes: bundled.usedSize - old.usedSize }))
+    const navigation = await evaluate('window.fillAdjacentHistoryPages()')
+    await send('HeapProfiler.collectGarbage')
+    const windowHeap = await send('Runtime.getHeapUsage')
+    console.log(JSON.stringify({ fixture: 'three saved credit-union pages', one_page_heap_bytes: bundled.usedSize, three_page_heap_bytes: windowHeap.usedSize, ...navigation }))
   }
   assert.deepEqual(exceptions, [])
 } finally {

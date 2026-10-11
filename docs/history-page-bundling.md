@@ -11,10 +11,25 @@ a consistent snapshot across summaries, reconstruction, and events. The bundled
 and single-history projections share event enrichment, finding descriptions and
 large-value serialization. No history copies or schema migrations are added.
 
-Record history requests bundles and keeps only the current page. Selecting a
-record uses its loaded detail without another request. Only that record's timeline
-is rendered. Page and filter changes clear the previous details; superseded
-requests are ignored. Other screens retain their existing detail requests.
+Record history requests bundles and keeps at most the previous, current and next
+pages for the active filter. Selecting a record uses its loaded detail without
+another request. Only that record's timeline is rendered. Cached page navigation
+displays immediately; uncached navigation clears the previous detail and shows
+loading. Superseded responses are ignored. Other screens retain their existing
+detail requests.
+
+Adjacent prefetch starts after the current page has painted, next page first.
+Already cached pages are reused: normal forward navigation never refetches the
+previous page. A direct jump may require fetching both missing neighbors.
+Foreground page requests take priority over unsent background work, but an
+active request must finish. One shared request lane prevents overlapping page
+requests, including when an old screen's request is still finishing after unmount.
+Background failures do not disrupt the visible page; navigation retries them.
+
+Case-data replacement and filter changes invalidate the page cache. Table options
+are fetched once per case-data generation. The cache is released on screen exit,
+lock and sign-out; same-case filter/offset preferences remain available on return.
+There is no persistent cache, truncation or backend storage change.
 
 ## Measurements
 
@@ -41,13 +56,36 @@ histories of 400 steps each had a 30,546,131-byte payload and added approximatel
 31.9 MB of retained heap. Heap measurements exclude native WebView memory and
 transient parsing peaks.
 
+### Adjacent-page prefetch measurements
+
+Measured locally on 2026-10-11 with the browser harness and three distinct saved
+credit-union pages. The harness serves saved responses over local HTTP; its cold
+load measurements include transport, parsing and rendering, **not backend query
+time or actual Tauri IPC**. Cached timings include the test's polling interval.
+
+| Browser fixture | Cold page | Cached Next | One-page heap | Three-page heap |
+| --- | ---: | ---: | ---: | ---: |
+| Saved credit-union | 94 ms | 17 ms | 5.2 MB | 7.7 MB |
+| Synthetic 400-step histories | 492 ms | 62 ms | 36.1 MB | 100.7 MB |
+
+The synthetic window contains 300 complete histories; each 100-history payload is
+approximately 30.5 MB. Heap values were collected after garbage collection and
+exclude native memory and transient parsing peaks. The controller tests assert
+that no more than three completed pages are retained.
+
+The separate backend benchmark measured a cold bundled credit-union page at
+826 ms (median of five query/projection runs). Prefetch leaves this query unchanged;
+its benefit comes from reusing the completed response during navigation.
+
 ## Repeat the checks
 
 Run the backend regression suite with `python -m pytest backend/tests -q`.
 Frontend checks include `npm --prefix frontend run build`, `lint`, `check:backend`,
-and `check:history-browser`. The history browser check verifies immediate
-selection, filtering, page changes, stale responses, cross-screen navigation,
-case switching and analysis refresh.
+`check:history-cache`, and `check:history-browser`. Controller checks cover cache
+reuse, deduplication, request priority, sequential prefetch, eviction and failures.
+Browser checks verify post-display prefetch, cached navigation, filtering, stale
+responses, cross-screen navigation, case switching, analysis refresh, lock,
+sign-out, unmount and background-failure recovery.
 
 For backend measurements, run:
 
@@ -62,5 +100,6 @@ $env:FACTUMDB_HISTORY_PAGE = "$env:TEMP/history-page.json"
 npm --prefix frontend run check:history-browser
 ```
 
-The optional JSON file contains case data; keep it with your local test artifacts.
-The benchmark leaves the original database unchanged.
+The optional JSON output contains case data; keep it with your local test artifacts.
+The benchmark also writes sibling `-100.json` and `-200.json` page files for the
+three-page browser measurement. It leaves the original database unchanged.
