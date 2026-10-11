@@ -4,7 +4,7 @@ import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { Badge } from '../components/Badge'
 import { StatusMessage } from '../components/StatusMessage'
 import { navigationButton } from '../components/buttonStyles'
-import { display, pickEvidence, request, type CaseData, type Row } from '../lib/backend'
+import { display, pickEvidence, type CaseData, type Row } from '../lib/backend'
 import { useApp } from '../store'
 import { useTablePage } from '../lib/useTablePage'
 
@@ -17,7 +17,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="flex flex-col gap-1 text-[11px] text-muted">{label}{children}</label>
 }
 
-function Notes({ data }: { data: CaseData }) {
+function Notes({ data }: { data: Pick<CaseData, 'case'> }) {
   const busy = useApp(s => s.busy)
   const [notes, setNotes] = useState(data.case.examiner_notes ?? '')
   const [saved, setSaved] = useState(data.case.examiner_notes ?? '')
@@ -27,11 +27,7 @@ function Notes({ data }: { data: CaseData }) {
     if (saving || busy) return
     setSaving(true)
     try {
-      const result = await request<CaseData>('save_case_notes', { case_id: data.case.case_id, notes })
-      setSaved(notes)
-      if (useApp.getState().data?.case.case_id === data.case.case_id) {
-        useApp.setState(current => ({ data: current.data ? { ...current.data, case: result.case } : null }))
-      }
+      if (await useApp.getState().saveNotes(notes)) setSaved(notes)
     } catch (error) { useApp.getState().setError(error) }
     finally { setSaving(false) }
   }
@@ -54,7 +50,8 @@ function fileSize(value: Row['size_bytes']): string {
 }
 
 export function IntakeScreen() {
-  const data = useApp(s => s.data)
+  const data = useApp(s => s.preview ?? s.data)
+  const fullData = useApp(s => s.data)
   const busy = useApp(s => s.busy)
   const [path, setPath] = useState('')
   const [selected, setSelected] = useState('')
@@ -80,15 +77,15 @@ export function IntakeScreen() {
       const scale = window.devicePixelRatio || 1
       const inside = !!bounds && position.x / scale >= bounds.left && position.x / scale <= bounds.right &&
         position.y / scale >= bounds.top && position.y / scale <= bounds.bottom
-      const allowed = inside && !operation.current && !state.busy && state.data?.case.case_id === caseId && (!state.data.run || state.data.run.stopped)
-      setHovering(allowed && event.payload.type !== 'drop')
+      const allowed = !!inside && !operation.current && !state.busy && (state.preview ?? state.data)?.case.case_id === caseId && (!(state.preview ?? state.data)?.run || (state.preview ?? state.data)?.run?.stopped)
+      setHovering(!!allowed && event.payload.type !== 'drop')
       if (allowed && event.payload.type === 'drop') void state.registerEvidence(event.payload.paths)
     }).then(stop => { if (disposed) stop(); else unlisten = stop })
       .catch(error => { if (!disposed) useApp.getState().setError(error) })
     return () => { disposed = true; unlisten?.() }
   }, [caseId])
   if (!data) return <StatusMessage>Open or create a case to register evidence.</StatusMessage>
-  const evidence = data.tables.evidence_files ?? []
+  const evidence = 'evidence' in data ? data.evidence : fullData?.tables.evidence_files ?? []
   const verified = evidence.filter(e => e.verification_status === 'verified').length
   const detail = evidence.find(e => e.evidence_id === selected)
   const pages = Math.max(1, Math.ceil(evidence.length / 100))
@@ -101,7 +98,7 @@ export function IntakeScreen() {
     if (locked) return
     try {
       const paths = await pickEvidence()
-      if (paths.length && useApp.getState().data?.case.case_id === caseId) await useApp.getState().registerEvidence(paths)
+      if (paths.length && (useApp.getState().activeCaseId ?? useApp.getState().data?.case.case_id) === caseId) await useApp.getState().registerEvidence(paths)
     } catch (error) { useApp.getState().setError(error) }
   }
   const verifyAll = async () => {
@@ -110,7 +107,7 @@ export function IntakeScreen() {
     setWorking(true)
     try {
       for (const file of evidence.filter(e => e.verification_status !== 'verified')) {
-        if (useApp.getState().data?.case.case_id !== caseId) break
+        if ((useApp.getState().activeCaseId ?? useApp.getState().data?.case.case_id) !== caseId) break
         await useApp.getState().verifyEvidence(String(file.evidence_id))
         if (useApp.getState().error) break
       }

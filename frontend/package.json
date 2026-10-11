@@ -14,7 +14,9 @@
     "lint": "oxlint",
     "check:backend": "esbuild checks/backend.check.tsx --bundle --platform=node --format=esm --external:react --external:react-dom/* --jsx=automatic --outfile=node_modules/.cache/backend.check.mjs --log-level=warning && node node_modules/.cache/backend.check.mjs",
     "preview": "vite preview",
-    "check:graph": "esbuild checks/correlation.check.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/correlation.check.mjs --log-level=warning && node node_modules/.cache/correlation.check.mjs"
+    "check:graph": "esbuild checks/correlation.check.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/correlation.check.mjs --log-level=warning && node node_modules/.cache/correlation.check.mjs",
+    "check:case-preview": "esbuild checks/casePreviewController.check.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/casePreviewController.check.mjs --log-level=warning && node node_modules/.cache/casePreviewController.check.mjs",
+    "check:case-preview-browser": "node checks/casePreview.browser.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",

@@ -50,7 +50,7 @@ from sidecar.composition import (
 from sidecar.main import build_router
 from sidecar.native_verification import NativeVerificationBridge
 from sidecar.protocol import CommandRouter, SidecarRequest, serve
-from sidecar.views import analysis_detail, case_view
+from sidecar.views import analysis_detail, case_view, case_preview
 
 
 class DesktopRuntime:
@@ -196,6 +196,11 @@ class DesktopRuntime:
         )
         self.session(response.case_id)
         return {"case_id": response.case_id}
+
+    def case_preview(self, payload):
+        case_id = _validate(payload, ("case_id",))["case_id"]
+        connection, stores, pipelines = self.session(case_id)
+        return case_preview(case_id, connection, stores, pipelines)
 
     def case_data(self, payload):
         case_id = _validate(payload, ("case_id",))["case_id"]
@@ -524,6 +529,7 @@ class DesktopRuntime:
         router.register("list_cases", self.list_cases)
         router.register("delete_case", self.delete_case)
         router.register("get_case_data", self.case_data)
+        router.register("get_case_preview", self.case_preview)
         router.register("get_analysis_detail", self.analysis_detail)
         for name, kind in (("get_history_tables", "tables"), ("get_history_page", "page"), ("locate_history_record", "locate")):
             router.register(name, lambda payload, kind=kind: self.history_query(kind, payload))

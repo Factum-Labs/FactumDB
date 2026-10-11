@@ -29,7 +29,7 @@ export function useSessionLock() {
       if (checking || useApp.getState().busy) return
       checking = true
       void request<AuthStatus>('auth_status').then(status => {
-        if (status.locked) useApp.setState({ locked: true })
+        if (status.locked) void useApp.getState().lockSession()
         else if (!status.user) void useApp.getState().signOut()
       }).catch(error => useApp.getState().setError(error)).finally(() => { checking = false })
     }, 1000)

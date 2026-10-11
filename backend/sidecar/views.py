@@ -9,9 +9,58 @@ from core.domain.rules import RULES, describe
 from core.engine import ENGINE_REVISION, ANALYSIS_FORMAT_VERSION
 
 
+def case_preview(case_id, connection, stores, pipelines):
+    """A consistent, bounded projection; analysis arrays stay inside SQLite."""
+    connection.execute("SAVEPOINT case_preview")
+    try:
+        case = connection.execute("SELECT * FROM cases WHERE case_id = ?", (case_id,)).fetchone()
+        if case is None:
+            raise NotFoundError(f"case not found: {case_id}")
+        evidence = [_row(r) for r in connection.execute(
+            "SELECT * FROM evidence_files WHERE case_id = ? ORDER BY evidence_id", (case_id,))]
+        run = pipelines.latest_for_case(case_id)
+        run_view = _pipeline_result(run) if run else None
+        def length(stage, path):
+            row = connection.execute("SELECT json_array_length(result_json, ?) FROM analysis_results WHERE case_id = ? AND stage = ?",
+                                     (path, case_id, stage)).fetchone()
+            return row[0] if row else None
+        def count(table):
+            return connection.execute(f"SELECT count(*) FROM {table} t JOIN evidence_files e ON e.evidence_id = t.evidence_id WHERE e.case_id = ?", (case_id,)).fetchone()[0]
+        parsed = count('schemas')
+        columns = connection.execute("SELECT count(*) FROM schema_columns c JOIN schemas s ON s.schema_id=c.schema_id JOIN evidence_files e ON e.evidence_id=s.evidence_id WHERE e.case_id=?", (case_id,)).fetchone()[0]
+        integrity = connection.execute("SELECT count(*), sum(total_pages), sum(damaged_pages), sum(total_pages IS NULL), sum(status != 'valid') FROM integrity_results t JOIN evidence_files e ON e.evidence_id=t.evidence_id WHERE e.case_id=?", (case_id,)).fetchone()
+        missing = connection.execute("SELECT count(DISTINCT j.value) FROM binlog_inventory t JOIN evidence_files e ON e.evidence_id=t.evidence_id, json_each(t.missing_files_json) j WHERE e.case_id=?", (case_id,)).fetchone()[0]
+        comparisons = length('reconciliation', '$.rows')
+        exact, unresolved = connection.execute("SELECT coalesce(sum(json_extract(j.value,'$.result')='Exact'),0), coalesce(sum(json_extract(j.value,'$.result')='Unresolved'),0) FROM analysis_results a, json_each(a.result_json,'$.rows') j WHERE a.case_id=? AND a.stage='reconciliation'", (case_id,)).fetchone()
+        metrics = dict(evidence=len(evidence), verified=sum(e['verification_status']=='verified' for e in evidence),
+                       tables=parsed if parsed or (run_view and any(s['stage'] == 'extract_schema' and s['status'] == 'succeeded' for s in run_view['stages'])) else None,
+                       transactions=length('grouping', '$.transactions'), records=length('correlation', '$.records'),
+                       exact=exact if comparisons is not None else None, unresolved=unresolved if comparisons is not None else None,
+                       gaps=length('grouping', '$.coverage.gaps'))
+        summaries = {
+            'verify_evidence': f"{metrics['verified']} / {len(evidence)} match",
+            'validate_pages': f"{'Unknown' if not integrity[0] or integrity[3] else integrity[1]} pages, {integrity[2] or 0} damaged",
+            'extract_schema': f"{parsed} tables, {columns} columns",
+            'extract_physical_rows': f"{count('physical_records')} rows",
+            'decode_binary_logs': f"{sum(e['kind']=='binlog' for e in evidence)} logs, {missing} missing",
+            'group_transactions': f"{metrics['transactions']} transactions",
+            'correlate_records': f"{metrics['records']} records linked",
+            'reconstruct_state': f"{length('reconstruction', '$.histories')} histories",
+            'reconcile_records': f"{comparisons} comparisons",
+        }
+        return _present({'case': _row(case), 'evidence': evidence, 'run': _pipeline_result(run) if run else None,
+                         'pipeline': {'metrics': metrics, 'summaries': summaries, 'warnings': {
+                             'validate_pages': bool(integrity[4]), 'decode_binary_logs': bool(missing),
+                             'group_transactions': bool(metrics['gaps'])}}})
+    finally:
+        connection.execute("RELEASE case_preview")
+
+
 def _present(value):
     if type(value) is int and abs(value) > 2**53 - 1:
         return {"__integer__": str(value)}
+    if isinstance(value, tuple):
+        return [_present(item) for item in value]
     if isinstance(value, list):
         for i, item in enumerate(value):
             value[i] = _present(item)
