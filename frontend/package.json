@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "check:history-browser": "node checks/history.browser.mjs",
     "check:settings-browser": "node checks/settings.browser.mjs",
     "check:gaps": "esbuild checks/gaps.check.tsx --bundle --platform=node --format=esm --external:react --external:react-dom/* --jsx=automatic --outfile=node_modules/.cache/gaps.check.mjs --log-level=warning && node node_modules/.cache/gaps.check.mjs",
     "check:gaps-browser": "node checks/gaps.browser.mjs",

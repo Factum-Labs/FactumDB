@@ -148,19 +148,36 @@ def analysis_detail(connection, case_id, kind, identity, field=None, qualified_t
         raise NotFoundError(f"{kind} not found in this case: {identity}")
     detail = json.loads(row[0])
     if kind == "history":
-        refs = {tuple(step["ref"]) for step in detail["steps"] if step.get("ref")}
-        events = []
-        for ref in sorted(refs):
-            event = connection.execute(
-                "SELECT * FROM binlog_events WHERE source_file = ? AND log_position = ? AND row_index = ?",
-                ref,
-            ).fetchone()
-            if event:
-                item = _row(event)
-                item["database"] = item.pop("database_name")
-                item["table"] = item.pop("table_name")
-                events.append(item)
-        detail["events"] = events
+        return history_details(connection, case_id, [detail])[0]
     found = {}
     _findings(detail, found)
     return {"detail": _present(detail), "findings": _present(list(found.values()))}
+
+
+def history_details(connection, case_id, histories):
+    """Enrich a page in bounded, case-scoped batches using the detail projection."""
+    references = [{tuple(step["ref"]) for step in history["steps"] if step.get("ref")} for history in histories]
+    refs = sorted(set().union(*references)) if references else []
+    events = {}
+    for start in range(0, len(refs), 200):
+        batch = refs[start:start + 200]
+        values = ','.join('(?,?,?)' for _ in batch)
+        parameters = [value for ref in batch for value in ref]
+        for event in connection.execute(
+            f"WITH refs(source_file, log_position, row_index) AS (VALUES {values}) "
+            "SELECT b.* FROM refs r JOIN binlog_events b ON b.source_file=r.source_file "
+            "AND b.log_position=r.log_position AND b.row_index=r.row_index "
+            "JOIN evidence_files e ON e.evidence_id=b.evidence_id WHERE e.case_id=? ORDER BY b.event_id",
+            [*parameters, case_id],
+        ):
+            item = _row(event)
+            item["database"] = item.pop("database_name")
+            item["table"] = item.pop("table_name")
+            events.setdefault((item["source_file"], item["log_position"], item["row_index"]), item)
+    result = []
+    for history, references_for_history in zip(histories, references):
+        history["events"] = [events[ref] for ref in sorted(references_for_history) if ref in events]
+        found = {}
+        _findings(history, found)
+        result.append({"detail": _present(history), "findings": _present(list(found.values()))})
+    return result

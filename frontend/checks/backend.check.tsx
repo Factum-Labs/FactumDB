@@ -170,6 +170,9 @@ try {
   const transaction = await request<{ detail: Row }>('get_analysis_detail', {
     case_id: caseId, kind: 'transaction', identity: transactionSummary.id,
   })
+  const bundled = await request<{ items: { summary: Row; detail: Row; findings: Row[] }[] }>('get_history_page', { case_id: caseId, include_details: true })
+  assert.deepEqual(bundled.items[0].detail, history.detail)
+  assert.deepEqual(bundled.items[0].findings, history.findings)
   seeded.analysis.reconstruction = { ...seeded.analysis.reconstruction, histories: [history.detail], details_deferred: false }
   seeded.analysis.grouping = { ...seeded.analysis.grouping, transactions: [transaction.detail], details_deferred: false }
   seeded.findings.push(...history.findings)

@@ -13,7 +13,6 @@ import {
   type Row,
 } from "../lib/backend";
 import { useApp } from "../store";
-import { useAnalysisDetail } from "../lib/useAnalysisDetail";
 import { useTablePage } from "../lib/useTablePage";
 import { useTimeDisplay } from "../lib/timeDisplay";
 
@@ -743,19 +742,14 @@ export function RecordHistoryScreen() {
   const selected = useApp((s) => s.selectedRecord);
   const selectedTable = useApp((s) => s.selectedRecordTable);
   const list = useHistoryPage(data);
-  const histories = list.items;
+  const histories = list.items.map(item => item.summary);
   const current =
     histories.find(
       (h) =>
         object(h.record).id === selected &&
         (!selectedTable || object(h.record).table === selectedTable),
     ) ?? histories[0];
-  const loaded = useAnalysisDetail(
-    data?.case.case_id,
-    "history",
-    current,
-    data?.analysis.reconstruction?.details_deferred === true,
-  );
+  const loaded = list.items.find(item => item.summary === current);
   const page = list.offset / 100;
   const pages = Math.max(1, Math.ceil(list.total / 100));
   if (!data)
@@ -863,7 +857,7 @@ export function RecordHistoryScreen() {
           </div>
         )}
       </section>
-      {current && !list.loading && loaded.detail ? (
+      {current && !list.loading && loaded?.detail ? (
         <HistoryDetail
           key={`${data.case.case_id}:${object(current.record).table}:${object(current.record).id}`}
           history={loaded.detail}
@@ -871,7 +865,7 @@ export function RecordHistoryScreen() {
         />
       ) : (
         <p role="status" className="text-sm text-muted">
-          {loaded.error ?? "Loading record history…"}
+          {list.error || (list.loading ? "Loading record history..." : "No record history selected.")}
         </p>
       )}
     </div>

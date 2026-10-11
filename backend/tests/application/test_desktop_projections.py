@@ -82,8 +82,19 @@ def test_deferred_history_keeps_observed_log_images(tmp_path, monkeypatch):
         view = call(runtime, "get_case_data", case_id=case_id)
         record = call(runtime, "get_history_page", case_id=case_id)["items"][0]["record"]
         detail = call(runtime, "get_analysis_detail", case_id=case_id, kind="history", identity=record["id"])["detail"]
+        bundled = call(runtime, "get_history_page", case_id=case_id, include_details=True)
+        single = call(runtime, "get_analysis_detail", case_id=case_id, kind="history", identity=record["id"], qualified_table=record["table"])
+        assert bundled["items"][0]["detail"] == single["detail"]
+        assert bundled["items"][0]["findings"] == single["findings"]
         assert detail["events"]
         assert detail["events"][0]["database"] == record["database"]
         assert "before" in detail["events"][0] and "after" in detail["events"][0]
+        # Identical source positions belonging to another case must never leak.
+        other = create(runtime)
+        connection, _, _ = runtime.session(case_id)
+        with connection:
+            connection.execute("INSERT INTO cases(case_id,case_name,examiner,workspace_path,created_at) VALUES (?,?,?,?,?)", (other, 'Other', 'Test', '/tmp', 'now'))
+            connection.execute("UPDATE evidence_files SET case_id=? WHERE case_id=?", (other, case_id))
+        assert call(runtime, "get_history_page", case_id=case_id, include_details=True)["items"][0]["detail"]["events"] == []
     finally:
         runtime.close()

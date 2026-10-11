@@ -255,7 +255,7 @@ class DesktopRuntime:
 
     def history_query(self, command, payload):
         from adapters.persistence.sqlite_history_summary_repository import HistorySummaries
-        allowed = {"case_id"} | ({"identity", "qualified_table"} if command == "locate" else {"database", "table", "offset", "limit"} if command == "page" else set())
+        allowed = {"case_id"} | ({"identity", "qualified_table"} if command == "locate" else {"database", "table", "offset", "limit", "include_details"} if command == "page" else set())
         if set(payload) - allowed:
             raise ValueError("Unsupported history query fields")
         case_id = _validate({"case_id": payload.get("case_id")}, ("case_id",))["case_id"]
@@ -266,7 +266,7 @@ class DesktopRuntime:
         if command == "locate":
             identity = _validate({"identity": payload.get("identity")}, ("identity",))["identity"]
             return repository.locate(case_id, identity, payload.get("qualified_table"))
-        return repository.page(case_id, payload.get("database"), payload.get("table"), payload.get("offset", 0), payload.get("limit", 100))
+        return repository.page(case_id, payload.get("database"), payload.get("table"), payload.get("offset", 0), payload.get("limit", 100), payload.get("include_details", False))
 
     def application_command(self, command, payload):
         values = _validate(payload, COMMAND_FIELDS[command])

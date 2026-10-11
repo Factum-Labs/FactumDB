@@ -24,8 +24,14 @@ class HistorySummaries:
 
     def ensure(self, case_id):
         if not self.connection.execute("SELECT 1 FROM history_summary_ready WHERE case_id = ?", (case_id,)).fetchone():
-            with self.connection:
+            self.connection.execute("SAVEPOINT history_backfill")
+            try:
                 self.rebuild(case_id)
+            except BaseException:
+                self.connection.execute("ROLLBACK TO history_backfill")
+                raise
+            finally:
+                self.connection.execute("RELEASE history_backfill")
 
     def tables(self, case_id):
         self.ensure(case_id)
@@ -35,21 +41,44 @@ class HistorySummaries:
         tables = [dict(database=r[0], table=r[1], count=r[2]) for r in rows]
         return {"tables": tables, "total": sum(r['count'] for r in tables)}
 
-    def page(self, case_id, database=None, table=None, offset=0, limit=100):
+    def page(self, case_id, database=None, table=None, offset=0, limit=100, include_details=False):
+        if type(include_details) is not bool:
+            raise ValueError("include_details must be a boolean")
         if (database is None) != (table is None):
             raise ValueError("database and table must be supplied together")
         if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("offset must be nonnegative and limit must be 1–100")
         if database is not None and (not isinstance(database, str) or not isinstance(table, str)):
             raise ValueError("database and table must be strings")
-        self.ensure(case_id)
+        self.connection.execute("SAVEPOINT history_page")
+        try:
+            self.ensure(case_id)
+            return self._page(case_id, database, table, offset, limit, include_details)
+        except BaseException:
+            self.connection.execute("ROLLBACK TO history_page")
+            raise
+        finally:
+            self.connection.execute("RELEASE history_page")
+
+    def _page(self, case_id, database, table, offset, limit, include_details):
         where, args = "case_id = ?", [case_id]
         if table is not None:
             where += " AND database_name = ? AND qualified_table_name = ?"
             args += [database, table]
         total = self.connection.execute(f"SELECT count(*) FROM history_summaries WHERE {where}", args).fetchone()[0]
-        result = self.connection.execute(f"SELECT record_json, method, step_count FROM history_summaries WHERE {where} ORDER BY ordinal LIMIT ? OFFSET ?", [*args, limit, offset])
-        return dict(items=[dict(record=json.loads(r[0]), method=r[1], step_count=r[2]) for r in result], total=total, offset=offset, limit=limit)
+        result = self.connection.execute(f"SELECT record_json, method, step_count, ordinal FROM history_summaries WHERE {where} ORDER BY ordinal LIMIT ? OFFSET ?", [*args, limit, offset]).fetchall()
+        items = [dict(record=json.loads(r[0]), method=r[1], step_count=r[2]) for r in result]
+        if include_details and result:
+            ordinals = [r[3] for r in result]
+            placeholders = ','.join('?' for _ in ordinals)
+            histories = {int(r[0]): json.loads(r[1]) for r in self.connection.execute(
+                "SELECT j.key, j.value FROM analysis_results a, json_each(a.result_json, '$.histories') j "
+                f"WHERE a.case_id = ? AND a.stage = 'reconstruction' AND CAST(j.key AS INTEGER) IN ({placeholders})",
+                [case_id, *ordinals])}
+            from sidecar.views import history_details
+            details = history_details(self.connection, case_id, [histories[o] for o in ordinals])
+            items = [dict(summary=summary, **detail) for summary, detail in zip(items, details)]
+        return dict(items=items, total=total, offset=offset, limit=limit)
 
     def locate(self, case_id, identity, qualified_table=None):
         self.ensure(case_id)

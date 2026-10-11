@@ -75,3 +75,32 @@ def test_backfill_empty_update_delete_and_rollback(db):
 def test_invalid_requests(db, args):
     with pytest.raises(ValueError):
         HistorySummaries(db).page('a', **args)
+
+
+def test_bundled_pages_parity_and_validation(db):
+    from sidecar.views import analysis_detail
+    seed(db)
+    repo = HistorySummaries(db)
+    for database, table, offset in [(None, None, 0), ('credit', 'credit.accounts', 100), ('credit', 'credit.accounts', 200), ('other', 'other.accounts', 0)]:
+        page = repo.page('a', database, table, offset, include_details=True)
+        legacy = repo.page('a', database, table, offset)
+        assert [item['summary'] for item in page['items']] == legacy['items']
+        for item in page['items']:
+            record = item['summary']['record']
+            single = analysis_detail(db, 'a', 'history', record['id'], qualified_table=record['table'])
+            assert {key: item[key] for key in ('detail', 'findings')} == single
+    assert repo.page('b', include_details=True)['items'] == []
+    assert repo.page('a', 'credit', 'missing', include_details=True)['items'] == []
+    with pytest.raises(ValueError, match='boolean'):
+        repo.page('a', include_details=1)
+
+
+def test_bundle_preserves_large_values_and_long_histories(db):
+    from sidecar.views import analysis_detail
+    history = dict(record=dict(id='products:1|2', database='credit', table='credit.products', key='1|2'),
+                   method='composite_primary_key_exact', steps=[dict(value=2**60, text='x' * 10000) for _ in range(201)])
+    db.execute("INSERT INTO analysis_results VALUES ('a', 'reconstruction', ?, 'now')", (json.dumps(dict(histories=[history])),))
+    db.commit()
+    item = HistorySummaries(db).page('a', include_details=True)['items'][0]
+    assert item['detail'] == analysis_detail(db, 'a', 'history', 'products:1|2')['detail']
+    assert len(item['detail']['steps']) == 201
