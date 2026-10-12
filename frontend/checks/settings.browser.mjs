@@ -65,6 +65,11 @@ try {
   await evaluate('[...document.querySelectorAll("h2")].find(heading => heading.textContent === "Storage & backup").scrollIntoView()')
   const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true })
   writeFileSync(resolve('node_modules/.cache/settings-browser.png'), Buffer.from(screenshot.data, 'base64'))
+  await evaluate('window.setSharedWorkspace()')
+  await waitFor('document.body.textContent.includes("Workspace-wide operations are unavailable")')
+  for (const label of ['Open workspace folder', 'Create workspace backup', 'Select backup to restore']) {
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === ${JSON.stringify(label)}).disabled`), true)
+  }
   assert.deepEqual(exceptions, [])
   console.log('PASS: browser profile/password forms, timezone preview, storage summary, backup/restore confirmation, lock-screen privacy and unlocking.')
 } finally {

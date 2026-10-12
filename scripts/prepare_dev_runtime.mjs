@@ -21,6 +21,7 @@ export function bundleReady(bundle, lock) {
       const fromBundle = relative(resolve(bundle), target)
       return fromBundle !== '..' && !fromBundle.startsWith(`..${sep}`) && !fromBundle.includes(':') && statSync(target).isFile()
     }
+    if (!containedFile("python-packages/factumdb-pdf.json")) return false
     if (!required.every(name => containedFile(manifest.tools?.[name]))) return false
     // A leftover Python directory alone, or a missing MySQL DLL, is not a complete bundle.
     return !!manifest.files && Object.keys(manifest.files).length > 0 && Object.keys(manifest.files).every(containedFile)

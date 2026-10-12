@@ -32,7 +32,7 @@ export interface Preferences {
   lock_minutes: number; time_mode: 'utc' | 'local' | 'custom'; utc_offset_minutes: number
 }
 export interface ExaminerProfile { display_name?: string; organization?: string; examiner_id?: string }
-export interface Settings { workspace: string; tools: ToolSettings; bundled_tools?: Partial<ToolSettings>; preferences?: Preferences; profile?: ExaminerProfile }
+export interface Settings { workspace: string; tools: ToolSettings; bundled_tools?: Partial<ToolSettings>; preferences?: Preferences; profile?: ExaminerProfile; workspace_operations_available?: boolean }
 export interface AuthStatus { user: { username: string } | null; locked?: boolean }
 export interface StorageUsage { total_bytes: number; free_bytes: number; categories: Record<string, number>; cases: Record<string, number> }
 export interface BackupPreview { created_at: string; case_count: number; total_bytes: number; sha256: string; original_evidence_included: boolean }

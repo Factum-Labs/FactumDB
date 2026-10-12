@@ -6,6 +6,8 @@ from contextlib import nullcontext
 from dataclasses import asdict, dataclass, fields, is_dataclass, replace
 from typing import TextIO
 
+from core.application.safe_errors import safe_error
+
 JsonObject = dict[str, object]
 CommandHandler = Callable[[Mapping[str, object]], object]
 
@@ -80,7 +82,7 @@ class CommandRouter:
                 request.request_id,
                 False,
                 error_code="unknown_command",
-                error_message=f"unknown command: {request.command}",
+                error_message="Unknown command.",
             )
         try:
             if self._before_dispatch is not None:
@@ -90,11 +92,12 @@ class CommandRouter:
                 return replace(result, request_id=request.request_id)
             return SidecarResponse(request.request_id, True, result=result)
         except Exception as error:
+            error_code, error_message = safe_error(error)
             return SidecarResponse(
                 request.request_id,
                 False,
-                error_code=type(error).__name__,
-                error_message=str(error),
+                error_code=error_code,
+                error_message=error_message,
             )
 
 
@@ -119,12 +122,12 @@ def serve(
             )
             with scope:
                 response = router.dispatch(request)
-        except Exception as error:
+        except Exception:
             response = SidecarResponse(
                 request_id,
                 False,
                 error_code="invalid_request",
-                error_message=str(error),
+                error_message="Invalid request. Check the request format and session.",
             )
         output_stream.write(response.to_json() + "\n")
         output_stream.flush()

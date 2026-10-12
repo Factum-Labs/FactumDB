@@ -229,6 +229,13 @@ async fn pick_export_path(app: tauri::AppHandle, format: String) -> Result<Optio
                 .add_filter("JSON", &["json"])
                 .set_file_name("case.json")
                 .blocking_save_file()
+        } else if format == "PDF" {
+            app.dialog()
+                .file()
+                .set_title("Export to a new PDF report")
+                .add_filter("PDF", &["pdf"])
+                .set_file_name("report.pdf")
+                .blocking_save_file()
         } else if format == "CSV" {
             app.dialog()
                 .file()
@@ -281,7 +288,7 @@ async fn open_workspace(
     window: tauri::WebviewWindow,
     state: tauri::State<'_, Backend>,
 ) -> Result<(), String> {
-    let settings = backend_request(window, state, "get_settings".into(), json!({})).await?;
+    let settings = backend_request(window, state, "get_workspace_folder".into(), json!({})).await?;
     let path = settings["workspace"]
         .as_str()
         .ok_or("Workspace unavailable")?;

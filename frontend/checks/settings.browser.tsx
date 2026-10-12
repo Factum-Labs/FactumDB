@@ -13,6 +13,9 @@ let changedPassword = false
 let restoreCount = 0
 let deleteCount = 0
 Object.assign(globalThis, { isTauri: true })
+Object.assign(globalThis, { setSharedWorkspace: () => useApp.setState({
+  settings: { ...settings, workspace_operations_available: false },
+}) })
 mockIPC((command, args) => {
   if (command === 'pick_backup_path') return args?.restore ? 'C:/backups/workspace.fdbbackup' : 'C:/backups/new.fdbbackup'
   if (command === 'open_workspace') return null

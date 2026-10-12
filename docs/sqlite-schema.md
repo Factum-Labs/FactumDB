@@ -6,6 +6,12 @@ initialized only for `catalog.db`; case databases and exports contain no account
 credentials. See [authentication](authentication.md) for the account schema and
 shared/native implementation.
 
+The catalog also owns `case_owners(case_id, user_id)`: one stable account ID per
+case, with a nullable ID for unresolved legacy ownership. It references catalog
+`cases` and `users` and is not copied into case exports. The backend checks this
+table before opening any case database. Unknown legacy rows are sealed against
+later username-based claims. Case deletion cascades its catalog ownership row.
+
 Engine revision 2 adds `cases.engine_revision` and `cases.reanalysis_required`.
 Opening an older database preserves evidence, working-copy hashes, normalized
 extraction tables and tool audit history, deletes incompatible analysis results
@@ -445,6 +451,8 @@ CREATE TABLE reports (
     files_json  TEXT NOT NULL CHECK (json_valid(files_json)),
     analysed_at TEXT,
     created_at  TEXT NOT NULL,
+    actor_id    TEXT,
+    actor_username TEXT,
     UNIQUE (case_id, format, version)
 ) STRICT;
 ```

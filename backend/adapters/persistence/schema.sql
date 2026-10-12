@@ -216,6 +216,8 @@ CREATE TABLE IF NOT EXISTS reports (
     files_json  TEXT NOT NULL CHECK (json_valid(files_json)),
     analysed_at TEXT,
     created_at  TEXT NOT NULL,
+    actor_id    TEXT,
+    actor_username TEXT,
     UNIQUE (case_id, format, version)
 ) STRICT;
 

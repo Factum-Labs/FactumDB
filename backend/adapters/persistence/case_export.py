@@ -33,6 +33,8 @@ from pathlib import Path
 
 from adapters.persistence._timestamps import to_text
 from adapters.persistence._values import decode_value
+from adapters.persistence.export_redaction import POLICY, redact_document
+from adapters.persistence.export_sections import select_sections, validate_sections
 from adapters.persistence.sqlite_report_repository import SqliteReportRepository
 from core.application.errors import NotFoundError
 from core.domain.models.values import UNOBSERVED, UndecodableValue
@@ -131,25 +133,66 @@ def case_export(connection, case_id: str, *, now=_utc_now) -> dict:
     }
 
 
-def write_json(connection, case_id: str, path, *, now=_utc_now, preferences=None, examiner_profile=None) -> Path:
+def prepare_export(connection, case_id, *, now=_utc_now, preferences=None,
+                   examiner_profile=None, redacted=False, sections=None, profile=None):
+    if profile is not None:
+        from adapters.persistence.investigator_export import prepare_projection
+        return prepare_projection(connection, case_id, now=now, preferences=preferences,
+                                  examiner_profile=examiner_profile, redacted=redacted,
+                                  sections=sections, profile=profile)
+    from adapters.persistence.export_sections import OPTIONAL_SECTIONS
+    if sections is not None and any(key in sections for key, _ in OPTIONAL_SECTIONS):
+        raise ValueError("Optional supporting sections require an explicit export profile")
+    document = select_sections(case_export(connection, case_id, now=now),
+                               validate_sections(sections))
+    if redacted:
+        document = redact_document(document)
+        examiner_profile = {}
+    if preferences is not None:
+        document["presentation"] = {
+            "timezone": time_label(preferences),
+            "examiner_profile": (examiner_profile or {}) if sections is None or "case_details" in sections else {},
+            "display_times": report_times(document["tables"], preferences),
+            "note": ("Timestamps are aliased in this sharing copy." if redacted
+                     else "Original timestamps remain unchanged in tables."),
+        }
+    return document
+
+
+def write_json(
+    connection, case_id: str, path, *, now=_utc_now, preferences=None,
+    examiner_profile=None, redacted=False, sections=None, prepared_document=None,
+    actor_id=None, actor_username=None,
+    profile=None,
+) -> Path:
     """The whole case in one new file, recorded as the next JSON version."""
     moment = now()
-    document = case_export(connection, case_id, now=lambda: moment)
-    if preferences is not None:
-        document["presentation"] = {"timezone": time_label(preferences), "examiner_profile": examiner_profile or {},
-                                    "display_times": report_times(document["tables"], preferences),
-                                    "note": "Original timestamps remain unchanged in tables."}
+    document = prepared_document if prepared_document is not None else prepare_export(
+        connection, case_id, now=lambda: moment, preferences=preferences,
+        examiner_profile=examiner_profile, redacted=redacted, sections=sections, profile=profile,
+    )
     path = Path(path)
-    with open(path, "x", encoding="utf-8") as out:      # "x" never overwrites
-        json.dump(document, out, indent=2, sort_keys=True, ensure_ascii=False)
-        out.write("\n")
-    _record(connection, case_id, "json", path, [path], moment)
+    from adapters.persistence.investigator_export import ExportProjection
+    try:
+        with open(path, "x", encoding="utf-8", newline="\n") as out:
+            if isinstance(document, ExportProjection):
+                document.write_json(out)
+            else:
+                json.dump(document, out, indent=2, sort_keys=True, ensure_ascii=False)
+                out.write("\n")
+        _record(connection, case_id, "json", path, [path], moment,
+                actor_id=actor_id, actor_username=actor_username)
+    finally:
+        if isinstance(document, ExportProjection) and prepared_document is None:
+            document.close()
     return path
 
 
-def _record(connection, case_id, format, location, files, moment):
+def _record(connection, case_id, format, location, files, moment, **actor):
     """Add a finished export to the case's report history."""
-    SqliteReportRepository(connection, now=lambda: moment).record(case_id, format, location, files)
+    SqliteReportRepository(connection, now=lambda: moment).record(
+        case_id, format, location, files, **actor,
+    )
 
 
 def _row(row) -> dict:
@@ -167,13 +210,35 @@ def _row(row) -> dict:
 # ── CSV ──────────────────────────────────────────────────────────────────────
 
 
-def write_csv(connection, case_id: str, folder, *, now=_utc_now, preferences=None, examiner_profile=None) -> list:
+def write_csv(
+    connection, case_id: str, folder, *, now=_utc_now, preferences=None,
+    examiner_profile=None, redacted=False, sections=None, prepared_document=None,
+    actor_id=None, actor_username=None,
+    profile=None,
+) -> list:
     """One CSV file per kind of data, in a new folder. Returns the files written.
 
     The folder is recorded as the next CSV version, with about.txt included.
     """
     moment = now()
-    tables = case_export(connection, case_id, now=lambda: moment)["tables"]
+    document = prepared_document if prepared_document is not None else prepare_export(
+        connection, case_id, now=lambda: moment, preferences=preferences,
+        examiner_profile=examiner_profile, redacted=redacted, sections=sections, profile=profile,
+    )
+    from adapters.persistence.investigator_export import ExportProjection
+    if isinstance(document, ExportProjection):
+        try:
+            folder = Path(folder)
+            folder.mkdir(parents=True, exist_ok=False)
+            written = document.write_csv(folder)
+            _record(connection, case_id, "csv", folder, written, moment,
+                    actor_id=actor_id, actor_username=actor_username)
+            return written
+        finally:
+            if prepared_document is None:
+                document.close()
+    examiner_profile = document.get("presentation", {}).get("examiner_profile", {})
+    tables = document["tables"]
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=False)
 
@@ -181,17 +246,29 @@ def write_csv(connection, case_id: str, folder, *, now=_utc_now, preferences=Non
         _write(folder / f"{name}.csv", _header(connection, table), _plain(tables[table]))
         for name, table in (("evidence", "evidence_files"), ("tool_runs", "tool_runs"),
                             ("integrity", "integrity_results"), ("warnings", "warnings"))
+        if table in tables
     ]
     if preferences is not None:
         written.append(_write(folder / "display_times.csv", ["table", "row", "field", "display", "timezone"],
                               [{"table": table, **entry, "timezone": time_label(preferences)}
                                for table, entries in report_times(tables, preferences).items() for entry in entries]))
     columns = _columns_by_table(tables)
-    written += _row_files(folder, tables["physical_records"], columns)
-    written += _event_files(folder, tables["binlog_events"], columns)
+    written += _row_files(folder, tables.get("physical_records", []), columns)
+    written += _event_files(folder, tables.get("binlog_events", []), columns)
+
+    if sections is not None or "selection" in document:
+        standard = {"evidence_files", "tool_runs", "integrity_results", "warnings",
+                    "physical_records", "binlog_events", "analysis_results"}
+        for table, entries in tables.items():
+            if table not in standard:
+                written.append(_write(folder / f"{table}.csv", _all_keys(entries), _plain(entries)))
+        for analysis in tables.get("analysis_results", []):
+            if analysis["stage"] != "reconciliation":
+                written.append(_write(folder / f"analysis_{analysis['stage']}.csv",
+                                      _all_keys([analysis]), _plain([analysis])))
 
     reconciliation = next(
-        (r for r in tables["analysis_results"] if r["stage"] == "reconciliation"), None
+        (r for r in tables.get("analysis_results", []) if r["stage"] == "reconciliation"), None
     )
     if reconciliation is not None:
         written.append(_write(
@@ -207,11 +284,17 @@ def write_csv(connection, case_id: str, folder, *, now=_utc_now, preferences=Non
     (folder / "about.txt").write_text(
         f"Format version: {FORMAT_VERSION}; engine revision: {ENGINE_REVISION}; "
         f"analysis format version: {ANALYSIS_FORMAT_VERSION}\n\n" +
-        (f"Display timezone: {time_label(preferences)}\nOriginal timestamps are unchanged.\n"
+        (f"Display timezone: {time_label(preferences)}\n" +
+         ("Timestamps are aliased in this sharing copy.\n" if redacted
+          else "Original timestamps are unchanged.\n") +
          f"Exporting examiner profile: {json.dumps(examiner_profile or {}, ensure_ascii=False)}\n\n"
-         if preferences is not None else "") + _ABOUT, encoding="utf-8",
+         if preferences is not None else "") +
+        (json.dumps(POLICY, sort_keys=True) + "\n" if redacted else _ABOUT) +
+        ("\nSelected sections: " + ", ".join(document["selection"]["sections"]) + "\n"
+         if "selection" in document else ""), encoding="utf-8",
     )
-    _record(connection, case_id, "csv", folder, [*written, folder / "about.txt"], moment)
+    _record(connection, case_id, "csv", folder, [*written, folder / "about.txt"], moment,
+            actor_id=actor_id, actor_username=actor_username)
     return written
 
 
@@ -222,7 +305,7 @@ def _row_files(folder, records, columns):
         names = columns.get((database, table)) or _all_keys(r["values"] for r in group)
         header = ["record_id", "evidence_id", "tool_run_id", "is_deleted", *names]
         rows = [
-            {**{key: _cell(r[key]) for key in header[:4]},
+            {**{key: _cell(r.get(key)) for key in header[:4]},
              **{name: _value_cell(r["values"][name]) if name in r["values"] else ""
                 for name in names}}
             for r in group
@@ -244,7 +327,7 @@ def _event_files(folder, events, columns):
         )
         header = [*_EVENT_FIELDS, *(f"{side}.{name}" for side in ("before", "after") for name in names)]
         rows = [
-            {**{key: _cell(e[key]) for key in _EVENT_FIELDS},
+            {**{key: _cell(e.get(key)) for key in _EVENT_FIELDS},
              **{f"{side}.{name}": _image_cell(e[side], name)
                 for side in ("before", "after") for name in names}}
             for e in group
@@ -255,9 +338,9 @@ def _event_files(folder, events, columns):
 
 def _columns_by_table(tables):
     """(database, table) -> its column names in schema order."""
-    schema_tables = {s["schema_id"]: (s["database_name"], s["table_name"]) for s in tables["schemas"]}
+    schema_tables = {s["schema_id"]: (s["database_name"], s["table_name"]) for s in tables.get("schemas", [])}
     by_schema = defaultdict(list)
-    for column in tables["schema_columns"]:
+    for column in tables.get("schema_columns", []):
         by_schema[column["schema_id"]].append(column["name"])   # already in position order
     columns = {}
     for schema_id, names in by_schema.items():
@@ -340,7 +423,7 @@ def _write(path, header, rows):
         writer = csv.writer(out)
         writer.writerow(header)
         for row in rows:
-            writer.writerow([row[name] for name in header])
+            writer.writerow([row.get(name, "") for name in header])
     return path
 
 

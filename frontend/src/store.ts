@@ -36,7 +36,7 @@ interface AppState {
   retryPipeline: () => Promise<void>
   resetPipeline: () => Promise<void>
   configure: (tools: ToolSettings) => Promise<void>
-  exportCase: (path: string) => Promise<void>
+  exportCase: (path: string, redacted?: boolean) => Promise<void>
   setError: (error: unknown) => void
   selectTx: (id: string) => void; selectRecord: (id: string, table?: string) => void; selectTool: (id: string) => void
   setFormat: (f: string) => void; toggleGroup: (id: string) => void
@@ -294,8 +294,8 @@ export const useApp = create<AppState>((set, get) => {
     configure: tools => action(async () => {
       set({ settings: await request<Settings>('configure_settings', { ...tools }), notice: 'Tool settings saved.' })
     }).then(() => {}),
-    exportCase: path => action(async () => {
-      const result = await request<{ path: string }>('export_case', { case_id: caseId(), format: get().reportFormat, path })
+    exportCase: (path, redacted = true) => action(async () => {
+      const result = await request<{ path: string }>('export_case', { case_id: caseId(), format: get().reportFormat, path, redacted })
       set({ notice: 'Export saved to ' + result.path })
     }).then(() => {}),
     selectTx: selectedTx => set({ selectedTx }), selectRecord: (selectedRecord, table = '') => set({ selectedRecord, selectedRecordTable: table }),

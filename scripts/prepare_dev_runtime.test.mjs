@@ -10,7 +10,7 @@ test('Windows development repairs partial bundles and leaves complete bundles al
   const bundle = join(root, 'src-tauri/resources/runtime/windows')
   const lock = { target: 'test-windows', python: { sha256: 'pinned-python' }, vc_runtime: { files: {} } }
   const tools = { python_path: 'python/python.exe', innochecksum_path: 'mysql/innochecksum.exe', ibd2sdi_path: 'mysql/ibd2sdi.exe', mysqlbinlog_path: 'mysql/mysqlbinlog.exe', ibd2sql_path: 'ibd2sql/main.py' }
-  const manifest = { target: lock.target, tools, artifacts: lock, files: Object.fromEntries([...Object.values(tools), 'mysql/runtime.dll'].map(path => [path, 'test-hash'])) }
+  const manifest = { target: lock.target, tools, artifacts: lock, files: Object.fromEntries([...Object.values(tools), 'mysql/runtime.dll', 'python-packages/factumdb-pdf.json'].map(path => [path, 'test-hash'])) }
   const install = () => {
     for (const path of Object.keys(manifest.files)) {
       mkdirSync(join(bundle, path, '..'), { recursive: true })

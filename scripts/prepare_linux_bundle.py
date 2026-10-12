@@ -10,6 +10,8 @@ import tarfile
 import zipfile
 from pathlib import Path
 
+from prepare_pdf_dependencies import stage_pdf_dependencies
+
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / ".bundle-cache"
 RESOURCES = ROOT / "src-tauri/resources"
@@ -47,6 +49,7 @@ def prepare(record=False):
         RUNTIME.resolve().relative_to(RESOURCES.resolve())
         shutil.rmtree(RUNTIME)
     RUNTIME.mkdir(parents=True)
+    stage_pdf_dependencies(RUNTIME)
     # Copy only utilities, their private libraries and license/build information.
     # Never stage mysqld or install a database service.
     with tarfile.open(archives["mysql"]) as archive:
@@ -105,6 +108,11 @@ def prepare(record=False):
         "Complete source: ibd2sql/ and ../../sources/ibd2sql-e6e8c380.zip.\n"
         "Python and desktop libraries are provided by the Linux distribution.\n"
         "Artifact versions and SHA-256 hashes: manifest.json.\n", encoding="utf-8")
+    with (RUNTIME / "THIRD-PARTY-NOTICES.txt").open("a", encoding="utf-8") as out:
+        out.write("PDF: fpdf2 (LGPL-3.0), uharfbuzz, Pillow, fonttools, defusedxml.\n"
+                  "Versions and wheel names: python-packages/factumdb-pdf.json.\n"
+                  "Unmodified library sources and licenses: python-packages/ and *.dist-info/.\n"
+                  "Bundled font licenses: backend/adapters/persistence/fonts/.\n")
     for key, relative in tools.items():
         command = [str(RUNTIME / relative), "--version"]
         if key == "ibd2sql_path":

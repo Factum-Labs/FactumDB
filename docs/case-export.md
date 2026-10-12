@@ -1,5 +1,85 @@
 # Case Export (JSON and CSV)
 
+## Investigator reports and full exports (version 3)
+
+The desktop Report screen defaults to **Investigator report**, independently of
+its redaction setting. It retains acquisition/verification and processing
+metadata, evidence hashes, scope, all warnings and limitations, classification
+totals by table, and individual typed comparisons for every non-Exact result.
+Exact matches become counts. Relevant history and source observations support
+the retained conclusions. Unknown values and locations remain unknown; recorded
+processing metadata does not imply an unrecorded custody transfer.
+
+**Full evidence export** retains every unique extracted observation and distinct
+analysis result, including Exact comparisons, ordered events and speculative
+states. Repeated copies and presentation-derived strings are omitted. Its size
+still depends on the underlying evidence.
+
+The existing section checkboxes remain. Optional additions, unchecked in the
+investigator default, are `exact_matches`, `physical_records`, `binlog_events`,
+`complete_timeline`, `complete_histories`, `complete_schemas` and
+`intermediate_analysis`. The full default selects everything. Required metadata
+and interpretation dependencies are automatically added; explicitly deselecting
+default sections marks the result partial. Preview reports requested/effective
+sections, automatically added sections, counts and prepared JSON bytes.
+
+Desktop `preview_export` and `export_case` accept `profile: "investigator" |
+"full"`, defaulting to `"investigator"`. `get_export_sections` returns section
+IDs, labels, dependencies and profile defaults. Standalone `write_json`,
+`write_csv` and `prepare_export` retain their version-2 defaults; pass an explicit
+`profile` to obtain version 3. An explicitly prepared version-3 projection must
+be closed by its caller; standalone writers close their own projections.
+
+### Reference format
+
+Version 3 has `tables` and an `objects` array. An object has `id`, `kind`, `value`,
+`occurrences` and `associations` (origin and count). A structural `{"$ref": id}`
+resolves through that array. IDs are deterministic content hashes of normalized
+objects; redacted copies hash fresh aliases, not original sensitive values.
+Occurrences count appearances in stored report structures, not independent
+evidence observations.
+
+- `comparison`, `source`, `finding`, `coverage`, `identity`, `event` and `state`
+  objects are stored once. Large repeated evidence strings use `value` objects.
+- `image` objects preserve evidence column names verbatim. Resolve only their
+  child values, never interpret column names as report metadata. Tagged DECIMAL,
+  datetime, unobserved and undecodable values retain their meanings.
+- `analysis_<stage>_<member>` tables hold `index` and `value`. A null index means a
+  scalar member; `-1` marks an empty array; other indices preserve array order.
+  `analysis_metadata` retains stage/save times. Reconciliation records and the
+  optional flat rows reference the same comparison objects.
+- `binlog_events` rows hold source IDs, a canonical `event` reference and
+  `stored_timestamp` preserving the original SQLite timestamp spelling. Canonical
+  events carry database/table, row images, source position/row index and source
+  provenance; grouped events reference the same object where their contents agree.
+- Hashes live on canonical evidence/tool records; no duplicate exhaustive hash
+  or provenance list is generated. Machine-readable timestamps are original;
+  display timezone is declared once.
+
+`adapters.persistence.investigator_export.expand_document(document)` is a
+reference decoder for independent checking. It restores the legacy table and
+analysis shapes except omitted display strings. This convenience decoder loads
+its input into memory; generation and preview do not use it.
+
+JSON uses compact encoding. Version-3 CSV has one file per canonical table plus
+`objects.csv`; nested cells are JSON, with the same references and formula
+injection protection. `about.txt` records the envelope and reference convention.
+PDF and preview render the selected projection with locally bundled fonts.
+
+Generation reads large analysis TEXT incrementally through SQLite's blob API.
+The temporary projection, alias map and paginated text are disk-backed. Memory
+scales with the largest individual record/history/transaction, rather than the
+whole case. PDF generation additionally uses fpdf2's document buffer. Exports
+remain local; no upload or AWS resource is involved.
+
+Run `py -3 scripts/benchmark_report_export.py --target-mb 800` with the project's
+PDF dependencies available for a reproducible synthetic benchmark. It records
+baseline/output bytes, generation memory, preview preparation and cached page
+latency in `.bundle-cache/report-export-benchmark.json`. The synthetic benchmark
+contains repeated large values; its reduction is not a guarantee for other cases.
+
+## Legacy standalone exports (version 2)
+
 A case can be exported for checking outside FactumDB, as the workflow promises: *"the same case can also be exported as JSON or CSV for independent checking."* The code is in `backend/adapters/persistence/case_export.py`.
 
 ```python

@@ -18,7 +18,7 @@ def test_notes_survive_analysis_export_and_restart(tmp_path, monkeypatch):
         assert finish(with_runtime, case_id)["complete"]
         assert call(with_runtime, "get_case_data", case_id=other_id)["case"]["examiner_notes"] == ""
         path = tmp_path / "report.json"
-        call(with_runtime, "export_case", case_id=case_id, format="JSON", path=str(path))
+        call(with_runtime, "export_case", case_id=case_id, format="JSON", path=str(path), redacted=False)
         exported = json.loads(path.read_text(encoding="utf-8"))
         assert exported["tables"]["cases"][0]["examiner_notes"] == notes
     finally:

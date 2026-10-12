@@ -88,6 +88,23 @@ def read_csv(path):
         return list(csv.DictReader(f))
 
 
+@pytest.mark.parametrize("section", [
+    "case_details", "evidence", "hashes", "tools", "integrity", "schemas",
+    "timeline", "histories", "reconciliation", "gaps", "provenance", "notes",
+])
+def test_each_section_can_be_exported_independently(stores, tmp_path, section):
+    connection = connection_of(stores)
+    path = write_json(connection, "case-1", tmp_path / "selected.json",
+                      sections=[section], redacted=True)
+    document = json.loads(path.read_text(encoding="utf-8"))
+    assert document["selection"]["sections"] == [section]
+    assert document["selection"]["partial"]
+    files = write_csv(connection, "case-1", tmp_path / "selected-csv",
+                      sections=[section], redacted=True)
+    assert all(file.exists() for file in files)
+    assert section in (tmp_path / "selected-csv/about.txt").read_text(encoding="utf-8")
+
+
 # ── JSON ─────────────────────────────────────────────────────────────────────
 
 
