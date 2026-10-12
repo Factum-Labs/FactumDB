@@ -84,7 +84,7 @@ until those originals are moved out.
 6. Inspect tool runs in Provenance and read stdout/stderr previews. The backend
    checks the stored output hash before displaying bytes. Previews are limited
    to 256 KiB; complete outputs remain in the case workspace.
-7. Export completed analysis to a new JSON file or CSV folder. Native dialogs
+7. Export completed analysis to a new full JSON file or summary PDF. Native dialogs
    select destinations; manually entered paths are also supported.
 
 Cancellation takes effect at the next stage boundary. It does not terminate a
@@ -119,7 +119,7 @@ It includes the backend packages, SQLite schema, portable Python, extraction
 utilities, licenses, a hash manifest and corresponding source archives.
 Settings store only custom overrides, so bundled paths follow installation
 location changes. Linux and macOS still need Python and external utilities.
-JSON and CSV exports are implemented. PDF and HTML reporting remain future work.
+Full JSON exports and styled summary PDFs are implemented.
 
 ## Verification
 

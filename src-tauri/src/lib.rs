@@ -236,11 +236,6 @@ async fn pick_export_path(app: tauri::AppHandle, format: String) -> Result<Optio
                 .add_filter("PDF", &["pdf"])
                 .set_file_name("report.pdf")
                 .blocking_save_file()
-        } else if format == "CSV" {
-            app.dialog()
-                .file()
-                .set_title("Choose parent folder for CSV export")
-                .blocking_pick_folder()
         } else {
             return Err("Unsupported export format".into());
         };

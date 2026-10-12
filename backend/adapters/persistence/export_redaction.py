@@ -39,6 +39,8 @@ _OMIT = {
 _VALUE_MAPS = {"values", "before", "after", "observed_values"}
 _ENUM_KEYS = {
     "status",
+    "verification_status",
+    "integrity_status",
     "result",
     "rollup",
     "severity",
@@ -53,6 +55,11 @@ _ENUM_KEYS = {
     "method",
 }
 _ENUM_VALUES = {
+    "registered",
+    "verified",
+    "hash_mismatch",
+    "valid",
+    "damaged",
     "pending",
     "running",
     "succeeded",
@@ -91,7 +98,7 @@ _ENUM_VALUES = {
 }
 
 
-def make_redactor(aliases=None):
+def make_redactor(aliases=None, *, prefix=None, compact=False):
     """Fresh aliases per export; the mapping exists only for this invocation.
 
     All text is aliased rather than scanned with fallible secret/PII regexes.
@@ -100,7 +107,7 @@ def make_redactor(aliases=None):
     """
     if aliases is None:
         aliases = {}
-    prefix = secrets.token_hex(4)
+    prefix = prefix if prefix is not None else secrets.token_hex(4)
 
     def alias(value):
         # Rendered comparison values and stored scalars share an alias.
@@ -115,7 +122,10 @@ def make_redactor(aliases=None):
             else json.dumps(value, sort_keys=True, ensure_ascii=False)
         )
         if identity not in aliases:
-            aliases[identity] = f"[VALUE-{prefix}-{len(aliases) + 1:04d}]"
+            ordinal = len(aliases) + 1
+            aliases[identity] = (
+                f"[S-{ordinal:04d}]" if compact else f"[VALUE-{prefix}-{ordinal:04d}]"
+            )
         return aliases[identity]
 
     def visit(value, key="", evidence=False):

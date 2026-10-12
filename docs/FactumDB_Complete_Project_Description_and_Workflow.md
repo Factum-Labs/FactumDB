@@ -219,7 +219,7 @@ The investigator-facing interface will provide:
 - provenance details; and
 - filtering by table, transaction, record, event type, or time range.
 
-FactumDB will produce reproducible reports in JSON, CSV, HTML, or PDF containing case details, evidence hashes, tool versions, timelines, findings, limitations, and provenance.
+FactumDB will produce reproducible reports in full JSON or summary PDF containing case details, evidence hashes, tool versions, timelines, findings, limitations, and provenance.
 
 ---
 
@@ -585,7 +585,7 @@ The examiner exports a PDF report containing:
 11. Provenance references
 12. Examiner notes
 
-The same case can also be exported as JSON or CSV for independent checking.
+The same case can also be exported as full JSON or summary PDF for independent checking.
 
 ---
 

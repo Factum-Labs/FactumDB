@@ -1,7 +1,7 @@
 import copy
 import json
 
-from adapters.persistence.case_export import case_export, write_csv, write_json
+from adapters.persistence.case_export import case_export, write_json
 from adapters.persistence.export_redaction import redact_document
 from tests.adapters.test_case_export import connection_of, stores  # noqa: F401
 
@@ -66,7 +66,7 @@ def test_nested_redaction_keeps_aliases_and_drops_all_sensitive_text():
     assert redact_document(original) != redacted
 
 
-def test_both_exports_redact_and_preserve_source(stores, tmp_path):  # noqa: F811
+def test_json_export_redacts_and_preserves_source(stores, tmp_path):  # noqa: F811
     connection = connection_of(stores)
     connection.execute("UPDATE cases SET case_name = 'fake-person-secret' WHERE case_id = 'case-1'")
     before = case_export(connection, "case-1")["tables"]
@@ -78,19 +78,7 @@ def test_both_exports_redact_and_preserve_source(stores, tmp_path):  # noqa: F81
         preferences={"time_mode": "utc", "utc_offset_minutes": 0},
         examiner_profile={"display_name": "fake-examiner-secret"},
     )
-    csv_files = write_csv(
-        connection,
-        "case-1",
-        tmp_path / "share-csv",
-        redacted=True,
-        preferences={"time_mode": "utc", "utc_offset_minutes": 0},
-        examiner_profile={"display_name": "fake-examiner-secret"},
-    )
-    text = (
-        path.read_text()
-        + "".join(p.read_text() for p in csv_files)
-        + (tmp_path / "share-csv/about.txt").read_text()
-    )
+    text = path.read_text()
     for secret in [
         "fake-person-secret",
         "fake-examiner-secret",

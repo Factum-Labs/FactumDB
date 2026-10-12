@@ -1,10 +1,12 @@
 """Configured desktop entry point. Owns a catalog and one database per case."""
 
 import argparse
+import base64
 import hashlib
 import json
 import os
 import shutil
+import sqlite3
 import stat
 import sys
 import tempfile
@@ -30,9 +32,12 @@ from adapters.filesystem.workspace_backup import (
     require_backup_owner,
     usage,
 )
-from adapters.persistence.case_export import prepare_export, write_csv, write_json
-from adapters.persistence.export_sections import section_catalog, validate_sections
+from adapters.persistence.case_export import write_json
+from adapters.persistence.investigator_export import prepare_projection_steps
 from adapters.persistence.pdf_report import write_pdf
+from adapters.persistence.summary_report import (
+    SummaryProjection, export_definitions, prepare_summary_steps,
+)
 from adapters.persistence.sqlite_accounts import SqliteAccountStore
 from adapters.persistence.sqlite_case_repository import SqliteCaseRepository
 from adapters.persistence.sqlite_case_ownership import SqliteCaseOwnership
@@ -83,6 +88,7 @@ class DesktopRuntime:
         self.hasher = Sha256FileHasher()
         self.sessions = {}
         self.export_preview = None
+        self.export_preparation = None
         self._preview_lock = threading.RLock()
         self._preview_timer = None
         self.settings = {
@@ -140,16 +146,19 @@ class DesktopRuntime:
             if hasattr(document, "close"):
                 document.close()
         self.export_preview = None
+        if self.export_preparation is not None:
+            try:
+                self.export_preparation["steps"].close()
+            finally:
+                self.export_preparation["read_connection"].close()
+            self.export_preparation = None
 
     @preview_locked
     def _expire_export_preview(self):
-        if self.export_preview is not None and self.export_preview["expires"] <= time.monotonic():
+        active = self.export_preparation or self.export_preview
+        if active is not None and active["expires"] <= time.monotonic():
             self._clear_export_preview()
 
-    def export_sections(self, payload):
-        if payload:
-            raise ValueError("Section catalog takes no arguments")
-        return section_catalog()
 
     def session(self, case_id):
         safe_component(case_id, "case id")
@@ -538,12 +547,35 @@ class DesktopRuntime:
         redacted = payload.get("redacted", True)
         if not isinstance(redacted, bool):
             raise ValueError("redacted must be a boolean")
-        if values["format"] not in {"JSON", "CSV", "PDF"}:
-            raise ValueError("Supported export formats are JSON, CSV and PDF")
-        profile = payload.get("profile", "investigator")
-        if not isinstance(profile, str) or profile not in {"investigator", "full"}:
-            raise ValueError("Supported export profiles are investigator and full")
-        return values, {"redacted": redacted, "sections": validate_sections(payload.get("sections")), "profile": profile}
+        if values["format"] not in {"JSON", "PDF"}:
+            raise ValueError("Supported export formats are JSON and PDF")
+        detail = "full" if values["format"] == "JSON" else "summary"
+        if "profile" in payload and payload["profile"] != detail:
+            raise ValueError("Report detail is fixed by the export format")
+        if payload.get("sections") is not None:
+            raise ValueError("Section selection is unavailable: JSON is complete and PDF is a summary")
+        return values, {"redacted": redacted}
+
+    def export_definitions(self, payload):
+        if payload:
+            raise ValueError("Export definitions take no arguments")
+        return export_definitions()
+
+    def _prepare_report_steps(self, connection, case_id, format, settings, options):
+        document = None
+        try:
+            if format == "JSON":
+                document = yield from prepare_projection_steps(
+                    connection, case_id, profile="full", **settings, **options
+                )
+            else:
+                document = yield from prepare_summary_steps(connection, case_id, **settings, **options)
+                yield from document.prepare_pdf_steps()
+            return document
+        except BaseException:
+            if document is not None:
+                document.close()
+            raise
 
     def _export_source(self, case_id):
         connection, _, pipelines = self.session(case_id)
@@ -562,13 +594,43 @@ class DesktopRuntime:
 
     @preview_locked
     def preview_export(self, payload):
+        progressive = payload.get("progressive", False)
+        if not isinstance(progressive, bool):
+            raise ValueError("progressive must be a boolean")
+        payload = {k: v for k, v in payload.items() if k != "progressive"}
         values, options = self._export_options(payload)
         connection, settings = self._export_source(values["case_id"])
         self._clear_export_preview()
         fingerprint = self._export_fingerprint(connection, values["case_id"], settings)
-        document = prepare_export(connection, values["case_id"], **settings, **options)
+        if progressive:
+            database = connection.execute("PRAGMA database_list").fetchone()[2]
+            read_connection = sqlite3.connect(
+                Path(database).as_uri() + "?mode=ro", uri=True, check_same_thread=False
+            )
+            read_connection.row_factory = sqlite3.Row
+            read_connection.execute("PRAGMA query_only=ON")
+            read_connection.execute("PRAGMA cache_size=-2048")
+            self.export_preparation = {
+                "token": uuid.uuid4().hex, "case_id": values["case_id"],
+                "format": values["format"], "options": options, "fingerprint": fingerprint,
+                "expires": time.monotonic() + 600,
+                "read_connection": read_connection,
+                "steps": self._prepare_report_steps(read_connection, values["case_id"],
+                                                     values["format"], settings, options),
+            }
+            self._preview_timer = threading.Timer(600, self._expire_export_preview)
+            self._preview_timer.daemon = True
+            self._preview_timer.start()
+            return {"preparation_token": self.export_preparation["token"],
+                    "stage": "starting", "processed": 0}
+        steps = self._prepare_report_steps(connection, values["case_id"], values["format"], settings, options)
+        while True:
+            try:
+                next(steps)
+            except StopIteration as completed:
+                document = completed.value
+                break
         try:
-            document.prepare_lines()
             if fingerprint != self._export_fingerprint(connection, values["case_id"], settings):
                 raise PrerequisiteError("Case data changed; refresh the export preview")
         except BaseException:
@@ -585,20 +647,94 @@ class DesktopRuntime:
         return self._preview_page(1)
 
     @preview_locked
+    def export_preview_status(self, payload):
+        if set(payload) != {"preparation_token"}:
+            raise ValueError("Invalid preview preparation request")
+        job = self.export_preparation
+        if job is None or job["token"] != payload["preparation_token"]:
+            raise PrerequisiteError("Refresh the export preview")
+        connection, settings = self._export_source(job["case_id"])
+        if job["fingerprint"] != self._export_fingerprint(connection, job["case_id"], settings):
+            self._clear_export_preview()
+            raise PrerequisiteError("Case data changed; refresh the export preview")
+        deadline = time.monotonic() + 0.15
+        document = None
+        try:
+            while True:
+                try:
+                    progress = next(job["steps"])
+                except StopIteration as completed:
+                    document = completed.value
+                    break
+                if time.monotonic() >= deadline:
+                    return {"preparation_token": job["token"], **progress}
+            if job["fingerprint"] != self._export_fingerprint(connection, job["case_id"], settings):
+                raise PrerequisiteError("Case data changed; refresh the export preview")
+        except BaseException:
+            if document is not None:
+                document.close()
+            self._clear_export_preview()
+            raise
+        job["read_connection"].close()
+        self.export_preparation = None
+        if self._preview_timer is not None:
+            self._preview_timer.cancel()
+        self.export_preview = {k: v for k, v in job.items() if k not in {"steps", "read_connection"}}
+        self.export_preview.update(document=document, expires=time.monotonic() + 600)
+        self._preview_timer = threading.Timer(600, self._expire_export_preview)
+        self._preview_timer.daemon = True
+        self._preview_timer.start()
+        return self._preview_page(1)
+
+    @preview_locked
+    def cancel_export_preview(self, payload):
+        if set(payload) != {"preparation_token"}:
+            raise ValueError("Invalid preview cancellation request")
+        active = self.export_preparation or self.export_preview
+        if active and active["token"] == payload["preparation_token"]:
+            self._clear_export_preview()
+        return {"cancelled": True}
+
+    @preview_locked
     def _preview_page(self, page):
         preview = self.export_preview
         if preview is None or preview["expires"] < time.monotonic():
             self._clear_export_preview()
             raise PrerequisiteError("Refresh the export preview")
         document = preview["document"]
-        pages = document.pages
+        pages = document.pages if isinstance(document, SummaryProjection) else 1
         if not isinstance(page, int) or isinstance(page, bool) or not 1 <= page <= pages:
             raise ValueError("Invalid preview page")
         return {"preview_token": preview["token"], "page": page, "pages": pages,
-                "lines": document.page(page), "profile": document.profile,
-                "sections": section_catalog(), "selection": document.selection,
-                "counts": document.metadata["counts"], "json_size_bytes": document.json_size,
+                "pages_complete": True,
+                "has_more": page < pages,
+                "detail": "summary" if isinstance(document, SummaryProjection) else "full",
+                "counts": document.metadata["counts"],
+                "classification_totals": document.metadata.get("classification_totals"),
+                "size_bytes": document.pdf_size if isinstance(document, SummaryProjection) else document.json_size,
+                "manifest": {k: document.metadata[k] for k in (
+                    "case_id", "exported_at", "engine_revision", "analysis_format_version"
+                )},
                 "format": preview["format"], "redacted": preview["options"]["redacted"]}
+
+    @preview_locked
+    def export_preview_pdf(self, payload):
+        if set(payload) != {"preview_token", "offset", "length"}:
+            raise ValueError("Invalid PDF preview request")
+        self.export_preview_page({"preview_token": payload["preview_token"], "page": 1})
+        document = self.export_preview["document"]
+        if not isinstance(document, SummaryProjection):
+            raise ValueError("This preview is not a PDF")
+        offset, length = payload["offset"], payload["length"]
+        if (not isinstance(offset, int) or isinstance(offset, bool) or
+                not isinstance(length, int) or isinstance(length, bool) or
+                not 0 <= offset < document.pdf_size or not 1 <= length <= 262144):
+            raise ValueError("Invalid PDF preview byte range")
+        with document.pdf_path.open("rb") as source:
+            source.seek(offset)
+            content = source.read(length)
+        return {"offset": offset, "total_bytes": document.pdf_size,
+                "data": base64.b64encode(content).decode("ascii")}
 
     @preview_locked
     def export_preview_page(self, payload):
@@ -631,14 +767,19 @@ class DesktopRuntime:
             document = preview["document"]
         options = {**settings, **options, "prepared_document": document}
         if values["format"] == "JSON":
-            path = write_json(connection, values["case_id"], values["path"], **options, **actor)
-        elif values["format"] == "CSV":
-            write_csv(connection, values["case_id"], values["path"], **options, **actor)
-            path = Path(values["path"])
+            path = write_json(connection, values["case_id"], values["path"], profile="full", **options, **actor)
         else:
             if document is None:
                 options.pop("prepared_document")
-                document = prepare_export(connection, values["case_id"], **options)
+                options.pop("prepared_document", None)
+                steps = self._prepare_report_steps(connection, values["case_id"], "PDF", settings,
+                                                  {"redacted": options["redacted"]})
+                while True:
+                    try:
+                        next(steps)
+                    except StopIteration as completed:
+                        document = completed.value
+                        break
             try:
                 path = write_pdf(connection, values["case_id"], values["path"], document,
                                  self.clock.now(), **actor)
@@ -740,7 +881,10 @@ class DesktopRuntime:
         router.register("restore_workspace", self.restore_workspace)
         router.register("export_case", self.export)
         router.register("preview_export", self.preview_export)
-        router.register("get_export_sections", self.export_sections)
+        router.register("export_preview_status", self.export_preview_status)
+        router.register("cancel_export_preview", self.cancel_export_preview)
+        router.register("get_export_definitions", self.export_definitions)
+        router.register("export_preview_pdf", self.export_preview_pdf)
         router.register("export_preview_page", self.export_preview_page)
         router.register("read_tool_output", self.raw_output)
         for command in COMMAND_FIELDS:

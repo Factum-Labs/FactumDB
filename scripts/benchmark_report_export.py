@@ -17,7 +17,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import tracemalloc
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -134,32 +133,25 @@ def peak_rss():
 
 def run_profile(folder, profile):
     from adapters.persistence.investigator_export import prepare_projection
+    from adapters.persistence.summary_report import prepare_summary
     db = sqlite3.connect(folder / "case.db")
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA cache_size=-2048")
-    tracemalloc.start()
     started = time.perf_counter()
-    projection = prepare_projection(db, "benchmark", profile=profile)
-    prepared = time.perf_counter() - started
-    path = folder / (profile + ".json")
-    with path.open("x", encoding="utf-8", newline="\n") as output:
-        projection.write_json(output)
-    # Trace memory during generation; font loading is measured separately.
-    _, python_peak = tracemalloc.get_traced_memory()
-    tracemalloc.stop()
-    generation_rss = peak_rss()
-    started = time.perf_counter()
-    projection.prepare_lines()
-    first_preview = time.perf_counter() - started
-    started = time.perf_counter()
-    for _ in range(100):
-        projection.page(min(2, projection.pages))
-    page_ms = (time.perf_counter() - started) * 10
-    result = {"profile": profile, "output_bytes": path.stat().st_size,
-        "generation_seconds": round(prepared, 3), "python_peak_bytes": python_peak,
-        "generation_peak_rss_bytes": generation_rss, "preview_preparation_seconds": round(first_preview, 3),
-        "cached_page_ms": round(page_ms, 3), "preview_pages": projection.pages,
-        "total_peak_rss_bytes": peak_rss()}
+    if profile == "json":
+        projection = prepare_projection(db, "benchmark", profile="full")
+        path = folder / "full.json"
+        with path.open("x", encoding="utf-8", newline="\n") as output:
+            projection.write_json(output)
+        pages = None
+    else:
+        projection = prepare_summary(db, "benchmark")
+        projection.prepare_pdf()
+        path = projection.pdf_path
+        pages = projection.pages
+    elapsed = time.perf_counter() - started
+    result = {"format": profile.upper(), "output_bytes": path.stat().st_size,
+        "generation_seconds": round(elapsed, 3), "peak_rss_bytes": peak_rss(), "pages": pages}
     projection.close()
     db.close()
     return result
@@ -168,7 +160,7 @@ def run_profile(folder, profile):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--target-mb", type=int, default=800)
-    parser.add_argument("--worker", choices=["setup", "investigator", "full"])
+    parser.add_argument("--worker", choices=["setup", "json", "pdf"])
     parser.add_argument("--folder", type=Path)
     args = parser.parse_args()
     if args.worker:
@@ -177,14 +169,14 @@ def main():
         return
     with tempfile.TemporaryDirectory(prefix="factumdb-export-benchmark-") as folder:
         results = []
-        for worker in ("setup", "investigator", "full"):
+        for worker in ("setup", "json", "pdf"):
             command = [sys.executable, str(Path(__file__).resolve()), "--worker", worker,
                        "--folder", folder, "--target-mb", str(args.target_mb)]
             process = subprocess.run(command, check=True, capture_output=True, text=True)
             result = json.loads(process.stdout)
             results.append(result)
             print(json.dumps(result), flush=True)
-        destination = ROOT / ".bundle-cache/report-export-benchmark.json"
+        destination = ROOT / ".bundle-cache/report-summary-benchmark.json"
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
 

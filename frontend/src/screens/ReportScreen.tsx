@@ -1,21 +1,20 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useApp } from '../store'
 import { defaultPreferences, display, pickExportPath, request, rows, type CaseData } from '../lib/backend'
 import { navigationButton } from '../components/buttonStyles'
 import { formatTime } from '../lib/timeDisplay'
 
-type ReportProfile = 'investigator' | 'full'
-interface ExportSection {
-  id: string; title: string; optional: boolean; dependencies: string[]
-  default_profiles: ReportProfile[]
-}
+const PdfPreview = lazy(() => import('../components/PdfPreview').then(module => ({ default: module.PdfPreview })))
+interface ExportDefinition { format: 'JSON' | 'PDF'; title: string; description: string }
 interface Preview {
-  preview_token: string; page: number; pages: number; lines: string[]
-  format: string; redacted: boolean
-  profile: ReportProfile; json_size_bytes: number
-  selection: { sections: string[]; automatic_sections: string[]; partial: boolean }
-  counts: Record<string, { included: number; summarized: number; excluded: number }>
+  preview_token: string; page: number; pages: number; format: 'JSON' | 'PDF'; redacted: boolean
+  detail: 'full' | 'summary'; size_bytes: number
+  counts: Record<string, number | { included: number; summarized: number; excluded: number }>
+  classification_totals?: Record<string, Record<string, number>>
+  manifest: { case_id: string; exported_at: string; engine_revision: number; analysis_format_version: number }
 }
+
+interface Preparation { preparation_token: string; stage: string; processed: number }
 
 export function ReportScreen() {
   const state = useApp()
@@ -23,14 +22,14 @@ export function ReportScreen() {
   const caseId = state.data?.case.case_id
   const [path, setPath] = useState('')
   const [redacted, setRedacted] = useState(true)
-  const [profile, setProfile] = useState<ReportProfile>('investigator')
-  const [sections, setSections] = useState<ExportSection[]>([])
-  const [selected, setSelected] = useState<string[]>([])
+  const [definitions, setDefinitions] = useState<ExportDefinition[]>([])
+  const [zoom, setZoom] = useState(1)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [working, setWorking] = useState(false)
+  const [progress, setProgress] = useState('')
+  const preparation = useRef('')
   const generation = useRef(0)
-  const selectionKey = selected.join(',')
-  const requestKey = `${caseId}:${state.reportFormat}:${profile}:${redacted}:${selectionKey}`
+  const requestKey = `${caseId}:${state.reportFormat}:${redacted}`
   const currentKey = useRef(requestKey)
   currentKey.current = requestKey
   const [previewKey, setPreviewKey] = useState('')
@@ -38,10 +37,9 @@ export function ReportScreen() {
 
   useEffect(() => {
     let active = true
-    request<ExportSection[]>('get_export_sections', {}).then(catalog => {
+    request<ExportDefinition[]>('get_export_definitions', {}).then(catalog => {
       if (!active) return
-      setSections(catalog)
-      setSelected(catalog.filter(section => section.default_profiles.includes('investigator')).map(section => section.id))
+      setDefinitions(catalog)
     }).catch(error => { if (active) useApp.getState().setError(error) })
     return () => { active = false }
   }, [])
@@ -50,7 +48,7 @@ export function ReportScreen() {
     generation.current++
     setPreview(null)
     setWorking(false)
-  }, [caseId, state.reportFormat, profile, redacted, selectionKey])
+  }, [caseId, state.reportFormat, redacted])
   useEffect(() => { setPath('') }, [caseId, state.reportFormat])
   useEffect(() => () => { generation.current++ }, [])
 
@@ -58,16 +56,45 @@ export function ReportScreen() {
     const ticket = ++generation.current
     setWorking(true)
     setPreview(null)
+    setProgress('Starting report preparation…')
+    let activeToken = ''
     try {
-      const result = await request<Preview>('preview_export', {
-        case_id: caseId, format: state.reportFormat, profile, redacted, sections: selected,
+      let result = await request<Preview | Preparation>('preview_export', {
+        case_id: caseId, format: state.reportFormat, redacted, progressive: true,
       })
+      while ('preparation_token' in result) {
+        const token = result.preparation_token
+        activeToken = token
+        if (ticket !== generation.current || currentKey.current !== requestKey) {
+          await request('cancel_export_preview', { preparation_token: token })
+          return
+        }
+        preparation.current = token
+        setProgress(`Preparing ${result.stage.replaceAll('_', ' ')} · ${result.processed.toLocaleString()} entries processed`)
+        await new Promise(resolve => setTimeout(resolve, 30))
+        if (ticket !== generation.current) {
+          await request('cancel_export_preview', { preparation_token: token })
+          return
+        }
+        result = await request<Preview | Preparation>('export_preview_status', { preparation_token: token })
+      }
       if (ticket === generation.current && currentKey.current === requestKey) {
         setPreview(result)
         setPreviewKey(requestKey)
+      } else if (activeToken) {
+        await request('cancel_export_preview', { preparation_token: activeToken })
       }
     } catch (error) { if (ticket === generation.current) state.setError(error) }
-    finally { if (ticket === generation.current) setWorking(false) }
+    finally {
+      if (ticket === generation.current) { setWorking(false); preparation.current = '' }
+    }
+  }
+  const cancelPreparation = () => {
+    const token = preparation.current
+    generation.current++
+    preparation.current = ''
+    setWorking(false)
+    if (token) void request('cancel_export_preview', { preparation_token: token }).catch(state.setError)
   }
   const turnPage = async (page: number) => {
     if (!ready || !preview) return
@@ -85,8 +112,7 @@ export function ReportScreen() {
   const choose = async () => {
     try {
       const chosen = await pickExportPath(state.reportFormat)
-      if (chosen && currentKey.current === requestKey) setPath(state.reportFormat === 'CSV'
-        ? `${chosen}/factumdb-${caseId}-${Date.now()}` : chosen)
+      if (chosen && currentKey.current === requestKey) setPath(chosen)
     } catch (error) { state.setError(error) }
   }
   const save = async () => {
@@ -95,7 +121,7 @@ export function ReportScreen() {
     setWorking(true)
     try {
       const result = await request<{ path: string }>('export_case', {
-        case_id: caseId, format: state.reportFormat, profile, path, redacted, sections: selected,
+        case_id: caseId, format: state.reportFormat, path, redacted,
         preview_token: preview.preview_token,
       })
       if (ticket !== generation.current || currentKey.current !== requestKey || useApp.getState().data?.case.case_id !== caseId) return
@@ -107,34 +133,21 @@ export function ReportScreen() {
       if (ticket === generation.current) { setPreview(null); state.setError(error) }
     } finally { if (ticket === generation.current) setWorking(false) }
   }
-  const disabled = working || state.busy || !state.pipelineComplete || sections.length === 0
+  const disabled = working || state.busy || !state.pipelineComplete || definitions.length === 0
   return <div className="grid items-start gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
     <form className="space-y-5 rounded-md border border-line bg-panel p-5"
       onSubmit={event => { event.preventDefault(); void save() }}>
-      <label className="block text-xs font-semibold">Report detail
-        <select className="mt-2 w-full rounded border border-line-input bg-panel px-2 py-2 text-xs"
-          disabled={disabled} value={profile} onChange={event => {
-            const next = event.target.value as ReportProfile
-            setProfile(next)
-            setSelected(sections.filter(section => section.default_profiles.includes(next)).map(section => section.id))
-          }}>
-          <option value="investigator">Investigator report</option>
-          <option value="full">Full evidence export</option>
-        </select>
-      </label>
-      <p className="text-xs leading-relaxed text-muted">{profile === 'investigator'
-        ? 'Includes every non-Exact comparison, warnings and limitations. Routine matches become counts. Add supporting data below.'
-        : 'Includes every unique observation and analysis result, with repeated data stored once. Large evidence sets can still produce large exports.'}</p>
       <fieldset disabled={disabled} className="space-y-3">
         <legend className="mb-3 text-sm font-semibold">Format</legend>
         <div className="flex overflow-hidden rounded border border-line-input">
-          {['PDF', 'JSON', 'CSV'].map(format => <button key={format} type="button"
+          {definitions.map(({ format }) => <button key={format} type="button"
             aria-pressed={state.reportFormat === format} onClick={() => state.setFormat(format)}
             className={`flex-1 border-r border-line-input py-2 text-xs last:border-r-0 ${state.reportFormat === format ? 'bg-ink font-semibold text-white' : 'bg-panel text-muted'}`}>
             {format}
           </button>)}
         </div>
       </fieldset>
+      <p className="text-xs leading-relaxed text-muted">{definitions.find(definition => definition.format === state.reportFormat)?.description}</p>
       <label className="block text-xs font-semibold">Content
         <select className="mt-2 w-full rounded border border-line-input bg-panel px-2 py-2 text-xs"
           disabled={disabled} value={redacted ? 'redacted' : 'full'}
@@ -145,37 +158,13 @@ export function ReportScreen() {
       </label>
       <p className="text-xs leading-relaxed text-muted">{redacted
         ? 'Values and text identifiers become aliases. Personal metadata, paths, commands and diagnostic text are removed. Original case data stays intact.'
-        : 'Includes original values and sensitive metadata in the selected sections.'}</p>
-      <fieldset disabled={disabled} className="space-y-2.5">
-        <legend className="mb-3 text-sm font-semibold">Sections</legend>
-        <div className="mb-3 flex gap-3 text-xs">
-          <button type="button" className="text-accent underline" onClick={() => setSelected(sections.map(section => section.id))}>Select all</button>
-          <button type="button" className="text-accent underline" onClick={() => setSelected(sections.filter(section => section.default_profiles.includes(profile)).map(section => section.id))}>Reset defaults</button>
-          <button type="button" className="text-accent underline" onClick={() => setSelected([])}>Clear all</button>
-        </div>
-        {sections.filter(section => !section.optional).map(({ id, title }) => <label key={id} className="flex items-start gap-2 text-xs">
-          <input type="checkbox" className="mt-0.5 accent-accent" checked={selected.includes(id)}
-            onChange={event => setSelected(current => event.target.checked
-              ? sections.map(section => section.id).filter(key => key === id || current.includes(key))
-              : current.filter(key => key !== id))} />
-          {title}
-        </label>)}
-        <p className="pt-3 text-xs font-semibold">Optional supporting data</p>
-        <p className="text-[11px] text-muted">These additions can substantially increase export size. Required evidence and provenance metadata are included automatically.</p>
-        {sections.filter(section => section.optional).map(({ id, title }) => <label key={id} className="flex items-start gap-2 text-xs">
-          <input type="checkbox" className="mt-0.5 accent-accent" checked={selected.includes(id)}
-            onChange={event => setSelected(current => event.target.checked
-              ? sections.map(section => section.id).filter(key => key === id || current.includes(key))
-              : current.filter(key => key !== id))} />
-          {title}
-        </label>)}
-      </fieldset>
+        : 'Includes original identifiers and sensitive metadata. JSON retains all evidence values; PDF presents grouped summaries.'}</p>
       <button type="button" className={`${navigationButton} w-full justify-center`}
-        disabled={disabled || selected.length === 0} onClick={() => { void makePreview() }}>
+        disabled={disabled} onClick={() => { void makePreview() }}>
         {working ? 'Preparing…' : ready ? 'Refresh preview' : 'Preview export'}
       </button>
       {!state.pipelineComplete && <p className="text-xs text-muted">Complete the pipeline before previewing or exporting.</p>}
-      <label className="block text-xs font-semibold">{state.reportFormat === 'CSV' ? 'New CSV folder path' : `New ${state.reportFormat} file path`}
+      <label className="block text-xs font-semibold">{`New ${state.reportFormat} file path`}
         <input required className="mt-2 w-full rounded border border-line-input bg-page px-2 py-2 text-xs font-normal"
           disabled={disabled} value={path} onChange={event => setPath(event.target.value)} />
       </label>
@@ -201,31 +190,48 @@ export function ReportScreen() {
           <button type="button" className={navigationButton} disabled={disabled || preview.page === 1}
             onClick={() => { void turnPage(preview.page - 1) }}>Previous</button>
           <span>Page {preview.page} of {preview.pages}</span>
-          <button type="button" className={navigationButton} disabled={disabled || preview.page === preview.pages}
+          <button type="button" className={navigationButton} disabled={disabled || preview.page >= preview.pages}
             onClick={() => { void turnPage(preview.page + 1) }}>Next</button>
         </nav>}
       </div>
       {ready && preview ? <>
         <div className="mb-4 space-y-2 text-xs text-muted">
-          <p>Prepared JSON: {(preview.json_size_bytes / (1024 * 1024)).toFixed(2)} MB
-            {preview.selection?.partial && ' · Partial report'}</p>
-          <p>Included sections: {preview.selection?.sections.map(id => sections.find(section => section.id === id)?.title ?? id).join(', ')}</p>
-          {preview.selection?.automatic_sections.length > 0 && <p>Automatically included: {preview.selection.automatic_sections.map(id => sections.find(section => section.id === id)?.title ?? id).join(', ')}</p>}
-          <details><summary className="cursor-pointer">Included, summarized and excluded counts</summary>
-            <table className="mt-2 w-full text-left text-[11px]"><thead><tr><th>Data</th><th>Included</th><th>Summarized</th><th>Excluded</th></tr></thead>
-              <tbody>{Object.entries(preview.counts ?? {}).map(([name, count]) => <tr key={name}>
-                <td className="pr-3">{name.replaceAll('_', ' ')}</td><td>{count.included}</td><td>{count.summarized}</td><td>{count.excluded}</td>
+          <p>Prepared {preview.format}: {(preview.size_bytes / (1024 * 1024)).toFixed(2)} MB</p>
+          {redacted && <p>Pseudonymized sharing copy. Unsuitable for independent reanalysis.</p>}
+          <details><summary className="cursor-pointer">Coverage counts</summary>
+            <table className="mt-2 w-full text-left text-[11px]"><thead><tr><th>Data</th><th>Count</th></tr></thead>
+              <tbody>{Object.entries(preview.counts).map(([name, count]) => <tr key={name}>
+                <td className="pr-3">{name.replaceAll('_', ' ')}</td>
+                <td>{typeof count === 'number' ? count : count.included}</td>
               </tr>)}</tbody></table>
           </details>
         </div>
-        <p className="mb-4 text-[11px] text-muted">{state.reportFormat === 'PDF'
-          ? 'These text pages are used to generate the PDF with locally bundled fonts. Unsupported characters appear as Unicode escapes.'
-          : 'Readable preview of the selected content. JSON and CSV preserve their structured formats.'}
-          {redacted && ' Pseudonymization does not guarantee anonymity. This copy is unsuitable for independent reanalysis.'}</p>
-        <pre className="overflow-x-auto whitespace-pre font-mono text-[11px] leading-5 text-ink"
-          data-testid="export-preview-content">{preview.lines.join('\n')}</pre>
+        {preview.format === 'PDF' ? <>
+          <label className="mb-3 flex items-center gap-2 text-xs">Zoom
+            <select value={zoom} onChange={event => setZoom(Number(event.target.value))}
+              className="rounded border border-line-input bg-panel p-1">
+              {[0.75, 1, 1.25, 1.5].map(value => <option key={value} value={value}>{value * 100}%</option>)}
+            </select>
+          </label>
+          <Suspense fallback={<p role="status">Loading PDF viewer?</p>}>
+            <PdfPreview token={preview.preview_token} size={preview.size_bytes} page={preview.page}
+              zoom={zoom} onError={error => { setPreview(null); state.setError(error) }} />
+          </Suspense>
+        </> : <div data-testid="export-preview-content" className="space-y-3 text-sm">
+          <h3 className="font-semibold">Full case JSON</h3>
+          <p>Includes all unique evidence observations, Exact and Strong comparisons, complete histories,
+            events, findings and provenance. Repeated data is stored once through canonical references.</p>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
+            <dt>Case</dt><dd>{preview.manifest.case_id}</dd>
+            <dt>Prepared</dt><dd>{preview.manifest.exported_at}</dd>
+            <dt>Engine revision</dt><dd>{preview.manifest.engine_revision}</dd>
+            <dt>Analysis version</dt><dd>{preview.manifest.analysis_format_version}</dd>
+          </dl>
+        </div>}
       </> : <div className="py-24 text-center text-sm text-muted" role="status">
-        {working ? 'Preparing the selected report…' : 'Choose sections and select Preview export to review the report.'}
+        {working ? <><p>{progress || 'Preparing the selected report…'}</p>
+          <button type="button" className={navigationButton} onClick={cancelPreparation}>Cancel preparation</button>
+        </> : 'Select Preview export to review the full JSON manifest or rendered PDF.'}
       </div>}
     </section>
   </div>

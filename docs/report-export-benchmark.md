@@ -1,34 +1,55 @@
-# Report export benchmark
+# Report export performance
 
-Measured locally on Windows with Python 3.11, using a disposable synthetic case
-with 12,526 records, repeated large text values and 12 Conflicting comparisons.
-The original analysis TEXT was 833,678,652 bytes; equivalent version-2 JSON was
-945,139,832 bytes. No real case or AWS resource was used.
+The current report flow has full version-3 JSON and a separate grouped summary
+PDF. Timings include projection preparation and file generation. PDF is rendered
+once for preview; saving copies the prepared bytes rather than rendering again.
 
-| Measurement | Investigator report | Full evidence export |
+## Approximately 800 MB synthetic baseline
+
+The generated fixture contains 12,526 records, including 12 non-Exact comparisons,
+with repeated 8 KB values. Its pretty-printed version-2 baseline is 945,139,832
+bytes; its stored reconciliation stage is 833,678,652 bytes. Each worker runs in
+a fresh process so fixture construction does not inflate export memory.
+
+| Measurement | Full JSON | Summary PDF |
 |---|---:|---:|
-| JSON bytes | 44,875 | 25,150,722 |
-| Reduction against version 2 | 99.995% | 97.339% |
-| Projection preparation, with Python allocation tracing enabled | 23.432 s | 39.864 s |
-| Peak Python allocations during generation | 586,446 bytes | 559,308 bytes |
-| Peak process memory during generation | 32,239,616 bytes | 34,418,688 bytes |
-| Preview text preparation | 0.562 s | 58.008 s |
-| Cached preview page, average of 100 reads | 0.062 ms | 0.047 ms |
-| Preview pages | 12 | 6,611 |
-| Peak process memory including Unicode font loading/rendering | 81,047,552 bytes | 84,434,944 bytes |
+| Output bytes | 25,150,722 | 19,842 |
+| Generation time | 12.425 s | 5.894 s |
+| Peak process working set | 32,874,496 bytes | 83,279,872 bytes |
+| Pages | Not applicable | 3 |
 
-The investigator export retained all 12 non-Exact comparisons and classification
-totals for the complete source population. The full export retained all unique
-observations and analysis details. Separate preservation tests expand full
-version-3 exports back to their version-2 evidence and analysis shapes.
+JSON retains every unique observation and analysis result, including Exact
+comparisons. PDF groups exceptional results and shows all classification totals;
+no individual records are printed. These are different export contracts, not
+interchangeable artifacts. No evidence was discarded to meet a size or page cap.
 
-These reductions depend on this fixture's repeated large values and mostly Exact
-comparisons. Cases containing unique values or many exceptions will produce
-larger reports. Full preview preparation still scales with selected content;
-page navigation uses stored text and does not reload source analysis.
+The synthetic reduction depends on repeated values and mostly Exact comparisons.
+It does not predict reductions for cases with many unique observations or findings.
+Memory above includes locally embedded Unicode fonts for PDF.
 
-Run `py -3 scripts/benchmark_report_export.py --target-mb 800` with the project's
-PDF dependencies on `PYTHONPATH` to repeat the benchmark. Setup and each profile
-run in separate processes so fixture allocation does not inflate generation
-memory. The script writes measurements to `.bundle-cache/report-export-benchmark.json`
-and removes its synthetic database and generated files afterwards.
+## Read-only development-case validation
+
+A local case with 447,838,095 bytes of saved analysis was checked without changing
+its source database or report history. It contains 15,803 classified records,
+including 5,001 Unresolved, 300 Partial and 23 Conflicting records. All records
+remain in full JSON; PDF aggregates them and their field/presence comparisons.
+
+The expanded summary check, including record rollups and per-table totals,
+completed in 56.638 seconds and produced 19 pages / 63,778 bytes, with a peak
+working set of 84,692,992 bytes. This measurement ran alongside validation and
+frontend build work. It retained 37 exceptional groups and 33 warning
+categories with 110 grouped source associations. Compact aliases keep identifier width small without changing counts. The
+summary also records analysis scope and in-scope/stored counts. Current
+measurements are recorded in the local benchmark artifact.
+
+Earlier archival previews completed preparation but printing their entire
+canonical object graph was still unsuitable for PDF. The current summary builder
+skips images and duplicate flat comparisons; no archive projection is rendered.
+
+## Repeat the measurement
+
+Run `py -3 scripts/benchmark_report_export.py --target-mb 800` with PDF dependencies
+available. Results are written to `.bundle-cache/report-summary-benchmark.json`;
+the synthetic database and generated files are removed afterwards. Generation
+memory is bounded by individual parsed items and SQLite aggregation, not complete
+case serialization. Renderer/template/font versions are fixed for reproducibility.

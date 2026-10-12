@@ -2,7 +2,6 @@
 
 External tool execution is mocked; its recorded output and provenance are real.
 """
-import csv
 import hashlib
 import json
 import subprocess
@@ -121,7 +120,7 @@ def test_full_analysis_restart_provenance_export_and_case_isolation(runtime, tmp
     output = call(runtime, "read_tool_output", case_id=first, run_id=tool["tool_run_id"], stream="stdout")
     assert output["text"] == ROWS.decode()
     assert response(runtime, "read_tool_output", case_id=second, run_id=tool["tool_run_id"], stream="stdout")["error_code"] == "NotFoundError"
-    for format, name in (("JSON", "case.json"), ("CSV", "csv")):
+    for format, name in (("JSON", "case.json"), ("PDF", "case.pdf")):
         destination = tmp_path / name
         call(runtime, "export_case", case_id=first, format=format, path=str(destination))
         assert destination.exists()
@@ -131,7 +130,7 @@ def test_full_analysis_restart_provenance_export_and_case_isolation(runtime, tmp
     assert "auth_throttle" not in exported["tables"]
     assert any(name.startswith("analysis_reconciliation_") for name in exported["tables"])
     assert exported["tables"]["pipeline_runs"][0]["run"]["stages"][-1]["status"] == "succeeded"
-    assert (tmp_path / "csv" / "reconciliation_totals.csv").exists()
+    assert (tmp_path / "case.pdf").read_bytes().startswith(b"%PDF-")
 
     reopened = DesktopRuntime(runtime.root)
     try:
@@ -312,15 +311,18 @@ def test_desktop_export_defaults_to_redaction_and_full_is_explicit(runtime, tmp_
     tools(runtime, tmp_path, monkeypatch)
     assert finish(runtime, case_id)["complete"]
     original = call(runtime, "get_case_data", case_id=case_id)
-    for format, name in (("JSON", "redacted.json"), ("CSV", "redacted-csv")):
+    for format, name in (("JSON", "redacted.json"), ("PDF", "redacted.pdf")):
         path = tmp_path / name
         call(runtime, "export_case", case_id=case_id, format=format, path=str(path))
-        files = [path] if format == "JSON" else list(path.iterdir())
-        text = "".join(p.read_text(encoding="utf-8") for p in files)
+        if format == "JSON":
+            text = path.read_text(encoding="utf-8")
+        else:
+            from pypdf import PdfReader
+            text = "\n".join(page.extract_text() for page in PdfReader(path).pages)
         assert "fake-person-secret" not in text
         assert str(runtime.root) not in text
         assert "--password" not in text
-        assert "redacted" in text
+        assert "redacted" in text if format == "JSON" else "Pseudonymized" in text
     assert call(runtime, "get_case_data", case_id=case_id)["case"] == original["case"]
     bad = response(runtime, "export_case", case_id=case_id, format="JSON",
                    path=str(tmp_path / "bad.json"), redacted="false")
@@ -333,9 +335,9 @@ def test_desktop_exports_preserve_versions_hashes_and_row_identity(runtime, tmp_
     evidence(runtime, tmp_path, case_id)
     tools(runtime, tmp_path, monkeypatch)
     assert finish(runtime, case_id)["complete"]
-    paths = [tmp_path / "first.json", tmp_path / "second.json", tmp_path / "exports"]
-    for format, path in zip(("JSON", "JSON", "CSV"), paths):
-        call(runtime, "export_case", case_id=case_id, format=format, path=str(path), redacted=False, profile="full")
+    paths = [tmp_path / "first.json", tmp_path / "second.json", tmp_path / "summary.pdf"]
+    for format, path in zip(("JSON", "JSON", "PDF"), paths):
+        call(runtime, "export_case", case_id=case_id, format=format, path=str(path), redacted=False)
     documents = [json.loads(path.read_text(encoding="utf-8")) for path in paths[:2]]
     for document in documents:
         assert document["format_version"] == 3
@@ -345,18 +347,13 @@ def test_desktop_exports_preserve_versions_hashes_and_row_identity(runtime, tmp_
         document.pop("exported_at")
     assert documents[0] == documents[1]
     events = documents[0]["tables"]["binlog_events"]
-    with (paths[2] / "binlog_events.csv").open(encoding="utf-8", newline="") as stream:
-        exported_events = list(csv.DictReader(stream))
-    assert len(exported_events) == len(events)
-    assert {json.loads(row["event"])["$ref"] for row in exported_events} == {
-        event["event"]["$ref"] for event in events
-    }
-    assert json.loads((paths[2] / "about.txt").read_text(encoding="utf-8").splitlines()[0])["engine_revision"] == 2
+    assert len({event['event']['$ref'] for event in events}) == len(events)
+    assert paths[2].read_bytes().startswith(b'%PDF-')
     reopened = DesktopRuntime(runtime.root)
     try:
         reports = reopened.session(case_id)[1].reports.list_by_case(case_id)
         assert [(report.format, report.version) for report in reports] == [
-            ("csv", 1), ("json", 1), ("json", 2)
+            ("json", 1), ("json", 2), ("pdf", 1)
         ]
         for report in reports:
             for file in report.files:

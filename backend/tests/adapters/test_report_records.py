@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from adapters.persistence.case_export import write_csv, write_json
+from adapters.persistence.case_export import write_json
 from core.application.errors import NotFoundError
 from core.application.use_cases.analysis import (
     CorrelateRecordsUseCase,
@@ -41,23 +41,15 @@ def test_a_json_export_is_recorded_with_the_hash_of_its_file(stores, tmp_path) -
     ]
 
 
-def test_a_csv_export_records_every_file_it_wrote(stores, tmp_path) -> None:
-    folder = tmp_path / "csv"
-    write_csv(connection_of(stores), "case-1", folder)
-
-    report = stores.reports.latest("case-1", "csv")
-    assert sorted(f.name for f in report.files) == sorted(p.name for p in folder.iterdir())
-    assert "about.txt" in {f.name for f in report.files}
-    assert all(f.sha256 == sha256_of(folder / f.name) for f in report.files)
-
-
 def test_each_format_counts_its_own_versions(stores, tmp_path) -> None:
     write_json(connection_of(stores), "case-1", tmp_path / "first.json")
-    write_csv(connection_of(stores), "case-1", tmp_path / "csv")
+    pdf = tmp_path / "summary.pdf"
+    pdf.write_bytes(b"%PDF-history-test")
+    stores.reports.record("case-1", "pdf", pdf, [pdf])
     write_json(connection_of(stores), "case-1", tmp_path / "second.json")
 
     assert [(r.format, r.version) for r in stores.reports.list_by_case("case-1")] == [
-        ("csv", 1), ("json", 1), ("json", 2),
+        ("json", 1), ("json", 2), ("pdf", 1),
     ]
     assert stores.reports.latest("case-1", "json").location == str(tmp_path / "second.json")
 
@@ -110,3 +102,20 @@ def test_a_pdf_report_is_recorded_the_same_way(stores, tmp_path) -> None:
         stores.reports.record("case-1", "docx", pdf, [pdf])
     with pytest.raises(NotFoundError):
         stores.reports.record("no-such-case", "pdf", pdf, [pdf])
+
+
+def test_csv_generation_is_removed_but_historical_entries_remain_readable(stores, tmp_path):
+    import adapters.persistence.case_export as exports
+    assert not hasattr(exports, "write_csv")
+    existing = tmp_path / "historical.csv"
+    existing.write_text("historical fixture\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        stores.reports.record("case-1", "csv", existing, [existing])
+    connection_of(stores).execute(
+        "INSERT INTO reports(report_id,case_id,format,version,location,files_json,created_at) "
+        "VALUES ('historical-csv','case-1','csv',1,?,'[]','2026-10-01T00:00:00Z')",
+        (str(existing),),
+    )
+    assert stores.reports.latest("case-1", "csv").report_id == "historical-csv"
+    assert stores.reports.list_by_case("case-1")[0].format == "csv"
+    assert existing.read_text() == "historical fixture\n"

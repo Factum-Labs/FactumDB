@@ -97,8 +97,8 @@ def test_exports_record_signed_in_actor_for_all_formats_and_survive_restart(
 ):
     case_id, _ = analysed(runtime, tmp_path, monkeypatch)
     actor = runtime.auth.require_actor()
-    for format in ("JSON", "CSV", "PDF"):
-        path = tmp_path / ("csv" if format == "CSV" else "report." + format.lower())
+    for format in ("JSON", "PDF"):
+        path = tmp_path / ("report." + format.lower())
         assert not response(runtime, "export_case", case_id=case_id, format=format,
                             path=str(path), actor_username="Spoof")["ok"]
         call(runtime, "export_case", case_id=case_id, format=format, path=str(path))
@@ -107,12 +107,12 @@ def test_exports_record_signed_in_actor_for_all_formats_and_survive_restart(
         assert record.actor_username == actor["actor_username"]
         assert record.version == 1 and record.created_at.tzinfo is not None
         for output in record.files:
-            file = path / output.name if format == "CSV" else path
+            file = path
             assert output.sha256 == hashlib.sha256(file.read_bytes()).hexdigest()
     reopened = authenticated_runtime(runtime.root)
     try:
         history = call(reopened, "get_case_data", case_id=case_id)["tables"]["reports"]
-        assert len(history) == 3
+        assert len(history) == 2
         assert all({key: report[key] for key in actor} == actor for report in history)
     finally:
         reopened.close()

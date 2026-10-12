@@ -1,13 +1,15 @@
 import io
 import json
+import sqlite3
 
 # Imported pytest fixtures are consumed through test parameter names.
 # ruff: noqa: F811
 import pytest
 
-from adapters.persistence.case_export import case_export, write_csv, write_json
+from adapters.persistence.case_export import case_export, write_json
 from adapters.persistence.export_sections import OPTIONAL_SECTIONS, resolve_sections
 from adapters.persistence.investigator_export import (
+    DiskAliases,
     JsonMembers,
     expand_document,
     prepare_projection,
@@ -15,6 +17,25 @@ from adapters.persistence.investigator_export import (
 from tests.adapters.test_case_export import connection_of, stores  # noqa: F401
 from tests.adapters.test_finding_provenance import analysed  # noqa: F401
 from tests.adapters.test_sqlite_normalization import case  # noqa: F401
+
+
+def test_disk_alias_count_never_rescans_existing_aliases():
+    db = sqlite3.connect(":memory:")
+    db.execute("CREATE TABLE aliases(original TEXT PRIMARY KEY, alias TEXT)")
+    aliases = DiskAliases(db)
+    queries = []
+    db.set_trace_callback(queries.append)
+    for index in range(500):
+        aliases[str(index)] = f"alias-{len(aliases)}"
+    assert len(aliases) == 500
+    aliases["0"] = "replacement"
+    assert len(aliases) == 500
+    del aliases["0"]
+    assert len(aliases) == 499
+    with pytest.raises(KeyError):
+        del aliases["missing"]
+    assert not any("COUNT(" in query.upper() for query in queries)
+    db.close()
 
 
 def document(projection):
@@ -151,9 +172,7 @@ def test_standalone_legacy_defaults_and_explicit_profile(stores, tmp_path):
     modern = write_json(connection, "case-1", tmp_path / "modern.json", profile="full")
     assert json.loads(legacy.read_text())["format_version"] == 2
     assert json.loads(modern.read_text())["format_version"] == 3
-    files = write_csv(connection, "case-1", tmp_path / "csv", profile="investigator")
-    assert all(path.exists() for path in files)
-    assert (tmp_path / "csv/objects.csv").exists()
+
 
 
 def test_section_defaults_and_dependency_protection():

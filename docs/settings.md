@@ -6,7 +6,7 @@ workspace storage, and the existing extraction-tool configuration.
 ## Account and session
 
 Each local account has a display name, organization and examiner ID. These are
-included as the exporting examiner's profile in future JSON/CSV exports. They
+included as the exporting examiner's profile in original JSON/PDF exports. They
 do not rename the login account or rewrite historical case examiners, evidence
 actors or tool-run actors. Preferences and profiles are stored in the catalog's
 users table, with an additive migration for existing accounts.
@@ -37,9 +37,8 @@ Values without an established timezone are not converted.
 
 JSON exports preserve exact timestamps in `tables` and add a `presentation`
 section with the selected timezone, examiner profile and display-time values.
-CSV exports preserve original columns, add `display_times.csv` keyed by table,
-zero-based row and field, and explain the timezone in `about.txt`. Export file
-hashes cover the added presentation data too.
+Summary PDFs retain recorded timestamps and identify the preparation time.
+Export hashes cover the actual written files.
 
 ## Storage, backup and restore
 

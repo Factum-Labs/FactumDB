@@ -14,9 +14,8 @@ analysed_at is when the case's reconciliation result was saved, or empty if
 the analysis had not run yet. A report made before the analysis was run again
 then shows that it describes the older analysis.
 
-This repository does not write report files. JSON and CSV exports record
-themselves (case_export.py), and a PDF or HTML report can call record() the
-same way once it is written.
+This repository does not write report files. JSON exports and summary PDFs record themselves after writing.
+Historical formats remain readable, but only JSON and PDF can be registered.
 """
 
 import hashlib
@@ -29,7 +28,7 @@ from typing import Optional, Sequence
 from adapters.persistence._timestamps import from_text, to_text
 from core.application.errors import NotFoundError
 
-FORMATS = ("json", "csv", "html", "pdf")
+FORMATS = ("json", "pdf")
 
 
 @dataclass(frozen=True, slots=True)

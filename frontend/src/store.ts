@@ -21,7 +21,7 @@ interface AppState {
   busy: boolean; ready: boolean; error: string | null; notice: string | null
   pipelineComplete: boolean; stagesDone: number; runningStage: number | null; cancelRequested: boolean
   recordNavigation: number; selectedRecordTable: string;
-  selectedTx: string; selectedRecord: string; selectedTool: string; reportFormat: string; expandedGroups: string[]
+  selectedTx: string; selectedRecord: string; selectedTool: string; reportFormat: 'JSON' | 'PDF'; expandedGroups: string[]
   go: (screen: Screen) => void
   initialize: () => Promise<void>
   refresh: () => Promise<void>
@@ -39,7 +39,7 @@ interface AppState {
   exportCase: (path: string, redacted?: boolean) => Promise<void>
   setError: (error: unknown) => void
   selectTx: (id: string) => void; selectRecord: (id: string, table?: string) => void; selectTool: (id: string) => void
-  setFormat: (f: string) => void; toggleGroup: (id: string) => void
+  setFormat: (f: 'JSON' | 'PDF') => void; toggleGroup: (id: string) => void
   openTransaction: (id: string) => void; openRecord: (id: string) => void
 }
 

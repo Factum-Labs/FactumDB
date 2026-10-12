@@ -7,13 +7,11 @@ record/history/transaction, rather than the entire case or analysis stage.
 """
 
 import codecs
-import csv
 import hashlib
 import json
 import re
 import sqlite3
 import tempfile
-import textwrap
 from collections.abc import MutableMapping
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -79,7 +77,70 @@ class JsonMembers:
                     raise ValueError("Invalid stored analysis JSON") from None
                 self.fill()
 
-    def members(self):
+    def skip_value(self):
+        """Skip an unselected JSON container without allocating its contents."""
+        first = self.peek()
+        if first not in {"{", "[", '"'}:
+            self.value()
+            return
+        stack = [] if first == '"' else ["}" if first == "{" else "]"]
+        quoted = first == '"'
+        escaped = False
+        self.buffer = self.buffer[1:]
+        tokens = re.compile(r'["\\{}\[\]]')
+        while True:
+            position = 1 if escaped else 0
+            escaped = False
+            while token := tokens.search(self.buffer, position):
+                char = token.group()
+                position = token.end()
+                if quoted:
+                    if char == "\\":
+                        escaped = token.end() == len(self.buffer)
+                        if not escaped:
+                            position += 1
+                    elif char == '"':
+                        quoted = False
+                        if not stack:
+                            self.buffer = self.buffer[token.end():]
+                            return
+                elif char == '"':
+                    quoted = True
+                elif char in {"{", "["}:
+                    stack.append("}" if char == "{" else "]")
+                elif char in {"}", "]"}:
+                    if not stack or stack.pop() != char:
+                        raise ValueError("Invalid stored analysis JSON")
+                    if not stack:
+                        self.buffer = self.buffer[token.end():]
+                        return
+            if self.eof:
+                raise ValueError("Unterminated stored analysis JSON")
+            self.buffer = ""
+            self.fill()
+
+    def selected_object(self, fields):
+        if self.peek() != "{":
+            return self.value()
+        self.take("{")
+        result = {}
+        if self.peek() == "}":
+            self.take("}")
+            return result
+        while True:
+            key = self.value()
+            self.take(":")
+            if key in fields:
+                result[key] = self.value()
+            else:
+                self.skip_value()
+            if self.peek() != ",":
+                break
+            self.take(",")
+        self.take("}")
+        return result
+
+    def members(self, include=None, item_fields=None):
         self.take("{")
         if self.peek() == "}":
             self.take("}")
@@ -89,6 +150,12 @@ class JsonMembers:
             if not isinstance(member, str):
                 raise ValueError("Invalid analysis member")
             self.take(":")
+            if include is not None and member not in include:
+                self.skip_value()
+                if self.peek() != ",":
+                    break
+                self.take(",")
+                continue
             if self.peek() == "[":
                 self.take("[")
                 if self.peek() == "]":
@@ -96,7 +163,9 @@ class JsonMembers:
                 else:
                     index = 0
                     while True:
-                        yield member, index, self.value()
+                        fields = (item_fields or {}).get(member)
+                        value = self.selected_object(fields) if fields is not None else self.value()
+                        yield member, index, value
                         index += 1
                         if self.peek() != ",":
                             break
@@ -115,6 +184,7 @@ class JsonMembers:
 class DiskAliases(MutableMapping):
     def __init__(self, db):
         self.db = db
+        self._count = db.execute("SELECT COUNT(*) FROM aliases").fetchone()[0]
 
     def __getitem__(self, key):
         row = self.db.execute("SELECT alias FROM aliases WHERE original=?", (key,)).fetchone()
@@ -123,16 +193,23 @@ class DiskAliases(MutableMapping):
         return row[0]
 
     def __setitem__(self, key, value):
-        self.db.execute("INSERT OR REPLACE INTO aliases VALUES (?,?)", (key, value))
+        inserted = self.db.execute("INSERT OR IGNORE INTO aliases VALUES (?,?)", (key, value))
+        if inserted.rowcount:
+            self._count += 1
+        else:
+            self.db.execute("UPDATE aliases SET alias=? WHERE original=?", (value, key))
 
     def __delitem__(self, key):
-        self.db.execute("DELETE FROM aliases WHERE original=?", (key,))
+        deleted = self.db.execute("DELETE FROM aliases WHERE original=?", (key,))
+        if not deleted.rowcount:
+            raise KeyError(key)
+        self._count -= 1
 
     def __iter__(self):
         return (row[0] for row in self.db.execute("SELECT original FROM aliases"))
 
     def __len__(self):
-        return self.db.execute("SELECT COUNT(*) FROM aliases").fetchone()[0]
+        return self._count
 
 
 VALUE_MAPS = {"values", "before", "after", "observed_values"}
@@ -159,6 +236,8 @@ class ExportProjection:
             CREATE TABLE aliases (original TEXT PRIMARY KEY, alias TEXT);
             CREATE TABLE selected_records (id TEXT, database_name TEXT, table_name TEXT,
                 key_columns TEXT, key_values TEXT, PRIMARY KEY(id,database_name,table_name));
+            CREATE INDEX selected_record_keys ON selected_records
+                (database_name,table_name,key_columns,key_values);
             CREATE TABLE selected_transactions (id TEXT PRIMARY KEY);
             CREATE TABLE selected_sources (evidence_id TEXT, source_file TEXT,
                 log_position INTEGER, row_index INTEGER,
@@ -168,7 +247,6 @@ class ExportProjection:
             CREATE TABLE totals (table_name TEXT, granularity TEXT, result TEXT, count INTEGER,
                                  PRIMARY KEY(table_name,granularity,result));
             CREATE TABLE rules_used (rule_id TEXT PRIMARY KEY);
-            CREATE TABLE lines (position INTEGER PRIMARY KEY, text TEXT);
         """)
         self.profile = profile
         self.selection = selection
@@ -215,7 +293,6 @@ class ExportProjection:
                 "Summarized investigator report, not the complete evidence dataset."
             )
         self.origin = ""
-        self.line_count = 0
 
     def close(self):
         if self.db is not None:
@@ -430,35 +507,6 @@ class ExportProjection:
             output.write(packed(obj))
         output.write("]}\n")
 
-    def write_csv(self, folder):
-        from adapters.persistence.case_export import _cell
-
-        files = []
-        for name in [*self.table_names(), "objects"]:
-            if not re.fullmatch(r"[a-z][a-z0-9_]*", name):
-                raise ValueError("Unsupported export table name")
-            # Discover headers on disk, then iterate again; never collect rows.
-            iterator = self.objects if name == "objects" else lambda name=name: self.rows(name)
-            keys = set()
-            for row in iterator():
-                keys.update(row)
-            header = sorted(keys)
-            path = folder / (name + ".csv")
-            with path.open("x", newline="", encoding="utf-8") as output:
-                writer = csv.writer(output)
-                writer.writerow(header)
-                for row in iterator():
-                    writer.writerow([_cell(row.get(key)) for key in header])
-            files.append(path)
-        about = folder / "about.txt"
-        about.write_text(
-            packed(self.metadata)
-            + "\nCSV nested cells use JSON; resolve $ref through objects.csv.\n",
-            encoding="utf-8",
-        )
-        files.append(about)
-        return files
-
     def finish(self):
         # Remove sensitive alias mappings once the frozen projection is built.
         self.metadata["counts"] = {
@@ -508,90 +556,8 @@ class ExportProjection:
 
         self.write_json(Counter())
 
-    def prepare_lines(self):
-        """Store rendered lines on disk, with precisely the PDF's line wrapping."""
-        from fpdf.enums import MethodReturnValue
 
-        from adapters.persistence.pdf_report import _new_pdf, _style, _supported_text
-
-        pdf = _new_pdf()
-        pdf.add_page()
-
-        @lru_cache(maxsize=2048)
-        def wrap_chunk(chunk):
-            _style(pdf, chunk)
-            supported = _supported_text(chunk)
-            if pdf.get_string_width(supported) <= pdf.epw:
-                return (supported,)
-            return tuple(
-                pdf.multi_cell(
-                    w=pdf.epw, h=4.4, text=supported, dry_run=True, output=MethodReturnValue.LINES
-                )
-                or [""]
-            )
-
-        def line(text):
-            # Wrap before handing text to fpdf, keeping each text operation small.
-            for chunk in textwrap.wrap(
-                str(text), 90, replace_whitespace=False, drop_whitespace=False
-            ) or [""]:
-                for wrapped in wrap_chunk(chunk):
-                    self.db.execute("INSERT INTO lines VALUES (?,?)", (self.line_count, wrapped))
-                    self.line_count += 1
-
-        def fields(value):
-            line(
-                " | ".join(
-                    key.replace("_", " ") + ": " + packed(child) for key, child in value.items()
-                )
-            )
-
-        line("FORENSIC EXAMINATION REPORT")
-        line(f"Case: {self.metadata['case_id']} | Generated: {self.metadata['exported_at']}")
-        line("Investigator report" if self.profile == "investigator" else "Full evidence export")
-        if self.selection["partial"]:
-            line("PARTIAL REPORT: selected content only.")
-        for note in self.metadata["limitations"]:
-            line(note)
-        if self.redacted:
-            line(self.metadata["redaction"]["note"])
-        line("Effective sections: " + ", ".join(self.selection["sections"]))
-        line("Automatically included: " + ", ".join(self.selection["automatic_sections"]))
-        line("Included / summarized / excluded counts: " + packed(self.metadata["counts"]))
-        for name in self.table_names():
-            line("")
-            line(name.replace("_", " ").upper())
-            for row in self.rows(name):
-                fields(row)
-                line("")
-        line("CANONICAL SUPPORTING DETAILS (references resolve by ID)")
-        for obj in self.objects():
-            line(f"{obj['kind']}: {obj['id']}")
-            if isinstance(obj["value"], dict):
-                fields(obj["value"])
-            else:
-                line("value: " + packed(obj["value"]))
-            line("")
-        self.db.commit()
-
-    @property
-    def pages(self):
-        return max(1, (self.line_count + 54) // 55)
-
-    def page(self, number):
-        return [
-            row[0]
-            for row in self.db.execute(
-                "SELECT text FROM lines WHERE position>=? AND position<? ORDER BY position",
-                ((number - 1) * 55, number * 55),
-            )
-        ]
-
-    def iter_lines(self):
-        return (row[0] for row in self.db.execute("SELECT text FROM lines ORDER BY position"))
-
-
-def analysis_members(connection, case_id, stage):
+def analysis_members(connection, case_id, stage, include=None, item_fields=None):
     row = connection.execute(
         "SELECT rowid,saved_at FROM analysis_results WHERE case_id=? AND stage=?", (case_id, stage)
     ).fetchone()
@@ -599,13 +565,24 @@ def analysis_members(connection, case_id, stage):
         with connection.blobopen(
             "analysis_results", "result_json", row[0], readonly=True
         ) as stream:
-            for member, index, value in JsonMembers(stream).members():
+            for member, index, value in JsonMembers(stream).members(
+                include=include, item_fields=item_fields
+            ):
                 if not re.fullmatch(r"[a-z][a-z0-9_]*", member):
                     raise ValueError("Unsupported analysis member")
                 yield member, index, value, row[1]
 
 
-def prepare_projection(
+def prepare_projection(connection, case_id, **options):
+    steps = prepare_projection_steps(connection, case_id, **options)
+    while True:
+        try:
+            next(steps)
+        except StopIteration as completed:
+            return completed.value
+
+
+def prepare_projection_steps(
     connection,
     case_id,
     *,
@@ -645,7 +622,9 @@ def prepare_projection(
         relevant = s & {"reconciliation", "histories", "timeline", "gaps", "intermediate_analysis"}
         reconciliation = analysis_members(connection, case_id, "reconciliation") if relevant else ()
         reconciliation_saved_at = None
-        for member, index, value, saved_at in reconciliation:
+        for processed, (member, index, value, saved_at) in enumerate(reconciliation):
+            if processed % 32 == 0:
+                yield {"stage": "reconciliation", "processed": processed}
             reconciliation_saved_at = saved_at
             p.origin = "analysis_reconciliation_" + member
             p.collect_findings(value)
@@ -712,7 +691,9 @@ def prepare_projection(
                 if (stage_section in s or all_stage or "gaps" in s)
                 else ()
             )
-            for member, index, value, _saved_at in stage_values:
+            for processed, (member, index, value, _saved_at) in enumerate(stage_values):
+                if processed % 32 == 0:
+                    yield {"stage": stage, "processed": processed}
                 p.origin = f"analysis_{stage}_{member}"
                 p.collect_findings(value)
                 keep = all_stage
@@ -779,6 +760,18 @@ def prepare_projection(
             "table_creations": "schemas" in s,
             "physical_extractions": "histories" in s,
         }
+
+        @lru_cache(maxsize=256)
+        def physical_key_shapes(database, table):
+            return tuple(
+                columns[0]
+                for columns in p.db.execute(
+                    "SELECT DISTINCT key_columns FROM selected_records "
+                    "WHERE database_name=? AND table_name=?",
+                    (database, table),
+                )
+            )
+
         for name, sql in _TABLES:
             if name == "analysis_results":
                 continue
@@ -803,7 +796,9 @@ def prepare_projection(
                 )
                 p.stat(name, category, count)
                 continue
-            for row in connection.execute(sql, (case_id,)):
+            for processed, row in enumerate(connection.execute(sql, (case_id,))):
+                if processed % 32 == 0:
+                    yield {"stage": name, "processed": processed}
                 keep = wanted.get(name, False)
                 if name in {"schemas", "table_creations"} and keep and "complete_schemas" not in s:
                     keep = (
@@ -855,15 +850,12 @@ def prepare_projection(
                         from adapters.persistence._values import decode_value
                         from core.domain.models.identity import UnrenderableKey, render_key_value
 
-                        candidates = p.db.execute(
-                            "SELECT key_columns,key_values FROM selected_records "
-                            "WHERE database_name=? AND table_name=?",
-                            (row["database_name"], row["database_name"] + "." + row["table_name"]),
-                        )
+                        database = row["database_name"]
+                        table = database + "." + row["table_name"]
                         values = json.loads(row["values_json"])
                         keep = False
-                        for columns, keys in candidates:
-                            columns, keys = json.loads(columns), json.loads(keys)
+                        for encoded_columns in physical_key_shapes(database, table):
+                            columns = json.loads(encoded_columns)
                             if not columns:
                                 # No identity to narrow raw rows: retain schema,
                                 # counts and limitations, with full rows opt-in.
@@ -875,7 +867,11 @@ def prepare_projection(
                                 ]
                             except (KeyError, UnrenderableKey):
                                 continue
-                            if actual == keys:
+                            if p.db.execute(
+                                "SELECT 1 FROM selected_records WHERE database_name=? "
+                                "AND table_name=? AND key_columns=? AND key_values=? LIMIT 1",
+                                (database, table, encoded_columns, packed(actual)),
+                            ).fetchone():
                                 keep = True
                                 break
                 p.stat(
@@ -983,6 +979,7 @@ def prepare_projection(
                 "SELECT * FROM pipeline_runs WHERE case_id=? ORDER BY rowid", (case_id,)
             ):
                 p.add("pipeline_runs", _row(row))
+        yield {"stage": "finalizing selected data", "processed": 0}
         p.finish()
         return p
     except BaseException:

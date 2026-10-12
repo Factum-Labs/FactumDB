@@ -41,8 +41,8 @@ def test_upgrade_invalidation_restart_redecode_and_exports(tmp_path, monkeypatch
         assert exported['analysis_format_version'] == exported['engine_revision'] == 2
         from adapters.persistence.investigator_export import expand_document
         assert all('row_index' in e for e in expand_document(exported)['tables']['binlog_events'])
-        folder = tmp_path / 'upgraded_csv'
-        call(runtime, 'export_case', case_id=case_id, format='CSV', path=str(folder))
-        assert json.loads((folder / 'about.txt').read_text(encoding='utf-8').splitlines()[0])['engine_revision'] == 2
+        pdf = tmp_path / 'upgraded.pdf'
+        call(runtime, 'export_case', case_id=case_id, format='PDF', path=str(pdf))
+        assert pdf.read_bytes().startswith(b'%PDF-')
     finally:
         runtime.close()

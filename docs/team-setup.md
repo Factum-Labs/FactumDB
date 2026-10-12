@@ -127,7 +127,7 @@ An active desktop authentication agent is still required for sign-up.
 3. Check **Settings** for the bundled extraction tool paths. Use
    **Use bundled tools** to restore them after custom overrides.
 4. Create a case, register evidence, and complete the analysis pipeline.
-5. Export the completed results to a new JSON file or CSV folder.
+5. Export the completed results to a new full JSON file or summary PDF.
 
 Accounts and case data are local to the application data directory; pulling
 the repository does not download another teammate's accounts or cases.

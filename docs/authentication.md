@@ -99,7 +99,7 @@ their initiating user through completion. The evidence and provenance detail
 views and existing case exports include these fields. Older records without
 attribution remain unknown rather than being assigned to the current user.
 
-JSON, CSV and PDF export history also records the signed-in `actor_id` and
+JSON and PDF export history also records the signed-in `actor_id` and
 `actor_username`, alongside time, version and output hashes. Historical exports
 retain unknown attribution. History is visible in the owner-only report screen;
 credentials and report history are not copied into the forensic export itself.
