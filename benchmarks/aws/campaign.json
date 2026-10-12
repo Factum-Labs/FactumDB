@@ -1,0 +1,23 @@
+{
+  "region": "ap-southeast-2",
+  "profile": "factumdb-benchmark",
+  "budget_usd": 20,
+  "scheduling_limit_usd": 16,
+  "cleanup_reserve_usd": 4,
+  "max_instance_minutes": 90,
+  "root_disk_gib": 40,
+  "repetitions": 3,
+  "warmups": 1,
+  "timeout_seconds": 300,
+  "sizes": [2500, 10000, 40000, 100000],
+  "cpu_limits": [2, 1],
+  "matrix": [
+    {"os": "ubuntu", "instance_type": "m7i-flex.large", "ram_gib": 8},
+    {"os": "windows", "instance_type": "m7i-flex.large", "ram_gib": 8},
+    {"os": "ubuntu", "instance_type": "c7i-flex.large", "ram_gib": 4},
+    {"os": "windows", "instance_type": "c7i-flex.large", "ram_gib": 4},
+    {"os": "ubuntu", "instance_type": "t3.small", "ram_gib": 2},
+    {"os": "windows", "instance_type": "t3.small", "ram_gib": 2},
+    {"os": "ubuntu", "instance_type": "t3.micro", "ram_gib": 1}
+  ]
+}

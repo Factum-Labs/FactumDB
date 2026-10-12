@@ -1,0 +1,103 @@
+{
+  "checked_utc": "2026-10-11",
+  "region": "ap-southeast-2",
+  "source": "AWS Price List GetProducts; shared tenancy, standard license-included Windows RunInstances:0002; no reserved purchases",
+  "prices": [
+    {
+      "instance": "t3.micro",
+      "os": "Linux",
+      "on_demand": [
+        {
+          "sku": "HXWVK8ZBMBMGMVKN",
+          "effective": "2026-10-01T00:00:00Z",
+          "unit": "Hrs",
+          "usd": "0.0132000000"
+        }
+      ]
+    },
+    {
+      "instance": "t3.micro",
+      "os": "Windows",
+      "on_demand": [
+        {
+          "sku": "8AQ85QTHPMUFYFX8",
+          "effective": "2026-10-01T00:00:00Z",
+          "unit": "Hrs",
+          "usd": "0.0224000000"
+        }
+      ]
+    },
+    {
+      "instance": "t3.small",
+      "os": "Linux",
+      "on_demand": [
+        {
+          "sku": "ZJF5Q3KWKS8VD3X2",
+          "effective": "2026-10-01T00:00:00Z",
+          "unit": "Hrs",
+          "usd": "0.0264000000"
+        }
+      ]
+    },
+    {
+      "instance": "t3.small",
+      "os": "Windows",
+      "on_demand": [
+        {
+          "sku": "QWSG25RY99X9SUT7",
+          "effective": "2026-10-01T00:00:00Z",
+          "unit": "Hrs",
+          "usd": "0.0448000000"
+        }
+      ]
+    },
+    {
+      "instance": "c7i-flex.large",
+      "os": "Linux",
+      "on_demand": [
+        {
+          "sku": "FWJ388EZTA6AMWFV",
+          "effective": "2026-10-01T00:00:00Z",
+          "unit": "Hrs",
+          "usd": "0.1107200000"
+        }
+      ]
+    },
+    {
+      "instance": "c7i-flex.large",
+      "os": "Windows",
+      "on_demand": [
+        {
+          "sku": "DKNRXFJD9A4GGGJZ",
+          "effective": "2026-10-01T00:00:00Z",
+          "unit": "Hrs",
+          "usd": "0.1981200000"
+        }
+      ]
+    },
+    {
+      "instance": "m7i-flex.large",
+      "os": "Linux",
+      "on_demand": [
+        {
+          "sku": "YZS4YR3ZPHD427K5",
+          "effective": "2026-10-01T00:00:00Z",
+          "unit": "Hrs",
+          "usd": "0.1197000000"
+        }
+      ]
+    },
+    {
+      "instance": "m7i-flex.large",
+      "os": "Windows",
+      "on_demand": [
+        {
+          "sku": "KT4RWNC7MVM6YVTQ",
+          "effective": "2026-10-01T00:00:00Z",
+          "unit": "Hrs",
+          "usd": "0.2071000000"
+        }
+      ]
+    }
+  ]
+}

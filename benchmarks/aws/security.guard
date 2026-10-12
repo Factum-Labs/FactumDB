@@ -1,0 +1,26 @@
+# Campaign-specific mandatory controls; production retention rules do not apply to disposable tests.
+let guests = Resources.*[ Type == 'AWS::EC2::Instance' ]
+rule guest_security when %guests !empty {
+  %guests.Properties.MetadataOptions.HttpTokens == 'required'
+  %guests.Properties.InstanceInitiatedShutdownBehavior == 'terminate'
+  %guests.Properties.BlockDeviceMappings.*.Ebs.Encrypted == true
+  %guests.Properties.BlockDeviceMappings.*.Ebs.DeleteOnTermination == true
+  %guests.Properties.BlockDeviceMappings.*.Ebs.VolumeType == 'gp3'
+}
+let groups = Resources.*[ Type == 'AWS::EC2::SecurityGroup' ]
+rule no_inbound_management when %groups !empty {
+  %groups.Properties.SecurityGroupIngress empty
+}
+let buckets = Resources.*[ Type == 'AWS::S3::Bucket' ]
+rule private_artifacts when %buckets !empty {
+  %buckets.Properties.PublicAccessBlockConfiguration.BlockPublicAcls == true
+  %buckets.Properties.PublicAccessBlockConfiguration.BlockPublicPolicy == true
+  %buckets.Properties.PublicAccessBlockConfiguration.IgnorePublicAcls == true
+  %buckets.Properties.PublicAccessBlockConfiguration.RestrictPublicBuckets == true
+  %buckets.Properties.BucketEncryption.ServerSideEncryptionConfiguration.*.ServerSideEncryptionByDefault.SSEAlgorithm == 'AES256'
+  %buckets.DeletionPolicy == 'Delete'
+}
+rule watchdog_before_guest {
+  some Resources.Guest.DependsOn[*] == 'ExpiryRule'
+  some Resources.Guest.DependsOn[*] == 'WatchdogPermission'
+}
