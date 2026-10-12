@@ -81,9 +81,116 @@ def test_summary_redaction_and_unicode(case, analysed):
         text = "\n".join(page.extract_text() for page in PdfReader(summary.pdf_path).pages)
         assert "alice@example.com" not in text and "private-password" not in text
         assert "Pseudonymized" in text and "Unsuitable for independent reanalysis" in text
+        assert "Alias key:" in text and "[CASE-001]" in text
+        assert "[S-" not in text
         assert summary.metadata["classification_totals"]["records"]
     finally:
         summary.close()
+
+
+def test_typed_summary_references_connect_across_sections():
+    summary = SummaryProjection("same", redacted=True, moment=WHEN, settings={})
+    try:
+        summary.add("case", {"case_id": "same", "case_name": "same"})
+        summary.add(
+            "evidence",
+            {
+                "evidence_id": "same",
+                "filename": "same",
+                "kind": "ibd",
+                "source_sha256": "digest",
+                "working_copy_sha256": "digest",
+            },
+        )
+        summary.add(
+            "integrity",
+            {
+                "evidence_id": "same",
+                "status": "valid",
+                "total_pages": 9,
+                "damaged_pages": 0,
+            },
+        )
+        summary.tally("same", "records", "Conflicting")
+        for index in range(60):
+            summary.group(
+                kind="comparison",
+                table="same",
+                field=f"field-{index}",
+                result="Conflicting",
+                rule_id="R-RECON-003",
+                record_id=f"row-{index}",
+                identity=f"observation-{index}",
+                context={},
+                provenance=[
+                    {
+                        "evidence_id": "same",
+                        "tool_run_id": "same",
+                        "source_file": "same",
+                        "log_position": index,
+                    }
+                ],
+            )
+        summary.group(
+            kind="comparison",
+            table="Unknown",
+            field="",
+            result="Unsupported",
+            rule_id="R-CORR-020",
+            context={},
+        )
+        summary.finish()
+        evidence = next(summary.rows("evidence"))
+        assert evidence["evidence_id"] == "[EVIDENCE-001]"
+        assert next(summary.rows("integrity"))["evidence_id"] == evidence["evidence_id"]
+        assert evidence["source_sha256"] == evidence["working_copy_sha256"] == "[HASH-001]"
+        assert next(summary.rows("classification_tables"))["table"] == "[TABLE-001]"
+        for reference in summary.rows("finding_sources"):
+            if reference["result"] == "Unsupported":
+                assert reference["evidence_id"] == reference["source_file"] == "Unknown"
+            else:
+                assert reference["table"] == "[TABLE-001]"
+                assert reference["evidence_id"] == evidence["evidence_id"]
+                assert reference["source_file"] == evidence["filename"] == "[SOURCE-001]"
+                assert reference["tool_run_id"] == "[RUN-001]"
+                assert reference["field"].startswith("[FIELD-")
+        assert summary.metadata["case_id"] == "[CASE-001]"
+        assert next(summary.rows("case"))["case_name"] == "[CASE-NAME-001]"
+        summary.prepare_pdf()
+        reader = PdfReader(summary.pdf_path)
+        assert len(reader.pages) > 1
+        text = "\n".join(page.extract_text() for page in reader.pages)
+        assert "[SOURCE-001]" in text and "[S-" not in text
+        assert "Rule guide" in text
+        assert text.count("The values differ and the log coverage for this record is complete") == 1
+        assert '"same"' not in text and "digest" not in text.replace("HASH = digest", "")
+    finally:
+        summary.close()
+
+
+def test_page_breaks_restore_body_and_table_fonts():
+    from adapters.persistence.pdf_report import Layout, SummaryPDF, _new_pdf
+
+    pdf = _new_pdf(SummaryPDF(format="A4"))
+    pdf.add_page()
+    layout = Layout(pdf)
+    pdf.set_y(pdf.h - 19)
+    layout.paragraph("A body paragraph after a page break.")
+    assert pdf.page_no() == 2
+    assert pdf.font_size_pt == 10
+    pdf.set_y(pdf.h - 40)
+    list(
+        layout.table(
+            ["Table", "Records"],
+            [80, 94],
+            [(f"[TABLE-{index:03d}]", 108890) for index in range(10)],
+        )
+    )
+    assert pdf.page_no() > 2
+    assert pdf.font_size_pt == 9.5
+    text = "\n".join(page.extract_text() for page in PdfReader(io.BytesIO(pdf.output())).pages)
+    assert text.count("108,890") == 10
+    assert "[TABLE-009]" in text
 
 
 def test_group_occurrences_contexts_and_unknown_sources_preserve_distinctions():

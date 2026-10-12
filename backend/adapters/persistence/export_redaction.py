@@ -98,7 +98,35 @@ _ENUM_VALUES = {
 }
 
 
-def make_redactor(aliases=None, *, prefix=None, compact=False):
+def alias_category(key):
+    """Semantic categories shared by summary fields and assembled references."""
+    categories = {
+        "case_id": "CASE",
+        "case_name": "CASE-NAME",
+        "table": "TABLE",
+        "table_name": "TABLE",
+        "tables": "TABLE",
+        "database": "DATABASE",
+        "database_name": "DATABASE",
+        "databases": "DATABASE",
+        "field": "FIELD",
+        "column": "FIELD",
+        "evidence_id": "EVIDENCE",
+        "tool_run_id": "RUN",
+        "filename": "SOURCE",
+        "source_file": "SOURCE",
+        "after_file": "SOURCE",
+        "before_file": "SOURCE",
+        "tool_version": "VERSION",
+    }
+    if key.endswith("sha256"):
+        return "HASH"
+    if key.endswith("_at") or key in {"first_run", "last_run", "analysed_at"}:
+        return "TIME"
+    return categories.get(key, "VALUE")
+
+
+def make_redactor(aliases=None, *, prefix=None, compact=False, typed=False):
     """Fresh aliases per export; the mapping exists only for this invocation.
 
     All text is aliased rather than scanned with fallible secret/PII regexes.
@@ -108,8 +136,11 @@ def make_redactor(aliases=None, *, prefix=None, compact=False):
     if aliases is None:
         aliases = {}
     prefix = prefix if prefix is not None else secrets.token_hex(4)
+    category_counts = {}
 
-    def alias(value):
+    def alias(value, category="VALUE"):
+        if typed and (value is None or value in ("", "Unknown", "[REDACTED]")):
+            return value
         # Rendered comparison values and stored scalars share an alias.
         if isinstance(value, dict):
             for tag in ("__decimal__", "__datetime__"):
@@ -121,11 +152,18 @@ def make_redactor(aliases=None, *, prefix=None, compact=False):
             if isinstance(value, (str, int, float))
             else json.dumps(value, sort_keys=True, ensure_ascii=False)
         )
+        if typed:
+            identity = json.dumps([category, identity], ensure_ascii=False)
         if identity not in aliases:
-            ordinal = len(aliases) + 1
-            aliases[identity] = (
-                f"[S-{ordinal:04d}]" if compact else f"[VALUE-{prefix}-{ordinal:04d}]"
-            )
+            if typed:
+                ordinal = category_counts.get(category, 0) + 1
+                category_counts[category] = ordinal
+                aliases[identity] = f"[{category}-{ordinal:03d}]"
+            else:
+                ordinal = len(aliases) + 1
+                aliases[identity] = (
+                    f"[S-{ordinal:04d}]" if compact else f"[VALUE-{prefix}-{ordinal:04d}]"
+                )
         return aliases[identity]
 
     def visit(value, key="", evidence=False):
@@ -146,7 +184,8 @@ def make_redactor(aliases=None, *, prefix=None, compact=False):
                     result[child_key] = "[REDACTED]"
                 elif child_key in _VALUE_MAPS and isinstance(child, dict):
                     result[child_key] = {
-                        alias(k): visit(v, evidence=True) for k, v in child.items()
+                        alias(k, "FIELD" if typed else "VALUE"): visit(v, evidence=True)
+                        for k, v in child.items()
                     }
                 elif child_key == "derived_from" and isinstance(child, dict):
                     result[child_key] = {alias(k): visit(v) for k, v in child.items()}
@@ -169,7 +208,7 @@ def make_redactor(aliases=None, *, prefix=None, compact=False):
                 return value
             if key.endswith("rule_id") and re.fullmatch(r"R-[A-Z]+-\d{3}", value):
                 return value
-            return alias(value)
+            return alias(value, alias_category(key) if typed else "VALUE")
         return value
 
     return visit, alias
