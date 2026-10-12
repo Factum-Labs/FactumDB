@@ -66,3 +66,13 @@ export function display(value: Json | undefined): string {
   }
   return JSON.stringify(value)
 }
+
+export interface HistoryTables { tables: { database: string; table: string; count: number }[]; total: number }
+export interface HistoryPageItem { summary: Row; detail: Row; findings: Row[] }
+export interface BundledHistoryPage { items: HistoryPageItem[]; total: number; offset: number; limit: number }
+export interface HistoryPage { items: Row[]; total: number; offset: number; limit: number }
+
+export interface CasePreview {
+  case: CaseData['case']; evidence: Row[]; run: PipelineRun | null
+  pipeline: { metrics: Record<string, Json>; summaries: Record<string, string>; warnings: Record<string, boolean> }
+}

@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "check:history-cache": "esbuild checks/historyPageController.check.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/historyPageController.check.mjs --log-level=warning && node node_modules/.cache/historyPageController.check.mjs",
+    "check:history-browser": "node checks/history.browser.mjs",
     "check:settings-browser": "node checks/settings.browser.mjs",
     "check:gaps": "esbuild checks/gaps.check.tsx --bundle --platform=node --format=esm --external:react --external:react-dom/* --jsx=automatic --outfile=node_modules/.cache/gaps.check.mjs --log-level=warning && node node_modules/.cache/gaps.check.mjs",
     "check:gaps-browser": "node checks/gaps.browser.mjs",
@@ -12,7 +14,9 @@
     "lint": "oxlint",
     "check:backend": "esbuild checks/backend.check.tsx --bundle --platform=node --format=esm --external:react --external:react-dom/* --jsx=automatic --outfile=node_modules/.cache/backend.check.mjs --log-level=warning && node node_modules/.cache/backend.check.mjs",
     "preview": "vite preview",
-    "check:graph": "esbuild checks/correlation.check.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/correlation.check.mjs --log-level=warning && node node_modules/.cache/correlation.check.mjs"
+    "check:graph": "esbuild checks/correlation.check.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/correlation.check.mjs --log-level=warning && node node_modules/.cache/correlation.check.mjs",
+    "check:case-preview": "esbuild checks/casePreviewController.check.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/casePreviewController.check.mjs --log-level=warning && node node_modules/.cache/casePreviewController.check.mjs",
+    "check:case-preview-browser": "node checks/casePreview.browser.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",

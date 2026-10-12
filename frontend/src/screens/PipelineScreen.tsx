@@ -144,46 +144,50 @@ function ExecutionLog({ tools, caseId }: { tools: Row[]; caseId: string }) {
 export function PipelineScreen() {
   const state = useApp()
   const data = state.data
-  if (!data) return <StatusMessage>Open or create a case first.</StatusMessage>
-  const run = data.run
-  const evidence = data.tables.evidence_files ?? []
+  const preview = state.preview
+  if (!data && !preview) return <StatusMessage>Open or create a case first.</StatusMessage>
+  const run = preview?.run ?? data?.run
+  const evidence = preview?.evidence ?? data?.tables.evidence_files ?? []
   const verified = evidence.filter(e => e.verification_status === 'verified').length
   const hashes = evidence.filter(e => !!e.source_sha256).length
   const hasEvidence = evidence.some(e => e.kind === 'ibd' || e.kind === 'binlog')
-  const integrity = data.tables.integrity_results ?? []
-  const schemas = data.tables.schemas ?? []
-  const transactions = rows(data.analysis.grouping?.transactions)
-  const records = rows(data.analysis.correlation?.records)
-  const comparisons = rows(data.analysis.reconciliation?.rows)
-  const coverage = object(data.analysis.grouping?.coverage)
+  const integrity = data?.tables.integrity_results ?? []
+  const schemas = data?.tables.schemas ?? []
+  const transactions = rows(data?.analysis.grouping?.transactions)
+  const records = rows(data?.analysis.correlation?.records)
+  const comparisons = rows(data?.analysis.reconciliation?.rows)
+  const coverage = object(data?.analysis.grouping?.coverage)
   const gaps = rows(coverage.gaps).length
-  const inventories = data.tables.binlog_inventory ?? []
+  const inventories = data?.tables.binlog_inventory ?? []
   const missing = new Set(inventories.flatMap(i => Array.isArray(i.missing_files) ? i.missing_files.map(display) : [])).size
   const damaged = integrity.reduce((sum, i) => sum + Number(i.damaged_pages ?? 0), 0)
-  const toolRuns = data.tables.tool_runs ?? []
+  const toolRuns = data?.tables.tool_runs ?? []
   const failed = run?.stages.find(s => s.status === 'failed')
   const locked = state.busy || !!run?.stopped || !hasEvidence
   const summaries: Record<string, string> = {
     verify_evidence: `${verified} / ${evidence.length} match`,
     validate_pages: `${integrity.some(i => i.total_pages == null) ? 'Unknown' : integrity.reduce((sum, i) => sum + Number(i.total_pages), 0)} pages, ${damaged} damaged`,
-    extract_schema: `${schemas.length} tables, ${data.tables.schema_columns?.length ?? 0} columns`,
-    extract_physical_rows: `${data.table_counts?.physical_records ?? data.tables.physical_records?.length ?? 0} rows`,
+    extract_schema: `${schemas.length} tables, ${data?.tables.schema_columns?.length ?? 0} columns`,
+    extract_physical_rows: `${data?.table_counts?.physical_records ?? data?.tables.physical_records?.length ?? 0} rows`,
     decode_binary_logs: `${evidence.filter(e => e.kind === 'binlog').length} logs, ${missing} missing`,
     group_transactions: `${transactions.length} transactions`,
     correlate_records: `${records.length} records linked`,
-    reconstruct_state: `${rows(data.analysis.reconstruction?.histories).length} histories`,
+    reconstruct_state: `${data?.analysis.reconstruction?.history_count ?? rows(data?.analysis.reconstruction?.histories).length} histories`,
     reconcile_records: `${comparisons.length} comparisons`,
   }
+  Object.assign(summaries, preview?.pipeline.summaries)
   const metrics = [
     { label: 'Evidence files', value: evidence.length },
     { label: 'Verified', value: verified, tone: 'text-ok' },
     { label: 'Tables parsed', value: schemas.length },
-    { label: 'Transactions', value: data.analysis.grouping ? transactions.length : '—' },
-    { label: 'Records correlated', value: data.analysis.correlation ? records.length : '—' },
-    { label: 'Exact matches', value: data.analysis.reconciliation ? comparisons.filter(r => r.result === 'Exact').length : '—', tone: 'text-ok' },
-    { label: 'Unresolved', value: data.analysis.reconciliation ? comparisons.filter(r => r.result === 'Unresolved').length : '—' },
-    { label: 'Coverage gaps', value: data.analysis.grouping ? gaps : '—', tone: gaps ? 'text-amber' : '' },
+    { label: 'Transactions', value: data?.analysis.grouping ? transactions.length : '—' },
+    { label: 'Records correlated', value: data?.analysis.correlation ? records.length : '—' },
+    { label: 'Exact matches', value: data?.analysis.reconciliation ? comparisons.filter(r => r.result === 'Exact').length : '—', tone: 'text-ok' },
+    { label: 'Unresolved', value: data?.analysis.reconciliation ? comparisons.filter(r => r.result === 'Unresolved').length : '—' },
+    { label: 'Coverage gaps', value: data?.analysis.grouping ? gaps : '—', tone: gaps ? 'text-amber' : '' },
   ]
+  const metricKeys = ['evidence', 'verified', 'tables', 'transactions', 'records', 'exact', 'unresolved', 'gaps']
+  if (preview) metrics.forEach((metric, index) => { const value = preview.pipeline.metrics[metricKeys[index]]; metric.value = value == null ? '?' : display(value) })
   return <div className="grid min-h-0 max-w-[1240px] items-start gap-4 lg:h-full lg:grid-cols-[minmax(0,1fr)_minmax(280px,400px)] lg:grid-rows-[minmax(0,1fr)]">
     <section aria-labelledby="pipeline-heading" className="min-h-0 min-w-0 overflow-auto rounded-md border border-line bg-panel lg:max-h-full">
       <div className="flex flex-wrap items-center justify-between gap-2.5 px-3 py-[9px]">
@@ -201,7 +205,7 @@ export function PipelineScreen() {
           const attempt = stage?.attempts.at(-1)
           const running = state.runningStage === index
           const status = running ? 'running' : stage?.status ?? 'pending'
-          const warning = status === 'succeeded' && ((id === 'validate_pages' && (damaged > 0 || integrity.some(i => i.status !== 'valid'))) || (id === 'decode_binary_logs' && missing > 0) || (id === 'group_transactions' && gaps > 0))
+          const warning = status === 'succeeded' && (preview ? preview.pipeline.warnings[id] : ((id === 'validate_pages' && (damaged > 0 || integrity.some(i => i.status !== 'valid'))) || (id === 'decode_binary_logs' && missing > 0) || (id === 'group_transactions' && gaps > 0)))
           return <StageRow key={id} number={index + 3} label={label} status={warning ? 'warning' : status}
             summary={running ? 'Processing…' : status === 'succeeded' ? summaries[id] ?? `${attempt?.item_count ?? 0} objects` : status === 'skipped' ? 'Skipped' : status === 'pending' ? 'Pending' : status}
             attempt={attempt} attempts={stage?.attempts} />
@@ -225,7 +229,7 @@ export function PipelineScreen() {
           <dd className={'mt-0.5 font-mono text-[18px] font-semibold ' + (metric.tone ?? 'text-ink')}>{metric.value}</dd>
         </div>)}
       </dl>
-      <ExecutionLog tools={toolRuns} caseId={data.case.case_id} />
+      {data ? <ExecutionLog tools={toolRuns} caseId={data.case.case_id} /> : <p role="status">{state.analysisError ? 'Execution history unavailable until analysis loads.' : 'Loading execution history?'}</p>}
     </aside>
   </div>
 }

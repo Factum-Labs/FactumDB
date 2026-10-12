@@ -56,6 +56,22 @@ export default function App() {
   const displayName = useApp(s => s.settings?.profile?.display_name)
   const signOut = useApp(s => s.signOut)
   const data = useApp(s => s.data)
+  const preview = useApp(s => s.preview)
+  const activeCaseId = useApp(s => s.activeCaseId)
+  const cases = useApp(s => s.cases)
+  const analysisError = useApp(s => s.analysisError)
+  const previewError = useApp(s => s.previewError)
+  const retryCaseLoading = useApp(s => s.retryCaseLoading)
+  const prefetchCases = useApp(s => s.prefetchCases)
+  useEffect(() => {
+    if (!readyForPrefetch()) return
+    let active = true
+    const frame = requestAnimationFrame(() => requestAnimationFrame(() => { if (active) prefetchCases() }))
+    function readyForPrefetch() { return useApp.getState().ready && !!user && !locked }
+    return () => { active = false; cancelAnimationFrame(frame) }
+  }, [cases, user, locked, prefetchCases])
+  const caseMetadata = preview?.case ?? data?.case
+  const listedCase = cases.find(c => c.id === activeCaseId)
   const ready = useApp(s => s.ready)
   const busy = useApp(s => s.busy)
   const error = useApp(s => s.error)
@@ -79,8 +95,8 @@ export default function App() {
         <Logo size={26} />
         <div className="h-[14px] w-px bg-line" />
         <div className="flex items-center gap-[7px] text-[11.5px] text-muted">
-          <span className="font-mono text-ink">{data?.case.case_id ?? 'FactumDB'}</span>
-          <span>{data?.case.case_name ?? 'Select a case'}</span>
+          <span className="font-mono text-ink">{caseMetadata?.case_id ?? activeCaseId ?? 'FactumDB'}</span>
+          <span>{caseMetadata?.case_name ?? listedCase?.name ?? 'Select a case'}</span>
         </div>
         <div className="flex-1" />
         <div className="flex items-center gap-1.5 text-[11.5px] text-muted">
@@ -140,11 +156,16 @@ export default function App() {
 
           <div className={'min-h-0 flex-1 overflow-auto px-[18px] pt-4 ' + (screen === 'pipeline' ? 'flex flex-col pb-4' : 'pb-10')}>
             {error && <div role="alert" className="mb-4 whitespace-pre-wrap rounded border border-red-300 bg-red-50 p-3 text-xs text-red-800">{error}{!ready && <button onClick={() => { void initialize() }} className="ml-3 underline">Retry connection</button>}</div>}
+            {activeCaseId && preview && (previewError || analysisError) && ['intake', 'pipeline'].includes(screen) && <div role="alert" className="mb-4 text-xs">{previewError ?? analysisError}<button onClick={retryCaseLoading} className="ml-3 underline">Retry case loading</button></div>}
             {notice && <div role="status" className="mb-4 flex items-center gap-3 rounded border border-green-300 bg-green-50 p-3 text-xs text-green-800">
               <span>{notice}</span><button type="button" aria-label="Dismiss status message" className="ml-auto shrink-0 underline" onClick={() => useApp.setState({ notice: null })}>Dismiss</button>
             </div>}
             <div className={screen === 'pipeline' ? 'min-h-0 flex-1' : 'contents'}>
-              {ready ? <Screen /> : !error && <p className="text-sm text-muted">Connecting to the Python backend…</p>}
+              {ready ? (activeCaseId && !data && !['cases', 'settings', 'intake', 'pipeline'].includes(screen)
+                ? <div role={analysisError ? 'alert' : 'status'}>{analysisError ?? 'Loading case analysis?'}{analysisError && <button onClick={retryCaseLoading} className="ml-3 underline">Retry analysis</button>}</div>
+                : activeCaseId && !preview && !data && ['intake', 'pipeline'].includes(screen)
+                  ? <section className="rounded border border-line bg-panel p-4"><p>{listedCase?.name}</p><p>Examiner: {listedCase?.examiner}</p><p role={previewError ? 'alert' : 'status'}>{previewError ?? 'Loading registered evidence and pipeline?'}</p>{previewError && <button onClick={retryCaseLoading}>Retry preview</button>}</section>
+                  : <Screen />) : !error && <p className="text-sm text-muted">Connecting to the Python backend…</p>}
             </div>
           </div>
 

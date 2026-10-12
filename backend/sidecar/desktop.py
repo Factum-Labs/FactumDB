@@ -50,7 +50,7 @@ from sidecar.composition import (
 from sidecar.main import build_router
 from sidecar.native_verification import NativeVerificationBridge
 from sidecar.protocol import CommandRouter, SidecarRequest, serve
-from sidecar.views import analysis_detail, case_view
+from sidecar.views import analysis_detail, case_view, case_preview
 
 
 class DesktopRuntime:
@@ -197,6 +197,11 @@ class DesktopRuntime:
         self.session(response.case_id)
         return {"case_id": response.case_id}
 
+    def case_preview(self, payload):
+        case_id = _validate(payload, ("case_id",))["case_id"]
+        connection, stores, pipelines = self.session(case_id)
+        return case_preview(case_id, connection, stores, pipelines)
+
     def case_data(self, payload):
         case_id = _validate(payload, ("case_id",))["case_id"]
         connection, stores, pipelines = self.session(case_id)
@@ -246,14 +251,27 @@ class DesktopRuntime:
         kind = payload.get("kind")
         if kind not in {"history", "transaction", "comparison"}:
             raise ValueError("Unsupported analysis detail kind")
-        fields = (
-            ("case_id", "kind", "identity", "field")
-            if kind == "comparison"
-            else ("case_id", "kind", "identity")
-        )
+        fields = ("case_id", "kind", "identity", "field") if kind == "comparison" else ("case_id", "kind", "identity")
+        if kind == "history" and "qualified_table" in payload:
+            fields += ("qualified_table",)
         values = _validate(payload, fields)
         connection, _, _ = self.session(values["case_id"])
         return analysis_detail(connection, **values)
+
+    def history_query(self, command, payload):
+        from adapters.persistence.sqlite_history_summary_repository import HistorySummaries
+        allowed = {"case_id"} | ({"identity", "qualified_table"} if command == "locate" else {"database", "table", "offset", "limit", "include_details"} if command == "page" else set())
+        if set(payload) - allowed:
+            raise ValueError("Unsupported history query fields")
+        case_id = _validate({"case_id": payload.get("case_id")}, ("case_id",))["case_id"]
+        connection, _, _ = self.session(case_id)
+        repository = HistorySummaries(connection)
+        if command == "tables":
+            return repository.tables(case_id)
+        if command == "locate":
+            identity = _validate({"identity": payload.get("identity")}, ("identity",))["identity"]
+            return repository.locate(case_id, identity, payload.get("qualified_table"))
+        return repository.page(case_id, payload.get("database"), payload.get("table"), payload.get("offset", 0), payload.get("limit", 100), payload.get("include_details", False))
 
     def application_command(self, command, payload):
         values = _validate(payload, COMMAND_FIELDS[command])
@@ -511,7 +529,10 @@ class DesktopRuntime:
         router.register("list_cases", self.list_cases)
         router.register("delete_case", self.delete_case)
         router.register("get_case_data", self.case_data)
+        router.register("get_case_preview", self.case_preview)
         router.register("get_analysis_detail", self.analysis_detail)
+        for name, kind in (("get_history_tables", "tables"), ("get_history_page", "page"), ("locate_history_record", "locate")):
+            router.register(name, lambda payload, kind=kind: self.history_query(kind, payload))
         router.register("save_case_notes", self.save_case_notes)
         router.register("get_settings", self.get_settings)
         router.register("configure_settings", self.configure)

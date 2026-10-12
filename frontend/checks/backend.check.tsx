@@ -71,6 +71,11 @@ mockIPC((command, args) => {
   })
 })
 
+async function analysisReady() {
+  const until = Date.now() + 15000
+  while (!useApp.getState().data && !useApp.getState().analysisError && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 10))
+  assert.ok(useApp.getState().data, useApp.getState().analysisError ?? useApp.getState().previewError ?? 'Analysis did not load')
+}
 let copy: string | undefined
 const deadline = setTimeout(() => { child.kill(); throw new Error('Frontend integration check timed out') }, 30_000)
 const originalSnapshotHook = React.useSyncExternalStore
@@ -86,6 +91,7 @@ try {
   assert.equal(await useApp.getState().authenticate('UIExaminer', 'UI examiner password 123', 'UI examiner password 123'), true)
   assert.equal(useApp.getState().ready, true, useApp.getState().error ?? '')
   assert.equal(await useApp.getState().createCase('UI integration'), true)
+  await analysisReady()
   const caseId = useApp.getState().data!.case.case_id
   assert.equal(useApp.getState().data!.case.examiner, 'UIExaminer')
   await useApp.getState().settingsCommand('configure_profile', { display_name: 'UI Examiner', organization: 'Test lab', examiner_id: 'EX-1' })
@@ -101,23 +107,30 @@ try {
   assert.equal(await useApp.getState().unlockSession('incorrect'), false)
   assert.equal(useApp.getState().locked, true)
   assert.equal(await useApp.getState().unlockSession('UI examiner password 123'), true)
+  await analysisReady()
   assert.equal(useApp.getState().data!.case.case_id, caseId)
   const tablespace = join(workspace, 'accounts.ibd')
   const log = join(workspace, 'binlog.000001')
   writeFileSync(tablespace, 'test tablespace')
   writeFileSync(log, 'test binary log')
   assert.equal(await useApp.getState().registerEvidence([tablespace, log]), true)
+  await analysisReady()
   const evidence = useApp.getState().data!.tables.evidence_files[0]
   await useApp.getState().verifyEvidence(String(evidence.evidence_id))
+  await analysisReady()
   assert.equal(useApp.getState().data!.tables.evidence_files[0].verification_status, 'verified')
   copy = String(useApp.getState().data!.tables.evidence_files[0].working_copy_path)
   const cancelledWork = useApp.getState().runAllStages()
   await useApp.getState().cancelPipeline()
   await cancelledWork
+  await analysisReady()
   assert.equal(useApp.getState().data!.run!.stopped, true)
   assert.ok(useApp.getState().data!.run!.stages.some(s => s.status === 'cancelled'))
   await useApp.getState().resetPipeline()
+  await analysisReady()
+  await analysisReady()
   await useApp.getState().runAllStages()
+  await analysisReady()
   assert.equal(useApp.getState().pipelineComplete, true, useApp.getState().error ?? '')
   assert.equal(useApp.getState().stagesDone, 10)
   assert.equal(useApp.getState().notice, 'Analysis complete. Results are saved in the case database.')
@@ -125,13 +138,20 @@ try {
   await useApp.getState().exportCase(exportPath)
   assert.ok(existsSync(exportPath))
   await useApp.getState().verifyEvidence('missing')
+  await analysisReady()
   assert.match(useApp.getState().error!, /NotFoundError/)
   assert.equal(useApp.getState().busy, false)
   await useApp.getState().resetPipeline()
+  await analysisReady()
+  await analysisReady()
   await useApp.getState().cancelPipeline()
+  await analysisReady()
   assert.equal(useApp.getState().data!.run!.stopped, true)
   assert.ok(useApp.getState().data!.run!.stages.every(s => s.status === 'cancelled'))
   await useApp.getState().openCase(caseId)
+  await analysisReady()
+  await analysisReady()
+  await analysisReady()
   assert.equal(useApp.getState().data!.case.case_name, 'UI integration')
   const seeded = await request<CaseData>('seed_test_results', { case_id: caseId })
   assert.equal(seeded.tables.analysis_results.length, 0)
@@ -152,7 +172,17 @@ try {
   }
   // Server rendering has no effects. Fetch selected details through the same
   // IPC used by the screens, then render their loaded states.
-  const historySummary = (seeded.analysis.reconstruction.histories as Row[])[0]
+  const historyPage = await request<{ items: Row[] }>('get_history_page', { case_id: seeded.case.case_id })
+  const historySummary = historyPage.items[0]
+  const choices = await request<{ tables: { database: string; table: string; count: number }[]; total: number }>('get_history_tables', { case_id: caseId })
+  assert.equal(choices.total, seeded.analysis.reconstruction.history_count)
+  const choice = choices.tables[0]
+  const filtered = await request<{ items: Row[]; total: number }>('get_history_page', { case_id: caseId, database: choice.database, table: choice.table, limit: 100 })
+  assert.equal(filtered.total, choice.count)
+  assert.ok(filtered.items.every(item => (item.record as Row).table === choice.table))
+  const located = await request<{ table: string; offset: number }>('locate_history_record', { case_id: caseId, identity: (historySummary.record as Row).id, qualified_table: (historySummary.record as Row).table })
+  assert.equal(located.table, (historySummary.record as Row).table)
+  assert.equal(located.offset, 0)
   const transactionSummary = (seeded.analysis.grouping.transactions as Row[])[0]
   const history = await request<{ detail: Row; findings: Row[] }>('get_analysis_detail', {
     case_id: caseId, kind: 'history', identity: (historySummary.record as Row).id,
@@ -160,6 +190,9 @@ try {
   const transaction = await request<{ detail: Row }>('get_analysis_detail', {
     case_id: caseId, kind: 'transaction', identity: transactionSummary.id,
   })
+  const bundled = await request<{ items: { summary: Row; detail: Row; findings: Row[] }[] }>('get_history_page', { case_id: caseId, include_details: true })
+  assert.deepEqual(bundled.items[0].detail, history.detail)
+  assert.deepEqual(bundled.items[0].findings, history.findings)
   seeded.analysis.reconstruction = { ...seeded.analysis.reconstruction, histories: [history.detail], details_deferred: false }
   seeded.analysis.grouping = { ...seeded.analysis.grouping, transactions: [transaction.detail], details_deferred: false }
   seeded.findings.push(...history.findings)
@@ -191,6 +224,9 @@ try {
   assert.equal(await useApp.getState().authenticate('UIExaminer', 'bad password 123'), false)
   assert.equal(await useApp.getState().authenticate('UIExaminer', 'UI examiner password 123'), true)
   await useApp.getState().openCase(caseId)
+  await analysisReady()
+  await analysisReady()
+  await analysisReady()
   assert.equal(useApp.getState().data!.case.case_id, caseId)
   assert.equal(useApp.getState().settings!.profile!.organization, 'Test lab')
   await useApp.getState().settingsCommand('change_password', { current_password: 'UI examiner password 123', new_password: 'Changed UI password 456', password_confirmation: 'Changed UI password 456' })
@@ -199,6 +235,9 @@ try {
   assert.equal(await useApp.getState().authenticate('UIExaminer', 'UI examiner password 123'), false)
   assert.equal(await useApp.getState().authenticate('UIExaminer', 'Changed UI password 456'), true)
   await useApp.getState().openCase(caseId)
+  await analysisReady()
+  await analysisReady()
+  await analysisReady()
   const deletedName = useApp.getState().cases.find(item => item.id === caseId)!.name
   assert.equal(await useApp.getState().deleteCase(caseId, 'Wrong confirmation'), false)
   assert.equal(useApp.getState().data!.case.case_id, caseId)
