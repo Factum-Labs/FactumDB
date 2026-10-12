@@ -1,0 +1,92 @@
+[
+  {
+    "records": 2500,
+    "updates_per_record": 0,
+    "comparisons": 12500,
+    "repetitions": 5,
+    "legacy": {
+      "json_bytes": 26527135,
+      "encoding_ms": 4052.479,
+      "write_ms": 530.024,
+      "load_ms": 8221.514,
+      "preview_ms": 480.195,
+      "detail_ms": 248.33
+    },
+    "compact": {
+      "json_bytes": 12460754,
+      "encoding_ms": 1203.39,
+      "write_ms": 232.98,
+      "load_ms": 3768.201,
+      "preview_ms": 296.03,
+      "detail_ms": 193.54
+    },
+    "compact_vs_legacy": {
+      "json_bytes": 0.4697,
+      "encoding_ms": 0.297,
+      "write_ms": 0.4396,
+      "load_ms": 0.4583,
+      "preview_ms": 0.6165,
+      "detail_ms": 0.7794
+    }
+  },
+  {
+    "records": 10000,
+    "updates_per_record": 0,
+    "comparisons": 50000,
+    "repetitions": 5,
+    "legacy": {
+      "json_bytes": 106403408,
+      "encoding_ms": 15873.632,
+      "write_ms": 2222.684,
+      "load_ms": 36365.767,
+      "preview_ms": 2586.859,
+      "detail_ms": 1522.866
+    },
+    "compact": {
+      "json_bytes": 50073687,
+      "encoding_ms": 6958.094,
+      "write_ms": 1279.342,
+      "load_ms": 18479.601,
+      "preview_ms": 1321.42,
+      "detail_ms": 788.983
+    },
+    "compact_vs_legacy": {
+      "json_bytes": 0.4706,
+      "encoding_ms": 0.4383,
+      "write_ms": 0.5756,
+      "load_ms": 0.5082,
+      "preview_ms": 0.5108,
+      "detail_ms": 0.5181
+    }
+  },
+  {
+    "records": 250,
+    "updates_per_record": 40,
+    "comparisons": 1250,
+    "repetitions": 5,
+    "legacy": {
+      "json_bytes": 5893278,
+      "encoding_ms": 684.054,
+      "write_ms": 109.001,
+      "load_ms": 1850.943,
+      "preview_ms": 135.535,
+      "detail_ms": 80.085
+    },
+    "compact": {
+      "json_bytes": 2863479,
+      "encoding_ms": 326.607,
+      "write_ms": 60.772,
+      "load_ms": 893.013,
+      "preview_ms": 74.731,
+      "detail_ms": 46.58
+    },
+    "compact_vs_legacy": {
+      "json_bytes": 0.4859,
+      "encoding_ms": 0.4775,
+      "write_ms": 0.5575,
+      "load_ms": 0.4825,
+      "preview_ms": 0.5514,
+      "detail_ms": 0.5816
+    }
+  }
+]
