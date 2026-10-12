@@ -25,6 +25,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 from adapters.persistence._results import decode, encode
+from adapters.persistence._reconciliation import decode_reconciliation, encode_reconciliation
 from adapters.persistence._timestamps import to_text
 from adapters.persistence.sqlite_evidence_normalizer import scoped_evidence
 from core.application.errors import NotFoundError, PrerequisiteError
@@ -133,6 +134,8 @@ class SqliteDomainRepository:
 
     def _save(self, case_id: str, stage: str, result) -> None:
         later = STAGES[STAGES.index(stage) + 1:]
+        payload = json.dumps(encode_reconciliation(result) if stage == "reconciliation"
+                             else encode(result))
         with self._connection:
             if later:
                 self._connection.execute(
@@ -143,7 +146,7 @@ class SqliteDomainRepository:
             self._connection.execute(
                 "INSERT OR REPLACE INTO analysis_results "
                 "(case_id, stage, result_json, saved_at) VALUES (?, ?, ?, ?)",
-                (case_id, stage, json.dumps(encode(result)), to_text(self._now())),
+                (case_id, stage, payload, to_text(self._now())),
             )
             if stage == "reconstruction":
                 from adapters.persistence.sqlite_history_summary_repository import HistorySummaries
@@ -156,7 +159,10 @@ class SqliteDomainRepository:
             "SELECT result_json FROM analysis_results WHERE case_id = ? AND stage = ?",
             (case_id, stage),
         ).fetchone()
-        return decode(json.loads(row["result_json"]), result_type) if row else None
+        if row is None:
+            return None
+        data = json.loads(row["result_json"])
+        return decode_reconciliation(data) if stage == "reconciliation" else decode(data, result_type)
 
 
 # ── The domain ports, over one case's normalized evidence ───────────────────

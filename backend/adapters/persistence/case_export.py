@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from adapters.persistence._timestamps import to_text
+from adapters.persistence._reconciliation import expand_reconciliation
 from adapters.persistence.export_redaction import redact_document
 from adapters.persistence.export_sections import select_sections, validate_sections
 from adapters.persistence.sqlite_report_repository import SqliteReportRepository
@@ -81,6 +82,9 @@ def case_export(connection, case_id: str, *, now=_utc_now) -> dict:
         name: [_row(row) for row in connection.execute(sql, (case_id,)).fetchall()]
         for name, sql in _TABLES
     }
+    for result in tables["analysis_results"]:
+        if result["stage"] == "reconciliation":
+            result["result"] = expand_reconciliation(result["result"])
     # Desktop orchestration adds this table to existing case databases. Older
     # standalone databases remain exportable without a migration.
     if connection.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'pipeline_runs'").fetchone():
