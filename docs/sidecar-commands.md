@@ -111,7 +111,7 @@ with `step_count`, and all comparison rows' display fields. Each stage sets
 `field`. The response contains the complete saved `detail` and described
 `findings`; histories also include the observed binlog `events` for their steps.
 Details are scoped to the requested case. Full evidence, analysis, informational
-findings, exact tagged values, and provenance remain in JSON/CSV exports.
+findings, exact tagged values, and provenance remain in JSON/PDF exports.
 
 This keeps opening cases and refreshing pipeline progress from transferring
 hundreds of megabytes of duplicated nested findings. Frontends should request

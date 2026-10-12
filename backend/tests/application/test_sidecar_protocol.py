@@ -56,7 +56,7 @@ class SidecarProtocolTests(unittest.TestCase):
         router.register("fail", fail)
         response = router.dispatch(SidecarRequest("req-1", "fail", {}))
         self.assertEqual(response.error_code, "RuntimeError")
-        self.assertEqual(response.error_message, "adapter unavailable")
+        self.assertEqual(response.error_message, "The operation failed. Check the selected evidence and tool settings.")
 
 
 if __name__ == "__main__":

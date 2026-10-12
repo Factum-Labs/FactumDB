@@ -130,7 +130,7 @@ class OrchestratorTests(unittest.TestCase):
         failed = run.state_for(STAGES[1])
         self.assertEqual(failed.status, StageStatus.FAILED)
         self.assertEqual(failed.attempts[-1].error_code, "RuntimeError")
-        self.assertEqual(failed.attempts[-1].error_message, "controlled failure")
+        self.assertEqual(failed.attempts[-1].error_message, "The operation failed. Check the selected evidence and tool settings.")
         self.assertEqual(run.state_for(STAGES[2]).status, StageStatus.PENDING)
 
     def test_retry_retains_failed_attempt_and_then_completes(self) -> None:

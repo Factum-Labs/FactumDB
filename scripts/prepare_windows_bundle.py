@@ -9,6 +9,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+from prepare_pdf_dependencies import stage_pdf_dependencies
+
 ROOT = Path(__file__).resolve().parent.parent
 LOCK = ROOT / "scripts/windows-bundle.lock.json"
 CACHE = ROOT / ".bundle-cache"
@@ -75,9 +77,11 @@ def prepare(record=False):
         shutil.rmtree(RUNTIME)
     RUNTIME.mkdir(parents=True, exist_ok=True)
     extract(archives["python"], RUNTIME / "python")
+    stage_pdf_dependencies(RUNTIME, windows=True)
     # Python's isolated runtime ignores PYTHONPATH. Backend startup inserts its
     # resource path explicitly; ibd2sql needs its package in this fixed search path.
-    (RUNTIME / "python/python313._pth").write_text("python313.zip\n.\n../ibd2sql\n", encoding="utf-8")
+    (RUNTIME / "python/python313._pth").write_text(
+        "python313.zip\n.\n../ibd2sql\n../python-packages\n", encoding="utf-8")
     extract(archives["ibd2sql"], RUNTIME / "ibd2sql", strip=1)
     prefix = f"mysql-{lock['mysql']['version']}-winx64/"
     extract(archives["mysql"], RUNTIME / "mysql", strip=1, include=lambda name:
@@ -98,6 +102,11 @@ def prepare(record=False):
         "https://visualstudio.microsoft.com/license-terms/vs2022-ga-diagnosticbuildtools/\n"
         "Pinned download and runtime SHA-256 hashes are in manifest.json.\n",
         encoding="utf-8")
+    with (RUNTIME / "THIRD-PARTY-NOTICES.txt").open("a", encoding="utf-8") as out:
+        out.write("PDF: fpdf2 (LGPL-3.0), uharfbuzz, Pillow, fonttools, defusedxml.\n"
+                  "Versions and wheel names: python-packages/factumdb-pdf.json.\n"
+                  "Unmodified library sources and licenses: python-packages/ and *.dist-info/.\n"
+                  "Bundled font licenses: backend/adapters/persistence/fonts/.\n")
     sources = RESOURCES / "sources"
     sources.mkdir(parents=True, exist_ok=True)
     for name in ("mysql_source", "ibd2sql"):

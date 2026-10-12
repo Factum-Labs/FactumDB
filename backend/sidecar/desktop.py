@@ -1,14 +1,19 @@
 """Configured desktop entry point. Owns a catalog and one database per case."""
 
 import argparse
+import base64
+import hashlib
 import json
 import os
 import shutil
+import sqlite3
 import stat
 import sys
 import tempfile
+import threading
 import time
 import uuid
+from functools import wraps
 from pathlib import Path
 
 from adapters.filesystem import (
@@ -24,11 +29,18 @@ from adapters.filesystem.workspace_backup import (
     digest,
     inspect_backup,
     rebase_and_validate,
+    require_backup_owner,
     usage,
 )
-from adapters.persistence.case_export import write_csv, write_json
+from adapters.persistence.case_export import write_json
+from adapters.persistence.investigator_export import prepare_projection_steps
+from adapters.persistence.pdf_report import write_pdf
+from adapters.persistence.summary_report import (
+    SummaryProjection, export_definitions, prepare_summary_steps,
+)
 from adapters.persistence.sqlite_accounts import SqliteAccountStore
 from adapters.persistence.sqlite_case_repository import SqliteCaseRepository
+from adapters.persistence.sqlite_case_ownership import SqliteCaseOwnership
 from adapters.persistence.sqlite_database import open_case_database
 from adapters.persistence.sqlite_integration import build_sqlite_application_stores
 from adapters.persistence.sqlite_pipeline_repository import SqlitePipelineRepository
@@ -53,6 +65,14 @@ from sidecar.protocol import CommandRouter, SidecarRequest, serve
 from sidecar.views import analysis_detail, case_view, case_preview
 
 
+def preview_locked(method):
+    @wraps(method)
+    def locked(self, *args, **kwargs):
+        with self._preview_lock:
+            return method(self, *args, **kwargs)
+    return locked
+
+
 class DesktopRuntime:
     def __init__(self, root, *, device=None):
         self.root = Path(root).expanduser().resolve()
@@ -62,10 +82,15 @@ class DesktopRuntime:
             SqliteAccountStore(self.catalog), device or device_security()
         )
         self.cases = SqliteCaseRepository(self.catalog)
+        self.ownership = SqliteCaseOwnership(self.catalog)
         self.workspace = FilesystemCaseWorkspace(self.root / "cases")
         self.ids, self.clock = UuidGenerator(), UtcClock()
         self.hasher = Sha256FileHasher()
         self.sessions = {}
+        self.export_preview = None
+        self.export_preparation = None
+        self._preview_lock = threading.RLock()
+        self._preview_timer = None
         self.settings = {
             "innochecksum_path": os.environ.get("FACTUMDB_INNOCHECKSUM_PATH", "innochecksum"),
             "ibd2sdi_path": os.environ.get("FACTUMDB_IBD2SDI_PATH", "ibd2sdi"),
@@ -104,13 +129,40 @@ class DesktopRuntime:
                 }
             self.settings.update({k: v for k, v in saved.items() if k in self.settings})
 
+    @preview_locked
     def close(self):
+        self._clear_export_preview()
         for connection, *_ in self.sessions.values():
             connection.close()
         self.catalog.close()
 
+    @preview_locked
+    def _clear_export_preview(self):
+        if self._preview_timer is not None:
+            self._preview_timer.cancel()
+            self._preview_timer = None
+        if self.export_preview is not None:
+            document = self.export_preview.get("document")
+            if hasattr(document, "close"):
+                document.close()
+        self.export_preview = None
+        if self.export_preparation is not None:
+            try:
+                self.export_preparation["steps"].close()
+            finally:
+                self.export_preparation["read_connection"].close()
+            self.export_preparation = None
+
+    @preview_locked
+    def _expire_export_preview(self):
+        active = self.export_preparation or self.export_preview
+        if active is not None and active["expires"] <= time.monotonic():
+            self._clear_export_preview()
+
+
     def session(self, case_id):
         safe_component(case_id, "case id")
+        self.ownership.require_owner(case_id, self.auth.require_actor()["actor_id"])
         case = self.cases.get(case_id)
         if case is None:
             raise NotFoundError(f"case not found: {case_id}")
@@ -160,11 +212,11 @@ class DesktopRuntime:
 
     def list_cases(self, payload):
         _validate(payload, ())
-        rows = self.catalog.execute("SELECT case_id FROM cases ORDER BY created_at DESC").fetchall()
+        case_ids = self.ownership.case_ids(self.auth.require_actor()["actor_id"])
         result = []
-        for row in rows:
-            _, stores, pipelines = self.session(row["case_id"])
-            case = stores.cases.get(row["case_id"])
+        for case_id in case_ids:
+            _, stores, pipelines = self.session(case_id)
+            case = stores.cases.get(case_id)
             run = pipelines.latest_for_case(case.id)
             result.append(
                 {
@@ -194,6 +246,7 @@ class DesktopRuntime:
         response = CreateCaseUseCase(self.cases, self.workspace, self.ids, self.clock).execute(
             CreateCaseRequest(**values),
         )
+        self.ownership.assign(response.case_id, self.auth.require_actor()["actor_id"])
         self.session(response.case_id)
         return {"case_id": response.case_id}
 
@@ -211,6 +264,7 @@ class DesktopRuntime:
         self.auth.require_user()
         values = _validate(payload, ("case_id", "confirmation"))
         case_id = safe_component(values["case_id"], "case id")
+        self.ownership.require_owner(case_id, self.auth.require_actor()["actor_id"])
         case = self.cases.get(case_id)
         if case is None:
             raise NotFoundError(f"case not found: {case_id}")
@@ -288,7 +342,13 @@ class DesktopRuntime:
             )
             if case_id is None:
                 raise NotFoundError(f"pipeline run not found: {values['run_id']}")
-        connection, _, pipelines = self.session(case_id)
+        connection, stores, pipelines = self.session(case_id)
+        if command == "register_evidence":
+            self._require_owned_path(values["source_path"])
+        elif command == "verify_evidence":
+            evidence = stores.evidence.get(case_id, values["evidence_id"])
+            if evidence is not None:
+                self._require_owned_path(evidence.source_path)
         if "run_id" in values and command != "get_pipeline_status":
             latest = pipelines.latest_for_case(case_id)
             if latest is None or latest.id != values["run_id"]:
@@ -346,12 +406,18 @@ class DesktopRuntime:
         _validate(payload, ())
         user = self.auth.require_user()
         details = self.auth.accounts.details(user["username"].lower())
+        try:
+            self._require_exclusive_workspace()
+            workspace_operations_available = True
+        except PermissionError:
+            workspace_operations_available = False
         return {
             "workspace": str(self.root),
             "tools": self.settings,
             "bundled_tools": self.bundled_tools,
             "profile": details["profile"],
             "preferences": {**DEFAULTS, **details["preferences"]},
+            "workspace_operations_available": workspace_operations_available,
         }
 
     def configure_preferences(self, payload):
@@ -375,17 +441,40 @@ class DesktopRuntime:
 
     def storage_usage(self, payload):
         _validate(payload, ())
-        return usage(self.root)
+        return usage(
+            self.root, case_ids=self.ownership.case_ids(self.auth.require_actor()["actor_id"]),
+        )
+
+    def _require_owned_path(self, path):
+        resolved = Path(path).expanduser().resolve()
+        if resolved.is_relative_to(self.root):
+            relative = resolved.relative_to(self.root)
+            if len(relative.parts) < 2 or relative.parts[0] != "cases":
+                raise PermissionError("This path is not in an owned case.")
+            self.ownership.require_owner(relative.parts[1], self.auth.require_actor()["actor_id"])
+
+    def _require_exclusive_workspace(self):
+        self.ownership.require_exclusive_workspace(self.auth.require_actor()["actor_id"])
+
+    def workspace_folder(self, payload):
+        _validate(payload, ())
+        self._require_exclusive_workspace()
+        return {"workspace": str(self.root)}
 
     def backup_workspace(self, payload):
+        self._require_exclusive_workspace()
         path = _validate(payload, ("path",))["path"]
         self.ensure_storage_idle()
         return create_backup(self.root, path)
 
     def inspect_workspace_backup(self, payload):
+        self._require_exclusive_workspace()
         path = _validate(payload, ("path",))["path"]
         checksum = digest(path)
         manifest = inspect_backup(path)
+        require_backup_owner(
+            path, self.auth.accounts.find(self.auth.require_user()["username"].lower()),
+        )
         if digest(path) != checksum:
             raise ConflictError("Backup changed while it was being verified. Select it again.")
         return {
@@ -397,6 +486,7 @@ class DesktopRuntime:
         }
 
     def ensure_storage_idle(self):
+        self._require_exclusive_workspace()
         for row in self.catalog.execute("SELECT case_id FROM cases"):
             _, _, pipelines = self.session(row[0])
             run = pipelines.latest_for_case(row[0])
@@ -406,6 +496,7 @@ class DesktopRuntime:
                 )
 
     def restore_workspace(self, payload):
+        self._require_exclusive_workspace()
         values = _validate(payload, ("path", "sha256", "current_password"))
         self.auth.verify_password(values["current_password"])
         self.ensure_storage_idle()
@@ -420,6 +511,9 @@ class DesktopRuntime:
             staging = Path(temporary) / "workspace"
             staging.mkdir()
             manifest = inspect_backup(values["path"], extract_to=staging)
+            require_backup_owner(
+                values["path"], self.auth.accounts.find(self.auth.require_user()["username"].lower()),
+            )
             if digest(values["path"]) != values["sha256"]:
                 raise ConflictError("Backup changed during restore. Select it again.")
             rebase_and_validate(staging, manifest["workspace"], root, device.identity())
@@ -444,21 +538,255 @@ class DesktopRuntime:
                 raise
         return {"rollback_path": str(rollback), "restored": True}
 
-    def export(self, payload):
-        values = _validate(payload, ("case_id", "format", "path"))
-        connection, _, pipelines = self.session(values["case_id"])
-        run = pipelines.latest_for_case(values["case_id"])
+    def _export_options(self, payload, *, destination=False):
+        required = ("case_id", "format", "path") if destination else ("case_id", "format")
+        values = _validate(
+            {k: v for k, v in payload.items() if k not in {"redacted", "sections", "preview_token", "profile"}},
+            required,
+        )
+        redacted = payload.get("redacted", True)
+        if not isinstance(redacted, bool):
+            raise ValueError("redacted must be a boolean")
+        if values["format"] not in {"JSON", "PDF"}:
+            raise ValueError("Supported export formats are JSON and PDF")
+        detail = "full" if values["format"] == "JSON" else "summary"
+        if "profile" in payload and payload["profile"] != detail:
+            raise ValueError("Report detail is fixed by the export format")
+        if payload.get("sections") is not None:
+            raise ValueError("Section selection is unavailable: JSON is complete and PDF is a summary")
+        return values, {"redacted": redacted}
+
+    def export_definitions(self, payload):
+        if payload:
+            raise ValueError("Export definitions take no arguments")
+        return export_definitions()
+
+    def _prepare_report_steps(self, connection, case_id, format, settings, options):
+        document = None
+        try:
+            if format == "JSON":
+                document = yield from prepare_projection_steps(
+                    connection, case_id, profile="full", **settings, **options
+                )
+            else:
+                document = yield from prepare_summary_steps(connection, case_id, **settings, **options)
+                yield from document.prepare_pdf_steps()
+            return document
+        except BaseException:
+            if document is not None:
+                document.close()
+            raise
+
+    def _export_source(self, case_id):
+        connection, _, pipelines = self.session(case_id)
+        run = pipelines.latest_for_case(case_id)
         if run is None or not run.complete:
             raise PrerequisiteError("Complete the analysis before exporting results.")
         settings = self.get_settings({})
-        options = {"preferences": settings["preferences"], "examiner_profile": settings["profile"]}
+        return connection, {"preferences": settings["preferences"], "examiner_profile": settings["profile"]}
+
+    def _export_fingerprint(self, connection, case_id, settings):
+        value = {"connection": id(connection), "case_id": case_id,
+                 "data_version": connection.execute("PRAGMA data_version").fetchone()[0],
+                 "total_changes": connection.total_changes, "settings": settings,
+                 "actor": self.auth.require_actor()["actor_id"]}
+        return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+
+    @preview_locked
+    def preview_export(self, payload):
+        progressive = payload.get("progressive", False)
+        if not isinstance(progressive, bool):
+            raise ValueError("progressive must be a boolean")
+        payload = {k: v for k, v in payload.items() if k != "progressive"}
+        values, options = self._export_options(payload)
+        connection, settings = self._export_source(values["case_id"])
+        self._clear_export_preview()
+        fingerprint = self._export_fingerprint(connection, values["case_id"], settings)
+        if progressive:
+            database = connection.execute("PRAGMA database_list").fetchone()[2]
+            read_connection = sqlite3.connect(
+                Path(database).as_uri() + "?mode=ro", uri=True, check_same_thread=False
+            )
+            read_connection.row_factory = sqlite3.Row
+            read_connection.execute("PRAGMA query_only=ON")
+            read_connection.execute("PRAGMA cache_size=-2048")
+            self.export_preparation = {
+                "token": uuid.uuid4().hex, "case_id": values["case_id"],
+                "format": values["format"], "options": options, "fingerprint": fingerprint,
+                "expires": time.monotonic() + 600,
+                "read_connection": read_connection,
+                "steps": self._prepare_report_steps(read_connection, values["case_id"],
+                                                     values["format"], settings, options),
+            }
+            self._preview_timer = threading.Timer(600, self._expire_export_preview)
+            self._preview_timer.daemon = True
+            self._preview_timer.start()
+            return {"preparation_token": self.export_preparation["token"],
+                    "stage": "starting", "processed": 0}
+        steps = self._prepare_report_steps(connection, values["case_id"], values["format"], settings, options)
+        while True:
+            try:
+                next(steps)
+            except StopIteration as completed:
+                document = completed.value
+                break
+        try:
+            if fingerprint != self._export_fingerprint(connection, values["case_id"], settings):
+                raise PrerequisiteError("Case data changed; refresh the export preview")
+        except BaseException:
+            document.close()
+            raise
+        self.export_preview = {
+            "token": uuid.uuid4().hex, "case_id": values["case_id"],
+            "format": values["format"], "options": options, "document": document,
+            "expires": time.monotonic() + 600, "fingerprint": fingerprint,
+        }
+        self._preview_timer = threading.Timer(600, self._expire_export_preview)
+        self._preview_timer.daemon = True
+        self._preview_timer.start()
+        return self._preview_page(1)
+
+    @preview_locked
+    def export_preview_status(self, payload):
+        if set(payload) != {"preparation_token"}:
+            raise ValueError("Invalid preview preparation request")
+        job = self.export_preparation
+        if job is None or job["token"] != payload["preparation_token"]:
+            raise PrerequisiteError("Refresh the export preview")
+        connection, settings = self._export_source(job["case_id"])
+        if job["fingerprint"] != self._export_fingerprint(connection, job["case_id"], settings):
+            self._clear_export_preview()
+            raise PrerequisiteError("Case data changed; refresh the export preview")
+        deadline = time.monotonic() + 0.15
+        document = None
+        try:
+            while True:
+                try:
+                    progress = next(job["steps"])
+                except StopIteration as completed:
+                    document = completed.value
+                    break
+                if time.monotonic() >= deadline:
+                    return {"preparation_token": job["token"], **progress}
+            if job["fingerprint"] != self._export_fingerprint(connection, job["case_id"], settings):
+                raise PrerequisiteError("Case data changed; refresh the export preview")
+        except BaseException:
+            if document is not None:
+                document.close()
+            self._clear_export_preview()
+            raise
+        job["read_connection"].close()
+        self.export_preparation = None
+        if self._preview_timer is not None:
+            self._preview_timer.cancel()
+        self.export_preview = {k: v for k, v in job.items() if k not in {"steps", "read_connection"}}
+        self.export_preview.update(document=document, expires=time.monotonic() + 600)
+        self._preview_timer = threading.Timer(600, self._expire_export_preview)
+        self._preview_timer.daemon = True
+        self._preview_timer.start()
+        return self._preview_page(1)
+
+    @preview_locked
+    def cancel_export_preview(self, payload):
+        if set(payload) != {"preparation_token"}:
+            raise ValueError("Invalid preview cancellation request")
+        active = self.export_preparation or self.export_preview
+        if active and active["token"] == payload["preparation_token"]:
+            self._clear_export_preview()
+        return {"cancelled": True}
+
+    @preview_locked
+    def _preview_page(self, page):
+        preview = self.export_preview
+        if preview is None or preview["expires"] < time.monotonic():
+            self._clear_export_preview()
+            raise PrerequisiteError("Refresh the export preview")
+        document = preview["document"]
+        pages = document.pages if isinstance(document, SummaryProjection) else 1
+        if not isinstance(page, int) or isinstance(page, bool) or not 1 <= page <= pages:
+            raise ValueError("Invalid preview page")
+        return {"preview_token": preview["token"], "page": page, "pages": pages,
+                "pages_complete": True,
+                "has_more": page < pages,
+                "detail": "summary" if isinstance(document, SummaryProjection) else "full",
+                "counts": document.metadata["counts"],
+                "classification_totals": document.metadata.get("classification_totals"),
+                "size_bytes": document.pdf_size if isinstance(document, SummaryProjection) else document.json_size,
+                "manifest": {k: document.metadata[k] for k in (
+                    "case_id", "exported_at", "engine_revision", "analysis_format_version"
+                )},
+                "format": preview["format"], "redacted": preview["options"]["redacted"]}
+
+    @preview_locked
+    def export_preview_pdf(self, payload):
+        if set(payload) != {"preview_token", "offset", "length"}:
+            raise ValueError("Invalid PDF preview request")
+        self.export_preview_page({"preview_token": payload["preview_token"], "page": 1})
+        document = self.export_preview["document"]
+        if not isinstance(document, SummaryProjection):
+            raise ValueError("This preview is not a PDF")
+        offset, length = payload["offset"], payload["length"]
+        if (not isinstance(offset, int) or isinstance(offset, bool) or
+                not isinstance(length, int) or isinstance(length, bool) or
+                not 0 <= offset < document.pdf_size or not 1 <= length <= 262144):
+            raise ValueError("Invalid PDF preview byte range")
+        with document.pdf_path.open("rb") as source:
+            source.seek(offset)
+            content = source.read(length)
+        return {"offset": offset, "total_bytes": document.pdf_size,
+                "data": base64.b64encode(content).decode("ascii")}
+
+    @preview_locked
+    def export_preview_page(self, payload):
+        if set(payload) != {"preview_token", "page"}:
+            raise ValueError("Invalid preview request")
+        preview = self.export_preview
+        if preview is None or payload["preview_token"] != preview["token"]:
+            raise PrerequisiteError("Refresh the export preview")
+        connection, settings = self._export_source(preview["case_id"])
+        if preview["fingerprint"] != self._export_fingerprint(connection, preview["case_id"], settings):
+            self._clear_export_preview()
+            raise PrerequisiteError("Case data changed; refresh the export preview")
+        return self._preview_page(payload["page"])
+
+    @preview_locked
+    def export(self, payload):
+        values, options = self._export_options(payload, destination=True)
+        connection, settings = self._export_source(values["case_id"])
+        self._require_owned_path(values["path"])
+        actor = self.auth.require_actor()
+        document = None
+        if "preview_token" in payload:
+            preview = self.export_preview
+            if (preview is None or payload["preview_token"] != preview["token"]
+                    or preview["expires"] < time.monotonic()
+                    or preview["case_id"] != values["case_id"]
+                    or preview["format"] != values["format"] or preview["options"] != options
+                    or preview["fingerprint"] != self._export_fingerprint(connection, values["case_id"], settings)):
+                raise PrerequisiteError("Refresh the export preview before exporting")
+            document = preview["document"]
+        options = {**settings, **options, "prepared_document": document}
         if values["format"] == "JSON":
-            path = write_json(connection, values["case_id"], values["path"], **options)
-        elif values["format"] == "CSV":
-            write_csv(connection, values["case_id"], values["path"], **options)
-            path = Path(values["path"])
+            path = write_json(connection, values["case_id"], values["path"], profile="full", **options, **actor)
         else:
-            raise ValueError("Supported export formats are JSON and CSV")
+            if document is None:
+                options.pop("prepared_document")
+                options.pop("prepared_document", None)
+                steps = self._prepare_report_steps(connection, values["case_id"], "PDF", settings,
+                                                  {"redacted": options["redacted"]})
+                while True:
+                    try:
+                        next(steps)
+                    except StopIteration as completed:
+                        document = completed.value
+                        break
+            try:
+                path = write_pdf(connection, values["case_id"], values["path"], document,
+                                 self.clock.now(), **actor)
+            finally:
+                if "preview_token" not in payload:
+                    document.close()
+        self._clear_export_preview()
         return {"path": str(path)}
 
     def raw_output(self, payload):
@@ -477,6 +805,8 @@ class DesktopRuntime:
         )
         if self.hasher.sha256(str(path)) != output.sha256:
             raise ConflictError("Stored raw output no longer matches its recorded SHA-256.")
+        if path.stat().st_size != output.size_bytes:
+            raise ConflictError("Stored raw output no longer matches its recorded size.")
         # Display a bounded preview; the exact complete bytes remain in the workspace.
         with path.open("rb") as stream:
             raw = stream.read(256 * 1024 + 1)
@@ -499,8 +829,14 @@ class DesktopRuntime:
         }
 
         def authorize(command):
+            self._expire_export_preview()
             if command not in public:
                 self.auth.require_user()
+            if command in {"auth_logout", "auth_lock"}:
+                self._clear_export_preview()
+                for connection, *_ in self.sessions.values():
+                    connection.close()
+                self.sessions.clear()
 
         router = CommandRouter(before_dispatch=authorize)
         for command, method in (
@@ -539,10 +875,17 @@ class DesktopRuntime:
         router.register("configure_preferences", self.configure_preferences)
         router.register("configure_profile", self.configure_profile)
         router.register("storage_usage", self.storage_usage)
+        router.register("get_workspace_folder", self.workspace_folder)
         router.register("backup_workspace", self.backup_workspace)
         router.register("inspect_workspace_backup", self.inspect_workspace_backup)
         router.register("restore_workspace", self.restore_workspace)
         router.register("export_case", self.export)
+        router.register("preview_export", self.preview_export)
+        router.register("export_preview_status", self.export_preview_status)
+        router.register("cancel_export_preview", self.cancel_export_preview)
+        router.register("get_export_definitions", self.export_definitions)
+        router.register("export_preview_pdf", self.export_preview_pdf)
+        router.register("export_preview_page", self.export_preview_page)
         router.register("read_tool_output", self.raw_output)
         for command in COMMAND_FIELDS:
             if command != "create_case":

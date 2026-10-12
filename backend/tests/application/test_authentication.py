@@ -97,14 +97,15 @@ def test_existing_examiner_fields_follow_session_and_preserve_history(runtime):
         runtime, "create_case", case_name="Second", examiner="Impersonated"
     )["result"]["case_id"]
     for case_id, username in ((first, "Examiner"), (second, "Reviewer")):
+        assert send(runtime, "auth_logout")["ok"]
+        assert send(runtime, "auth_login", username=username, password=PASSWORD)["ok"]
         view = send(runtime, "get_case_data", case_id=case_id)["result"]
         assert view["case"]["examiner"] == username
         connection, _, _ = runtime.session(case_id)
         assert case_export(connection, case_id)["tables"]["cases"][0]["examiner"] == username
     cases = send(runtime, "list_cases")["result"]
-    assert {case["id"]: case["examiner"] for case in cases} == {
-        first: "Examiner", second: "Reviewer"
-    }
+    assert {case["id"]: case["examiner"] for case in cases} == {second: "Reviewer"}
+    assert not send(runtime, "get_case_data", case_id=first)["ok"]
 
 
 @pytest.mark.parametrize(

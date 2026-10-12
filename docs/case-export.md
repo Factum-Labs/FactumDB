@@ -1,61 +1,105 @@
-# Case Export (JSON and CSV)
+# Case exports: full JSON and investigator summary PDF
 
-A case can be exported for checking outside FactumDB, as the workflow promises: *"the same case can also be exported as JSON or CSV for independent checking."* The code is in `backend/adapters/persistence/case_export.py`.
+The desktop offers exactly two formats after analysis completes. Content follows
+format, with no report-profile or section-selector controls. Redaction remains
+an independent choice and defaults to a pseudonymized sharing copy.
 
-```python
-from adapters.persistence.case_export import write_json, write_csv
+## Full case JSON
 
-write_json(connection, case_id, "exports/FDB-2026-014.json")
-write_csv(connection, case_id, "exports/FDB-2026-014-csv/")
-```
+Desktop JSON exports use format version 3 and include every unique observation,
+all six reconciliation classifications, complete live/deleted physical records,
+decoded events, transaction groups, histories, speculative states, schemas,
+intermediate analysis, warnings, acquisition/verification data and provenance.
+Repeated observations retain their associations and occurrence counts.
 
-`connection` is the case database connection. Neither function overwrites an earlier export: `write_json` refuses an existing file and `write_csv` refuses an existing folder, because two exports mixed together could no longer be told apart.
+Canonical objects appear once in `objects`; references use `{"$ref":"<kind>:<sha256>"}`.
+The digest covers compact, UTF-8, sorted-key canonical content after redaction
+when enabled. Different positions, row indices or contexts remain distinct.
+Table rows keep references to canonical events, comparisons, sources and states.
+Nested image keys remain evidence column names; tagged NULL, unobserved,
+undecodable, decimal and datetime values retain their distinctions in original
+exports. Redaction aliases evidence values and cannot support independent reanalysis.
 
-## JSON - the exact record
+Analysis tables use `analysis_<stage>_<member>`, with `index` and `value`.
+An index of -1 denotes an empty array. `analysis_metadata` retains stage save
+times. `expand_document()` reconstructs the version-2 evidence/analysis shapes;
+reconstructible display strings and presentation duplicates are omitted.
 
-One file holding every table's rows for the case, under `tables`:
+Standalone `write_json(connection, case_id, path)` retains complete version-2
+JSON compatibility. Passing `profile="full"` selects version 3. Partial profiles,
+section selections and partial prepared documents are rejected by the writer.
 
-`cases`, `evidence_files`, `tool_runs`, `integrity_results`, `schemas`, `schema_columns`, `physical_records`, `binlog_events`, `transactions`, `transaction_events`, `warnings`, `binlog_inventory`, `case_scopes`, `normalizations`, `analysis_results`, `table_creations`, `physical_extractions`. Desktop cases also include `pipeline_runs` when that table exists. The `reports` history stays in the case database.
+## Styled summary PDF
 
-- Format version 2 includes `engine_revision` and `analysis_format_version`. Binlog rows retain their `(source_file, log_position, row_index)` identity in JSON and CSV.
-- Columns stored as JSON in SQLite (`values_json`, `before_json`, ...) are written as JSON, without the `_json` suffix.
-- Column values keep the tags they are stored with, listed in the file's `value_tags`. `{"__decimal__": "4000.10"}` is the DECIMAL 4000.10, which a plain `4000.10` or `"4000.10"` could not say.
-- Every row keeps its `evidence_id` and `tool_run_id`, and `tool_runs` has the exact command, tool version and executable hash, so any value can be followed back to the command that produced it.
-- Rows are in a fixed order, so the same case always exports the same way. Only `exported_at` changes between exports.
+The PDF is an A4 report with embedded local Unicode fonts, FactumDB teal/navy
+headings, classification colors and vector bars, pale table rows, repeating
+headers and page numbers. It contains readable prose and tables, never a JSON dump.
 
-This is the file to check against.
+Its independent disk-backed projection includes:
 
-## CSV - for reading in a spreadsheet
+- Case metadata, examiner notes, recorded acquisition and verification metadata,
+  evidence inventory and hashes, and processing summaries.
+- Case-wide and per-table record/field totals for all six classifications.
+  Exact and Strong appear only as counts; no individual records or examples appear.
+- Exceptional record classifications and field/presence comparisons grouped by
+  table, classification, field and rule. Groups show distinct record references,
+  observation counts, context variation counts and catalog explanations.
+- Grouped warnings, schema/extraction coverage, integrity, transaction outcomes,
+  reconstruction coverage, missing logs and limitations.
+- Grouped evidence/tool-run/file references, recorded position endpoints and
+  references without known positions. Endpoints do not imply continuous coverage.
 
-| File | Contents |
-|---|---|
-| `evidence.csv`, `tool_runs.csv`, `integrity.csv`, `warnings.csv` | Those tables as they are stored |
-| `rows_<db>.<table>.csv` | The rows found on the pages, one column per MySQL column, live rows first, then deleted ones |
-| `events_<db>.<table>.csv` | Every row change, with `before.<column>` and `after.<column>` |
-| `reconciliation.csv` | One line per compared field, once the analysis has run |
-| `about.txt` | What the markers below mean |
+Finding groups overlap, so their record counts must not be summed. Full command
+arguments, raw output hashes, diagnostic messages, values, images, histories and
+speculative details remain in JSON. No arbitrary page or observation cap is used.
 
-A CSV cell is only text, so these markers keep apart things an empty cell would blur:
+Summary aliases follow stable canonical traversal with compact S identifiers. Unknown
+metadata remains explicitly unknown; unrecorded custody transfers are never inferred.
+Redacted PDFs are pseudonymized and unsuitable for independent reanalysis.
 
-| Cell | Means |
-|---|---|
-| `\N` | SQL NULL (as MySQL writes it in its own exports) |
-| `[not logged]` | A column a partial row image (`binlog_row_image=MINIMAL`) left out |
-| `[undecodable: ...]` | A value the tool could not decode |
-| empty, in `events_*.csv` | The event has no such image: an INSERT has no before image, a DELETE no after image |
+## Preparation and preview API
 
-Text starting with `=`, `+`, `-` or `@` is written with a leading `'`, so a spreadsheet shows it instead of running it as a formula. The evidence comes from a database that may have been tampered with, so its text is never trusted to be harmless (this is known as CSV or formula injection).
+`get_export_definitions` publishes the JSON/full and PDF/summary definitions.
+`preview_export` and `export_case` accept case ID, format and redaction; export
+also accepts path and optional preview token. Conflicting profile/section
+arguments are rejected. Only JSON and PDF can be generated or registered.
 
-## Report history
+`preview_export` with `progressive: true` returns `preparation_token`.
+Polling `export_preview_status` advances preparation and returns `stage` and
+`processed`, or the completed preview. Processed counts concern the current
+stage and are not percentages. `cancel_export_preview` accepts the preparation
+token; cancellation, replacement, expiry, lock/logout and shutdown clean up
+projections, read-only source connections and generated preview artifacts.
 
-Every export written to disk is recorded in the case database's `reports` table (see `sqlite-schema.md`, section 16):
+Completed previews report format, detail, page count, size, manifest and coverage
+counts. JSON shows a full-case manifest. PDF preparation generates the actual
+PDF once; locally bundled PDF.js renders only the visible page, with navigation
+and zoom. Its worker, fonts, CMaps and WASM assets are bundled for offline use.
+`export_preview_pdf` accepts preview token, offset and length (maximum 262144
+bytes) and returns a base64 chunk. Each request enforces authentication,
+ownership, expiry and source/settings invalidation. Navigation does not reread
+complete analysis or regenerate the PDF.
 
-- a version number, counted separately for JSON and for CSV;
-- the SHA-256 and size of every file written, so a copy handed over can be checked later with `sha256sum`;
-- `analysed_at`, which says which analysis the export contains, or that the analysis had not run yet.
+Saving PDF copies the exact reviewed bytes. JSON streams the frozen projection.
+Every completed export records its actual creation time, actor, format version,
+file size and SHA-256 in history. Destinations are never overwritten and source
+case evidence is never changed. Historical unsupported formats and existing
+files remain readable; their generation capabilities have been removed.
 
-The history is kept in the database, not inside the export, so the same case still exports the same way.
+## Reproducibility and performance
 
-## Desktop workflow
+Source ordering, grouping keys, rule explanations, fonts and layout are fixed.
+The PDF records template and renderer versions; preview metadata retains the
+font manifest in PDF metadata. Frozen preparation metadata produces identical PDF bytes.
+Fresh exports may have new generation metadata and different hashes; unchanged
+source data/settings retain the same substantive content and layout.
 
-The authenticated `export_case` sidecar command and the Report screen support JSON and CSV after the pipeline completes. Incomplete analysis and existing destinations are rejected. PDF and HTML report generation remain future work; their files can use the same history through `SqliteReportRepository.record()`.
+Large analysis is read through incremental SQLite blobs. Summary readers skip
+unneeded containers and duplicate flat comparisons without decoding them.
+Aggregation, deduplication and alias maps live in temporary SQLite; generation
+never loads the whole case. The renderer buffers only the resulting summary PDF.
+
+Run `py -3 scripts/benchmark_report_export.py --target-mb 800` with PDF
+dependencies available to measure both formats. Results go to
+`.bundle-cache/report-summary-benchmark.json`; synthetic files are cleaned up.
+See [report-export-benchmark.md](report-export-benchmark.md) for measured results.

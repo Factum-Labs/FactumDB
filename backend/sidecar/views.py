@@ -111,6 +111,10 @@ def case_view(case_id, connection, stores, pipelines):
     tables["pipeline_runs"] = [_row(row) for row in connection.execute(
         "SELECT * FROM pipeline_runs WHERE case_id = ? ORDER BY rowid", (case_id,))]
     counts["pipeline_runs"] = len(tables["pipeline_runs"])
+    tables["reports"] = [_row(row) for row in connection.execute(
+        "SELECT * FROM reports WHERE case_id = ? ORDER BY created_at, report_id", (case_id,),
+    )]
+    counts["reports"] = len(tables["reports"])
     run = pipelines.latest_for_case(case_id)
     results = {}
     findings = {}

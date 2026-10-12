@@ -1,31 +1,22 @@
-"""Exporting a case as JSON and CSV for checking outside FactumDB."""
+"""Exporting a case as JSON for checking outside FactumDB."""
 
 from __future__ import annotations
 
-import csv
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
 
-from adapters.persistence.case_export import case_export, write_csv, write_json
+from adapters.persistence.case_export import case_export, write_json
 from adapters.persistence.sqlite_database import open_case_database
 from adapters.persistence.sqlite_integration import build_sqlite_application_stores
 from core.application.errors import NotFoundError
 from core.application.models import DecodedBinlog
-from core.application.use_cases.analysis import (
-    CorrelateRecordsUseCase,
-    GroupTransactionsUseCase,
-    ReconcileRecordsUseCase,
-    ReconstructStateUseCase,
-)
-from core.application.use_cases.extraction import NormalizeEvidenceUseCase
 from core.domain.models.canonical import BinlogEvent, Column, PhysicalRecord, Schema
 from core.domain.models.values import UndecodableValue
 from tests.adapters.conftest import FIXED_TIME, a_binlog, a_case, a_run, an_ibd
 from tests.adapters.test_sqlite_normalization import case  # noqa: F401 - fixture
-from tests.application.fakes import FixedClock
 
 WHEN = datetime(2026, 10, 3, 3, 45, tzinfo=timezone.utc)
 PAYMENTS = Schema("shop", "payments", (
@@ -83,13 +74,6 @@ def connection_of(stores):
     return stores.extraction._connection
 
 
-def read_csv(path):
-    with open(path, newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
-
-
-# ── JSON ─────────────────────────────────────────────────────────────────────
-
 
 def test_the_json_export_holds_every_table_for_this_case_only(stores) -> None:
     tables = case_export(connection_of(stores), "case-1")["tables"]
@@ -126,68 +110,14 @@ def test_an_unknown_case_cannot_be_exported(stores) -> None:
 
 def test_an_export_never_overwrites_an_earlier_one(stores, tmp_path) -> None:
     write_json(connection_of(stores), "case-1", tmp_path / "case-1.json")
-    write_csv(connection_of(stores), "case-1", tmp_path / "csv")
 
     with pytest.raises(FileExistsError):
         write_json(connection_of(stores), "case-1", tmp_path / "case-1.json")
-    with pytest.raises(FileExistsError):
-        write_csv(connection_of(stores), "case-1", tmp_path / "csv")
 
 
-# ── CSV ──────────────────────────────────────────────────────────────────────
-
-
-def test_csv_rows_have_one_column_per_mysql_column(stores, tmp_path) -> None:
-    write_csv(connection_of(stores), "case-1", tmp_path / "csv")
-
-    rows = read_csv(tmp_path / "csv" / "rows_shop.payments.csv")
-
-    assert [r["is_deleted"] for r in rows] == ["0", "1"]   # live rows first
-    assert list(rows[0]) == ["record_id", "evidence_id", "tool_run_id", "is_deleted",
-                             "payment_id", "amount", "note", "photo"]
-    assert (rows[0]["amount"], rows[0]["photo"]) == ("4000.10", "[undecodable: binary data is not decoded]")
-    assert (rows[1]["is_deleted"], rows[1]["note"]) == ("1", r"\N")
-
-
-def test_csv_events_show_both_images_and_what_was_not_logged(stores, tmp_path) -> None:
-    write_csv(connection_of(stores), "case-1", tmp_path / "csv")
-
-    insert, minimal, delete = read_csv(tmp_path / "csv" / "events_shop.payments.csv")
-
-    assert insert["before.amount"] == "" and insert["after.amount"] == "4000.10"
-    assert (minimal["before.payment_id"], minimal["before.amount"]) == ("1", "[not logged]")
-    assert (minimal["after.note"], minimal["after.amount"]) == ("checked", "[not logged]")
-    assert delete["before.amount"] == "7500.50" and delete["after.payment_id"] == ""
-
-
-def test_a_formula_in_the_evidence_is_not_run_by_a_spreadsheet(stores, tmp_path) -> None:
-    """The suspect database's text is never trusted to be harmless."""
-    write_csv(connection_of(stores), "case-1", tmp_path / "csv")
-
-    amal = read_csv(tmp_path / "csv" / "rows_shop.payments.csv")[0]
-
-    assert amal["note"] == """'=HYPERLINK("http://x")"""
-    assert amal["payment_id"] == "1"
-
-
-def test_an_empty_table_still_gets_a_file_with_its_header(stores, tmp_path) -> None:
-    """"No warnings" has to be visible, not look like a missing file."""
-    write_csv(connection_of(stores), "case-1", tmp_path / "csv")
-
-    with open(tmp_path / "csv" / "warnings.csv", encoding="utf-8") as f:
-        assert f.read().startswith("warning_id,case_id,evidence_id,tool_run_id,code,message,context")
-
-
-def test_reconciliation_is_exported_once_the_analysis_has_run(case, tmp_path) -> None:  # noqa: F811
-    NormalizeEvidenceUseCase(case.cases, case.normalizer, case.extraction, FixedClock()
-                             ).execute("case-1")
-    GroupTransactionsUseCase(case.domain).execute("case-1")
-    CorrelateRecordsUseCase(case.domain).execute("case-1")
-    ReconstructStateUseCase(case.domain).execute("case-1")
-    result = ReconcileRecordsUseCase(case.domain).execute("case-1")
-
-    write_csv(case.extraction._connection, "case-1", tmp_path / "csv")
-    rows = read_csv(tmp_path / "csv" / "reconciliation.csv")
-
-    assert len(rows) == len(result.rows)
-    assert list(rows[0]) == ["record_id", "field", "log", "page", "result", "rule_id"]
+@pytest.mark.parametrize("options", [{"sections": ["notes"]}, {"profile": "investigator"}])
+def test_json_writer_rejects_partial_case_options(stores, tmp_path, options):
+    destination = tmp_path / "partial.json"
+    with pytest.raises(ValueError):
+        write_json(connection_of(stores), "case-1", destination, **options)
+    assert not destination.exists()

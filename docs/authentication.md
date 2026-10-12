@@ -78,12 +78,19 @@ The work factor follows an [OWASP scrypt configuration](https://cheatsheetseries
 All desktop case, evidence, analysis, settings and export commands require a
 backend session. A renderer-supplied examiner value cannot override the account
 identity. Logout clears loaded frontend case data; restart requires sign-in.
-Existing cases keep their historical examiner text. Accounts share the existing
-workspace catalog; this change does not introduce per-account case ownership.
+Existing cases keep their historical examiner text. Each case now belongs to one
+account, recorded by stable `users.user_id` in the catalog-only `case_owners` table.
+Listing filters by owner before opening case databases. Every case session checks
+ownership, including cached sessions, so guessed case/run IDs cannot expose another
+account's views, notes, evidence, analysis, exports, deletion or raw tool output.
+Logout and explicit locking close cached case connections and discard export previews.
 
 The existing `cases.examiner` field stores the authenticated username at case
-creation. Existing views and exports use that saved name. Opening a case under
-another account preserves its historical examiner.
+creation. Existing views and exports use that saved name. Ownership is independent
+of that display field. Upgrade assigns legacy cases only to matching accounts already
+registered at upgrade; unmatched cases are sealed with an unknown owner and cannot
+be claimed by later sign-ups. They require a separately verified administrative
+migration; there is no user-facing claim or sharing operation.
 
 Evidence registration and tool runs also store `actor_id` (the catalog's existing
 `users.user_id`, written as text) and `actor_username` from the backend session.
@@ -91,6 +98,22 @@ Evidence keeps its original registering user through verification; tool runs kee
 their initiating user through completion. The evidence and provenance detail
 views and existing case exports include these fields. Older records without
 attribution remain unknown rather than being assigned to the current user.
+
+JSON and PDF export history also records the signed-in `actor_id` and
+`actor_username`, alongside time, version and output hashes. Historical exports
+retain unknown attribution. History is visible in the owner-only report screen;
+credentials and report history are not copied into the forensic export itself.
+
+Tool audit metadata retains references, sizes and SHA-256 hashes for separate raw
+stdout/stderr files. Owner-only reads verify both hash and size; raw evidence values
+are not duplicated into ordinary audit metadata. Imports and export destinations
+within the managed workspace must also belong to the signed-in account.
+
+Storage usage reports only owned cases. Whole-workspace backup, restore and folder
+opening require a single registered account and exclusive ownership of all cases.
+Restore and backup inspection reject archives containing another account's cases.
+This preserves the existing backup format without letting workspace operations
+bypass isolation. Per-account backups for shared workspaces are not implemented.
 
 This is a local application access gate. Case files are not encrypted, and OS
 administrators or processes with access to the app's data/code remain able to

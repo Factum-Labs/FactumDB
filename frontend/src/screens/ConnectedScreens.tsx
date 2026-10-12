@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useApp } from '../store'
-import { display, object, pickExportPath, request, rows, type CaseData, type CaseSummary, type Json, type Row } from '../lib/backend'
+import { display, object, request, rows, type CaseData, type CaseSummary, type Json, type Row } from '../lib/backend'
 import { Badge } from '../components/Badge'
 import { TablePagination } from '../components/TablePagination'
 import { StatusMessage } from '../components/StatusMessage'
@@ -259,26 +259,6 @@ export function ProvenanceScreen() {
     renderExpanded={run => data && <ToolRunDetails key={String(run.tool_run_id)} run={run} caseId={data.case.case_id} />} />
 }
 
-export function ReportScreen() {
-  const state = useApp()
-  const [path, setPath] = useState('')
-  const choose = async () => {
-    try {
-      const chosen = await pickExportPath(state.reportFormat)
-      if (chosen) setPath(state.reportFormat === 'CSV' ? chosen + '/factumdb-' + state.data?.case.case_id + '-' + Date.now() : chosen)
-    } catch (error) { state.setError(error) }
-  }
-  return <div className="space-y-4">
-    <div className={panel}><p className="text-sm font-semibold">Export saved analysis</p><p className="mt-2 text-xs text-muted">JSON contains exact tagged values and all stored case tables. CSV produces a new folder with evidence, tool runs, extracted rows, log events, warnings and reconciliation. Existing exports are never overwritten.</p></div>
-    {!state.pipelineComplete && <Empty>Complete the pipeline before exporting this case.</Empty>}
-    <form className={panel + ' flex flex-wrap items-end gap-3'} onSubmit={e => { e.preventDefault(); void state.exportCase(path) }}>
-      <label className="flex flex-col gap-1 text-xs text-muted">Format<select className={select} value={state.reportFormat} onChange={e => { state.setFormat(e.target.value); setPath('') }}><option>JSON</option><option>CSV</option></select></label>
-      <label className="flex min-w-72 flex-1 flex-col gap-1 text-xs">{state.reportFormat === 'JSON' ? 'New JSON file path' : 'New CSV folder path'}<input className="h-[30px] rounded border border-line bg-page px-3 text-xs text-ink" required value={path} onChange={e => setPath(e.target.value)} /></label>
-      <Button disabled={!state.pipelineComplete} onClick={() => { void choose() }}>Choose destination</Button>
-      <Button type="submit" disabled={!state.pipelineComplete || !path.trim()}>Export</Button>
-    </form>
-    {state.data && <div className={panel + ' text-xs'}>{Object.entries(state.data.tables).map(([table, values]) => <p key={table} className="mb-1">{table.replaceAll('_', ' ')}: {state.data?.table_counts?.[table] ?? values.length}</p>)}</div>}
-  </div>
-}
+export { ReportScreen } from './ReportScreen'
 
 export { SettingsScreen } from './SettingsScreen'

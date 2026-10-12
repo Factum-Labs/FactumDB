@@ -298,7 +298,7 @@ Handles:
 
 ### 4.7 Report Adapter
 
-Generates PDF, HTML, JSON, or CSV reports from structured case data.
+Generates full JSON or summary PDF reports from structured case data.
 
 ---
 

@@ -19,6 +19,7 @@ from core.application.orchestration.ports import (
     ProgressPublisher,
 )
 from core.application.ports import CaseRepository, Clock, IdGenerator
+from core.application.safe_errors import safe_error
 
 
 class AnalysisOrchestrator:
@@ -102,12 +103,13 @@ class AnalysisOrchestrator:
         try:
             outcome = handler.execute(PipelineExecutionContext(run.id, run.case_id))
         except Exception as error:
+            error_code, error_message = safe_error(error)
             failed_attempt = replace(
                 attempt,
                 status=StageStatus.FAILED,
                 finished_at=self._clock.now(),
-                error_code=type(error).__name__,
-                error_message=str(error),
+                error_code=error_code,
+                error_message=error_message,
             )
             failed_state = replace(
                 running_state,
@@ -116,7 +118,7 @@ class AnalysisOrchestrator:
             )
             run = self._replace_state(run, index, failed_state)
             self._repository.save(run)
-            self._publish(run, failed_state, str(error))
+            self._publish(run, failed_state, error_message)
             return run
 
         status = StageStatus.SKIPPED if outcome.skip_reason is not None else StageStatus.SUCCEEDED

@@ -51,7 +51,7 @@ def initialise(connection):
     """
     connection.executescript(SCHEMA_FILE.read_text())
     # Existing records retain unknown actors; never infer them from the current session.
-    for table in ("evidence_files", "tool_runs"):
+    for table in ("evidence_files", "tool_runs", "reports"):
         actor_columns = {r[1] for r in connection.execute(f"PRAGMA table_info({table})")}
         for name in ("actor_id", "actor_username"):
             if name not in actor_columns:

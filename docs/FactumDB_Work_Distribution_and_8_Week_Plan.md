@@ -41,7 +41,7 @@ Primary ownership does not mean that one member works alone. Every major compone
 - Design and implement the SQLite schema.
 - Implement repositories and persistence.
 - Preserve raw outputs and provenance references.
-- Implement JSON and CSV export data.
+- Implement JSON and PDF export data.
 - Optimize database operations.
 
 ### Yasiru
@@ -218,7 +218,7 @@ Primary ownership does not mean that one member works alone. Every major compone
 **Gimhan**
 
 - Implement repositories for transactions, correlations, histories, reconciliation results, warnings, and report metadata.
-- Implement JSON and CSV export.
+- Implement JSON and PDF export.
 - Add appropriate SQLite indexes.
 - Verify that every finding links to supporting evidence.
 

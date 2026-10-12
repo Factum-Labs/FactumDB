@@ -30,8 +30,14 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def files(root):
+def files(root, *, case_ids=None):
     for path in root.rglob("*"):
+        relative = path.relative_to(root).as_posix()
+        parts = PurePosixPath(relative).parts
+        if case_ids is not None and (
+            len(parts) < 2 or parts[0] != "cases" or parts[1] not in case_ids
+        ):
+            continue
         if path.is_symlink():
             raise ValueError("Workspace contains a symbolic link; backup cannot follow it")
         if path.is_file() and not path.name.endswith(("-wal", "-shm", "-journal")):
@@ -40,7 +46,8 @@ def files(root):
                 yield path, relative
 
 
-def usage(root):
+def usage(root, *, case_ids=None):
+    case_ids = None if case_ids is None else set(case_ids)
     categories = {
         "working": 0,
         "raw-output": 0,
@@ -49,7 +56,7 @@ def usage(root):
         "databases_and_settings": 0,
     }
     cases = {}
-    for path, relative in files(root):
+    for path, relative in files(root, case_ids=case_ids):
         size = path.stat().st_size
         parts = PurePosixPath(relative).parts
         category = (
@@ -63,6 +70,11 @@ def usage(root):
         p.stat().st_size
         for p in root.rglob("*")
         if p.is_file() and not p.is_symlink() and p.name.endswith(("-wal", "-shm", "-journal"))
+        and (case_ids is None or (
+            len(p.relative_to(root).parts) > 2
+            and p.relative_to(root).parts[0] == "cases"
+            and p.relative_to(root).parts[1] in case_ids
+        ))
     )
     categories["databases_and_settings"] += journal_bytes
     return {
@@ -120,6 +132,37 @@ def create_backup(root, destination):
         finally:
             Path(pending).unlink(missing_ok=True)
     return {"path": str(destination), "files": len(entries)}
+
+
+def require_backup_owner(path, account):
+    """A user-facing workspace archive may contain only the signed-in account's cases."""
+    with tempfile.TemporaryDirectory(prefix="factumdb-backup-owner-") as temporary:
+        catalog_path = Path(temporary) / "catalog.db"
+        with (zipfile.ZipFile(path) as archive, archive.open("catalog.db") as source,
+              catalog_path.open("xb") as output):
+            shutil.copyfileobj(source, output)
+        with closing(sqlite3.connect(catalog_path)) as catalog:
+            users = catalog.execute(
+                "SELECT user_id, username, device_identity FROM users"
+            ).fetchall()
+            if (len(users) != 1 or users[0][1].lower() != account["username"].lower()
+                    or users[0][2] != account["device_identity"]):
+                raise PermissionError("This backup belongs to another account or shared workspace.")
+            ownership_exists = catalog.execute(
+                "SELECT 1 FROM sqlite_master WHERE name = 'case_owners' AND type = 'table'"
+            ).fetchone()
+            if ownership_exists:
+                invalid = catalog.execute("""
+                    SELECT 1 FROM cases c LEFT JOIN case_owners o USING(case_id)
+                    WHERE o.user_id IS NULL OR o.user_id != ? LIMIT 1
+                """, (users[0][0],)).fetchone()
+            else:
+                invalid = catalog.execute(
+                    "SELECT 1 FROM cases WHERE lower(examiner) != ? LIMIT 1",
+                    (account["username"].lower(),),
+                ).fetchone()
+            if invalid:
+                raise PermissionError("This backup contains cases not owned by this account.")
 
 
 def inspect_backup(path, *, extract_to=None):

@@ -6,6 +6,12 @@ initialized only for `catalog.db`; case databases and exports contain no account
 credentials. See [authentication](authentication.md) for the account schema and
 shared/native implementation.
 
+The catalog also owns `case_owners(case_id, user_id)`: one stable account ID per
+case, with a nullable ID for unresolved legacy ownership. It references catalog
+`cases` and `users` and is not copied into case exports. The backend checks this
+table before opening any case database. Unknown legacy rows are sealed against
+later username-based claims. Case deletion cascades its catalog ownership row.
+
 Engine revision 2 adds `cases.engine_revision` and `cases.reanalysis_required`.
 Opening an older database preserves evidence, working-copy hashes, normalized
 extraction tables and tool audit history, deletes incompatible analysis results
@@ -22,7 +28,7 @@ Two additive extraction tables support presence comparisons:
 
 The decoder now owns `binlog_events.row_index`; repository round trips and
 lookups preserve it. `idx_binlog_row_ref(source_file, log_position, row_index)`
-supports row-specific provenance queries. JSON and CSV exports carry format
+supports row-specific provenance queries. JSON and PDF exports carry format
 version 2, engine revision 2 and analysis format version 2.
 
 ## What this is
@@ -445,6 +451,8 @@ CREATE TABLE reports (
     files_json  TEXT NOT NULL CHECK (json_valid(files_json)),
     analysed_at TEXT,
     created_at  TEXT NOT NULL,
+    actor_id    TEXT,
+    actor_username TEXT,
     UNIQUE (case_id, format, version)
 ) STRICT;
 ```
@@ -452,10 +460,10 @@ CREATE TABLE reports (
 The report metadata: one row for every report or export made from a case. The project proposal promises "maintaining different versions of reports", and a case is often reported on more than once - before and after more evidence arrives, or after the analysis is run again.
 
 - `version` counts up separately for each format, so "the third JSON export of this case" means one thing. `report_id` is `<case>:<format>:v<version>`.
-- `files_json` lists every file written, each with its SHA-256 and size: one file for JSON or PDF, the whole folder for CSV. Anyone holding a copy can check it is the file FactumDB wrote by running `sha256sum` - no need to trust the tool for that.
+- `files_json` lists every file written, each with its SHA-256 and size: one file for JSON or PDF. Historical CSV folders remain readable. Anyone holding a copy can check it is the file FactumDB wrote by running `sha256sum` - no need to trust the tool for that.
 - `analysed_at` is the `saved_at` of the case's reconciliation result when the report was made, or empty if the analysis had not run. A report made before the analysis was run again shows that it describes the older analysis.
 
-The JSON and CSV exports record themselves (`case_export.py`). A PDF or HTML report can call `SqliteReportRepository.record()` once its file is written. The table is not part of the export itself, so exporting the same case twice still gives the same content.
+The JSON and PDF exports record themselves (`case_export.py`). Only JSON and PDF can be newly registered; legacy formats remain readable. The table is not part of the export itself, so exporting the same case twice still gives the same content.
 
 ---
 

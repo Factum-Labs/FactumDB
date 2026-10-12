@@ -12,10 +12,8 @@ description = "FactumDB backend: forensic correlation engine for MySQL InnoDB ev
 # with a later interpreter, so the range has to cover both.
 requires-python = ">=3.11"
 
-# The domain layer is deliberately dependency-free. Anything listed here would
-# be reachable from core/domain, and the whole point of the layer is that its
-# conclusions can be reasoned about and diffed as pure logic.
-dependencies = []
+# Dependencies are used only by the PDF adapter; core/domain remains dependency-free.
+dependencies = ["fpdf2==2.8.9", "uharfbuzz==0.56.3"]
 
 [project.optional-dependencies]
 dev = [
@@ -23,6 +21,7 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.6",
     "mypy>=1.11",
+    "pypdf>=6.0,<7",
 ]
 
 [tool.hatch.build.targets.wheel]

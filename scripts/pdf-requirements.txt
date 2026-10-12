@@ -1,0 +1,6 @@
+# PDF runtime dependencies, installed at BUILD time and bundled for offline use.
+fpdf2==2.8.9
+uharfbuzz==0.56.3
+defusedxml==0.7.1
+Pillow==12.3.0
+fonttools==4.66.1

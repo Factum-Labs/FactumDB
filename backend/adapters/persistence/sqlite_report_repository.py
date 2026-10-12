@@ -14,9 +14,8 @@ analysed_at is when the case's reconciliation result was saved, or empty if
 the analysis had not run yet. A report made before the analysis was run again
 then shows that it describes the older analysis.
 
-This repository does not write report files. JSON and CSV exports record
-themselves (case_export.py), and a PDF or HTML report can call record() the
-same way once it is written.
+This repository does not write report files. JSON exports and summary PDFs record themselves after writing.
+Historical formats remain readable, but only JSON and PDF can be registered.
 """
 
 import hashlib
@@ -29,7 +28,7 @@ from typing import Optional, Sequence
 from adapters.persistence._timestamps import from_text, to_text
 from core.application.errors import NotFoundError
 
-FORMATS = ("json", "csv", "html", "pdf")
+FORMATS = ("json", "pdf")
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +48,8 @@ class ReportRecord:
     files: tuple[ReportFile, ...]
     analysed_at: Optional[datetime]
     created_at: datetime
+    actor_id: str | None = None
+    actor_username: str | None = None
 
 
 def _utc_now() -> datetime:
@@ -62,7 +63,8 @@ class SqliteReportRepository:
         self._connection = connection
         self._now = now
 
-    def record(self, case_id: str, format: str, location, files) -> ReportRecord:
+    def record(self, case_id: str, format: str, location, files, *,
+               actor_id=None, actor_username=None) -> ReportRecord:
         """Record a finished report as the next version of its format.
 
         files are the paths written. They are hashed here, so call this only
@@ -96,12 +98,14 @@ class SqliteReportRepository:
                 files=hashed,
                 analysed_at=from_text(analysed["saved_at"]) if analysed else None,
                 created_at=self._now(),
+                actor_id=actor_id,
+                actor_username=actor_username,
             )
             self._connection.execute(
                 """
                 INSERT INTO reports (report_id, case_id, format, version, location,
-                                     files_json, analysed_at, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                     files_json, analysed_at, created_at, actor_id, actor_username)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record.report_id, case_id, format, version, record.location,
@@ -111,6 +115,7 @@ class SqliteReportRepository:
                     ]),
                     analysed["saved_at"] if analysed else None,
                     to_text(record.created_at),
+                    actor_id, actor_username,
                 ),
             )
         return record
@@ -150,4 +155,6 @@ def _row_to_record(row) -> ReportRecord:
         files=tuple(ReportFile(**f) for f in json.loads(row["files_json"])),
         analysed_at=from_text(row["analysed_at"]) if row["analysed_at"] else None,
         created_at=from_text(row["created_at"]),
+        actor_id=row["actor_id"],
+        actor_username=row["actor_username"],
     )

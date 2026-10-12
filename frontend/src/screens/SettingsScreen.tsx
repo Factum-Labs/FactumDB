@@ -121,7 +121,7 @@ function StorageUsageSummary({ usage, cases }: { usage: StorageUsage; cases: { i
   </div>
 }
 
-function StorageSettings({ workspace }: { workspace: string }) {
+function StorageSettings({ workspace, workspaceOperationsAvailable }: { workspace: string; workspaceOperationsAvailable: boolean }) {
   const [usage, setUsage] = useState<StorageUsage>()
   const [backupPath, setBackupPath] = useState('')
   const [preview, setPreview] = useState<BackupPreview>()
@@ -165,13 +165,14 @@ function StorageSettings({ workspace }: { workspace: string }) {
   }
   return <section className={section} aria-labelledby="storage-heading">
     <h2 id="storage-heading" className="font-semibold">Storage & backup</h2><p className="break-all text-sm">{workspace}</p>
-    <div className="flex flex-wrap gap-3"><button type="button" disabled={busy} className={navigationButton} onClick={() => { void openWorkspace().catch(error => useApp.getState().setError(error)) }}>Open workspace folder</button>
+    <div className="flex flex-wrap gap-3"><button type="button" disabled={busy || !workspaceOperationsAvailable} className={navigationButton} onClick={() => { void openWorkspace().catch(error => useApp.getState().setError(error)) }}>Open workspace folder</button>
       <button type="button" disabled={busy} className={navigationButton} onClick={() => { void refreshUsage() }}>Refresh usage</button></div>
     {usage && <StorageUsageSummary usage={usage} cases={cases} />}
     {!usage && <p role="status" className="text-sm text-muted">Loading storage usage…</p>}
-    <p className="text-sm text-muted">Full backups include cases, working copies, outputs, settings and local account records. External original evidence files are excluded. Backup archives are not encrypted.</p>
-    <div className="flex flex-wrap gap-3"><button type="button" disabled={busy || selecting} className={navigationButton} onClick={() => { void backup() }}>Create workspace backup</button>
-      <button type="button" disabled={busy || selecting} className={navigationButton} onClick={() => { void selectRestore() }}>Select backup to restore</button></div>
+    <p className="text-sm text-muted">Storage usage shows your cases. Workspace backups and folder opening are available only when this account exclusively owns the workspace. Backups include working copies, outputs, settings and account records; external original evidence is excluded. Backup archives are not encrypted.</p>
+    {!workspaceOperationsAvailable && <p role="status" className="text-sm text-muted">Workspace-wide operations are unavailable because this workspace contains other accounts or cases without a verified owner.</p>}
+    <div className="flex flex-wrap gap-3"><button type="button" disabled={busy || selecting || !workspaceOperationsAvailable} className={navigationButton} onClick={() => { void backup() }}>Create workspace backup</button>
+      <button type="button" disabled={busy || selecting || !workspaceOperationsAvailable} className={navigationButton} onClick={() => { void selectRestore() }}>Select backup to restore</button></div>
     {(busy || selecting) && <p role="status" className="text-sm text-muted">Working… Large backups can take several minutes.</p>}
     {preview && <form className="space-y-3 rounded border border-line bg-page p-4" onSubmit={e => {
       e.preventDefault()
@@ -211,6 +212,6 @@ export function SettingsScreen() {
   if (!settings) return <StatusMessage>Connect to the desktop backend to load settings.</StatusMessage>
   return <div key={username} className="max-w-5xl space-y-5">
     <div className="grid items-stretch gap-5 lg:grid-cols-2"><ProfileForm profile={settings.profile ?? {}} /><PasswordForm /></div>
-    <PreferencesForm preferences={settings.preferences ?? defaultPreferences} /><StorageSettings workspace={settings.workspace} /><ToolForm settings={settings} />
+    <PreferencesForm preferences={settings.preferences ?? defaultPreferences} /><StorageSettings workspace={settings.workspace} workspaceOperationsAvailable={settings.workspace_operations_available ?? true} /><ToolForm settings={settings} />
   </div>
 }
