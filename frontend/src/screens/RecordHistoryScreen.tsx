@@ -843,8 +843,8 @@ export function RecordHistoryScreen() {
             >
               Previous
             </button>
-            <span>
-              {page + 1} / {pages} / {list.total} records
+            <span className="whitespace-nowrap">
+              {page + 1} / {pages}
             </span>
             <button
               type="button"

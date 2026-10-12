@@ -3,6 +3,7 @@
 import json
 
 from adapters.persistence.case_export import _TABLES, _row
+from adapters.persistence._reconciliation import check_storage, references
 from core.application.errors import NotFoundError
 from sidecar.commands import _pipeline_result
 from core.domain.rules import RULES, describe
@@ -16,6 +17,7 @@ def case_preview(case_id, connection, stores, pipelines):
         case = connection.execute("SELECT * FROM cases WHERE case_id = ?", (case_id,)).fetchone()
         if case is None:
             raise NotFoundError(f"case not found: {case_id}")
+        _compact_storage(connection, case_id)
         evidence = [_row(r) for r in connection.execute(
             "SELECT * FROM evidence_files WHERE case_id = ? ORDER BY evidence_id", (case_id,))]
         run = pipelines.latest_for_case(case_id)
@@ -113,6 +115,7 @@ def case_view(case_id, connection, stores, pipelines):
     results = {}
     findings = {}
     for (stage,) in connection.execute("SELECT stage FROM analysis_results WHERE case_id = ?", (case_id,)):
+        is_compact = stage == "reconciliation" and _compact_storage(connection, case_id)
         result = {}
         if stage == "grouping":
             result["transactions"] = _project(connection, case_id, stage, "transactions",
@@ -129,7 +132,8 @@ def case_view(case_id, connection, stores, pipelines):
         elif stage == "reconciliation":
             result["records"] = _project(connection, case_id, stage, "records",
                 ("record", "rollup", "rollup_rule_id", "rollup_label", "triggers"),
-                {"field_count": "json_array_length(j.value, '$.fields')"})
+                {"field_count": "json_array_length(j.value, '$.field_refs')" if is_compact
+                 else "json_array_length(j.value, '$.fields')"})
             result["rows"] = _project(connection, case_id, stage, "rows",
                 ("record_id", "field", "log_display", "phys_display", "result", "rule_id"))
             result["coverage"] = _part(connection, case_id, stage, "$.coverage")
@@ -137,12 +141,24 @@ def case_view(case_id, connection, stores, pipelines):
         results[stage] = result
         # The gaps view needs warnings and limitations. Routine informational
         # findings remain available in each selected record/transaction and export.
-        for (value,) in connection.execute(
-            "SELECT j.value FROM analysis_results a, "
+        findings_sql = (
+            "WITH pool AS MATERIALIZED (SELECT p.key, p.value FROM analysis_results a, "
+            "json_each(a.result_json, '$.finding_pool') p WHERE a.case_id=? AND a.stage=?) "
+            "SELECT p.value, r.value, r.type FROM analysis_results a, "
+            "json_each(a.result_json, '$.finding_refs') r "
+            "LEFT JOIN pool p ON p.key=r.value WHERE a.case_id=? AND a.stage=? "
+            "AND (json_extract(p.value, '$.severity') != 'info' OR p.value IS NULL "
+            "OR r.type != 'integer' OR r.value < 0) ORDER BY r.key"
+        ) if is_compact else (
+            "SELECT j.value, NULL, NULL FROM analysis_results a, "
             "json_each(a.result_json, '$.findings') j "
-            "WHERE a.case_id = ? AND a.stage = ? AND json_extract(j.value, '$.severity') != 'info'",
-            (case_id, stage),
+            "WHERE a.case_id = ? AND a.stage = ? AND json_extract(j.value, '$.severity') != 'info'"
+        )
+        for value, ref, ref_type in connection.execute(
+            findings_sql, (case_id, stage, case_id, stage) if is_compact else (case_id, stage),
         ):
+            if is_compact and (ref_type != "integer" or ref < 0 or value is None):
+                raise ValueError(f"finding_refs: invalid reference {ref!r}")
             _findings(json.loads(value), findings)
     return {
         "engine_revision": ENGINE_REVISION,
@@ -170,6 +186,26 @@ def _part(connection, case_id, stage, path):
     return json.loads(row[0]) if row and row[0] else None
 
 
+def _compact_storage(connection, case_id):
+    row = connection.execute(
+        "SELECT json_extract(result_json, '$.storage_format'), "
+        "json_extract(result_json, '$.storage_version'), "
+        "json_type(result_json, '$.storage_format'), "
+        "json_type(result_json, '$.storage_version') FROM analysis_results "
+        "WHERE case_id=? AND stage='reconciliation'", (case_id,),
+    ).fetchone()
+    return _check_header(row)
+
+
+def _check_header(row):
+    if row is None or row[2] is None:
+        return False
+    if row[3] != "integer":
+        raise ValueError("unsupported reconciliation storage version: expected integer")
+    check_storage(row[0], row[1])
+    return True
+
+
 def _project(connection, case_id, stage, array, fields, extra=None):
     # All SQL fragments here are internal constants, never request values.
     pairs = [f"'{name}', json_extract(j.value, '$.{name}')" for name in fields]
@@ -187,8 +223,22 @@ def analysis_detail(connection, case_id, kind, identity, field=None, qualified_t
         "transaction": ("grouping", "transactions", "$.id"),
         "comparison": ("reconciliation", "rows", "$.record_id"),
     }[kind]
+    # Resolve only this row's findings in the same statement: repeated full-document
+    # reads for a header, pool size, and individual findings make detail queries slower.
+    selection = "j.value"
+    if kind == "comparison":
+        selection += (
+            ", json_extract(a.result_json, '$.storage_format'), "
+            "json_extract(a.result_json, '$.storage_version'), "
+            "json_type(a.result_json, '$.storage_format'), "
+            "json_type(a.result_json, '$.storage_version'), "
+            "json_array_length(a.result_json, '$.finding_pool'), "
+            "(SELECT json_group_array(json(json_extract(a.result_json, "
+            "'$.finding_pool[' || f.value || ']'))) "
+            "FROM json_each(j.value, '$.finding_refs') f)"
+        )
     row = connection.execute(
-        "SELECT j.value FROM analysis_results a, json_each(a.result_json, ?) j "
+        f"SELECT {selection} FROM analysis_results a, json_each(a.result_json, ?) j "
         "WHERE a.case_id = ? AND a.stage = ? AND json_extract(j.value, ?) = ? "
         "AND (? IS NULL OR json_extract(j.value, '$.field') = ?) AND (? IS NULL OR json_extract(j.value, '$.record.table') = ?) LIMIT 1",
         (f"$.{array}", case_id, stage, path, identity, field, field, qualified_table, qualified_table),
@@ -196,6 +246,10 @@ def analysis_detail(connection, case_id, kind, identity, field=None, qualified_t
     if row is None:
         raise NotFoundError(f"{kind} not found in this case: {identity}")
     detail = json.loads(row[0])
+    if kind == "comparison" and _check_header(row[1:5]):
+        refs = detail.pop("finding_refs")
+        references(refs, range(row[5]), "comparison.finding_refs")
+        detail["findings"] = json.loads(row[6])
     if kind == "history":
         return history_details(connection, case_id, [detail])[0]
     found = {}
