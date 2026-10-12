@@ -11,12 +11,60 @@ from adapters.persistence.export_sections import OPTIONAL_SECTIONS, resolve_sect
 from adapters.persistence.investigator_export import (
     DiskAliases,
     JsonMembers,
+    analysis_members,
     expand_document,
     prepare_projection,
 )
 from tests.adapters.test_case_export import connection_of, stores  # noqa: F401
 from tests.adapters.test_finding_provenance import analysed  # noqa: F401
 from tests.adapters.test_sqlite_normalization import case  # noqa: F401
+
+
+def test_streamed_compact_reconciliation_matches_legacy_with_summary_selection(case, analysed):
+    from adapters.persistence._reconciliation import expand_reconciliation
+
+    connection = connection_of(case)
+    stored = json.loads(connection.execute(
+        "SELECT result_json FROM analysis_results WHERE case_id=? AND stage=?",
+        ("case-1", "reconciliation"),
+    ).fetchone()[0])
+    assert stored["storage_format"] == "factumdb-reconciliation"
+    for include, item_fields in (
+        (None, None),
+        ({"records", "findings", "coverage"},
+         {"records": {"record", "fields", "rollup", "rollup_rule_id"}}),
+    ):
+        compact = list(analysis_members(
+            connection, "case-1", "reconciliation", include, item_fields
+        ))
+        stream = io.BytesIO(json.dumps(expand_reconciliation(stored)).encode())
+        legacy = list(JsonMembers(stream).members(include, item_fields))
+        assert [item[:3] for item in compact] == legacy
+
+
+@pytest.mark.parametrize("damage", [
+    "version", "field_reference", "finding_reference", "missing_pool",
+])
+def test_streamed_compact_reconciliation_rejects_invalid_storage(case, analysed, damage):
+    connection = connection_of(case)
+    stored = json.loads(connection.execute(
+        "SELECT result_json FROM analysis_results WHERE case_id=? AND stage=?",
+        ("case-1", "reconciliation"),
+    ).fetchone()[0])
+    if damage == "version":
+        stored["storage_version"] = 999
+    elif damage == "field_reference":
+        stored["records"][0]["field_refs"] = [True]
+    elif damage == "finding_reference":
+        stored["finding_refs"] = [len(stored["finding_pool"])]
+    else:
+        del stored["finding_pool"]
+    connection.execute(
+        "UPDATE analysis_results SET result_json=? WHERE case_id=? AND stage=?",
+        (json.dumps(stored), "case-1", "reconciliation"),
+    )
+    with pytest.raises(ValueError):
+        list(analysis_members(connection, "case-1", "reconciliation"))
 
 
 def test_disk_alias_count_never_rescans_existing_aliases():

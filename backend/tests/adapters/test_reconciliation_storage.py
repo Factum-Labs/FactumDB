@@ -13,7 +13,7 @@ from adapters.persistence._reconciliation import (
     expand_reconciliation,
 )
 from adapters.persistence._results import encode
-from adapters.persistence.case_export import case_export, write_csv
+from adapters.persistence.case_export import case_export, write_json
 from core.domain.models.values import UNOBSERVED, UndecodableValue
 from tests.application.auth_support import authenticated_runtime as DesktopRuntime
 from tests.application.test_desktop_runtime import call, create
@@ -136,8 +136,8 @@ def test_legacy_and_compact_desktop_and_exports_match(tmp_path):
                                      "AND stage='reconciliation'", (case_id,)).fetchone()[0]
         legacy = json.dumps(encode(result.reconciliation))
         snapshots = []
-        csv_payloads = []
-        for index, payload in enumerate((compact, legacy)):
+        json_payloads = []
+        for payload in (compact, legacy):
             with connection:
                 connection.execute("UPDATE analysis_results SET result_json=? WHERE case_id=? "
                                    "AND stage='reconciliation'", (payload, case_id))
@@ -151,12 +151,18 @@ def test_legacy_and_compact_desktop_and_exports_match(tmp_path):
                      identity=row.record_id, field=row.field),
                 case_export(connection, case_id)["tables"],
             )))
-            folder = tmp_path / f"csv-{index}"
-            write_csv(connection, case_id, folder)
-            csv_payloads.append((folder / "reconciliation.csv").read_bytes())
             assert stores.domain.load_reconciliation(other_id) == result.reconciliation
         assert snapshots[0] == snapshots[1]
-        assert csv_payloads[0] == csv_payloads[1]
+        # Saving exports adds report history; compare desktop snapshots before either save.
+        for index, payload in enumerate((compact, legacy)):
+            with connection:
+                connection.execute("UPDATE analysis_results SET result_json=? WHERE case_id=? "
+                                   "AND stage='reconciliation'", (payload, case_id))
+            path = tmp_path / f"export-{index}.json"
+            write_json(connection, case_id, path, profile="full",
+                       now=lambda: datetime(2026, 10, 12, tzinfo=UTC))
+            json_payloads.append(path.read_bytes())
+        assert json_payloads[0] == json_payloads[1]
         before = connection.execute("SELECT result_json FROM analysis_results WHERE case_id=? "
                                     "AND stage='reconciliation'", (case_id,)).fetchone()[0]
         invalid = replace(result.reconciliation, rows=())

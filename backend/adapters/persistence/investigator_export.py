@@ -562,6 +562,18 @@ def analysis_members(connection, case_id, stage, include=None, item_fields=None)
         "SELECT rowid,saved_at FROM analysis_results WHERE case_id=? AND stage=?", (case_id, stage)
     ).fetchone()
     if row:
+        if stage == "reconciliation":
+            with connection.blobopen(
+                "analysis_results", "result_json", row[0], readonly=True
+            ) as stream:
+                headers = {member: value for member, _, value in JsonMembers(stream).members(
+                    include={"storage_format", "storage_version"}
+                )}
+            if "storage_format" in headers:
+                from adapters.persistence._reconciliation import check_storage
+                check_storage(headers["storage_format"], headers.get("storage_version"))
+                yield from compact_analysis_members(connection, row, include, item_fields)
+                return
         with connection.blobopen(
             "analysis_results", "result_json", row[0], readonly=True
         ) as stream:
@@ -571,6 +583,101 @@ def analysis_members(connection, case_id, stage, include=None, item_fields=None)
                 if not re.fullmatch(r"[a-z][a-z0-9_]*", member):
                     raise ValueError("Unsupported analysis member")
                 yield member, index, value, row[1]
+
+
+def compact_analysis_members(connection, row, include, item_fields):
+    """Resolve compact references through disk pools, retaining one output item at a time."""
+    from dataclasses import fields
+
+    from core.domain.models.findings import Finding
+    from core.domain.models.reconciliation import FieldReconciliation, RecordReconciliation
+    from core.domain.models.transactions import CoverageReport
+
+    with tempfile.TemporaryDirectory(prefix="factumdb-reconciliation-export-") as directory:
+        db = sqlite3.connect(Path(directory) / "pool.db", check_same_thread=False)
+        try:
+            db.executescript("""
+                PRAGMA cache_size=-2048;
+                PRAGMA temp_store=FILE;
+                PRAGMA secure_delete=ON;
+                CREATE TABLE pool(member TEXT, ordinal INTEGER, payload TEXT,
+                                  PRIMARY KEY(member,ordinal));
+            """)
+            with connection.blobopen(
+                "analysis_results", "result_json", row[0], readonly=True
+            ) as stream:
+                for member, index, value in JsonMembers(stream).members():
+                    db.execute("INSERT INTO pool VALUES (?,?,?)",
+                               (member, -2 if index is None else index, packed(value)))
+            db.commit()
+
+            def required(value, key):
+                if not isinstance(value, dict) or key not in value:
+                    raise ValueError(f"reconciliation: missing required property {key!r}")
+                return value[key]
+
+            def attributes(value, cls, excluded=()):
+                return {field.name: required(value, field.name) for field in fields(cls)
+                        if field.init and field.name not in excluded}
+
+            def lookup(member, index):
+                if type(index) is not int or index < 0:
+                    raise ValueError(f"reconciliation.{member}: invalid reference {index!r}")
+                stored = db.execute("SELECT payload FROM pool WHERE member=? AND ordinal=?",
+                                    (member, index)).fetchone()
+                if stored is None:
+                    raise ValueError(f"reconciliation.{member}: invalid reference {index!r}")
+                return json.loads(stored[0])
+
+            def references(value, member, transform):
+                if not isinstance(value, list):
+                    raise ValueError(f"reconciliation.{member}: expected an array of references")
+                return [transform(lookup(member, index)) for index in value]
+
+            def finding(value):
+                return attributes(value, Finding)
+
+            def field(value):
+                return {**attributes(value, FieldReconciliation, {"findings"}),
+                        "findings": references(
+                            required(value, "finding_refs"), "finding_pool", finding)}
+
+            def record(value):
+                return {**attributes(value, RecordReconciliation, {"fields", "findings"}),
+                        "fields": references(required(value, "field_refs"), "rows", field),
+                        "findings": references(
+                            required(value, "finding_refs"), "finding_pool", finding)}
+
+            for member in ("coverage", "rows", "records", "finding_pool", "finding_refs"):
+                indexes = db.execute(
+                    "SELECT MIN(ordinal) FROM pool WHERE member=?", (member,)
+                ).fetchone()[0]
+                if (indexes is None or (member == "coverage" and indexes != -2)
+                        or (member != "coverage" and indexes == -2)):
+                    raise ValueError(f"reconciliation.{member}: missing or invalid member")
+            # Validate all pool entries, including ones not referenced by selected records.
+            for (payload,) in db.execute(
+                "SELECT payload FROM pool WHERE member='finding_pool' AND ordinal>=0"
+            ):
+                finding(json.loads(payload))
+            transforms = (
+                ("coverage", lambda value: attributes(value, CoverageReport)),
+                ("rows", field), ("records", record),
+                ("findings", lambda value: finding(lookup("finding_pool", value))),
+            )
+            for member, transform in transforms:
+                source = "finding_refs" if member == "findings" else member
+                for index, payload in db.execute(
+                    "SELECT ordinal,payload FROM pool WHERE member=? ORDER BY ordinal", (source,)
+                ):
+                    value = None if index == -1 else transform(json.loads(payload))
+                    if include is None or member in include:
+                        selected = (item_fields or {}).get(member)
+                        if selected is not None and isinstance(value, dict):
+                            value = {key: item for key, item in value.items() if key in selected}
+                        yield member, None if index == -2 else index, value, row[1]
+        finally:
+            db.close()
 
 
 def prepare_projection(connection, case_id, **options):
