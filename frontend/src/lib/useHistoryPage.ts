@@ -1,126 +1,55 @@
-import { useEffect, useRef, useState } from 'react'
-import { request, object, type CaseData, type BundledHistoryPage, type HistoryTables, type Row } from './backend'
-import { HistoryPageController, ObsoleteHistoryRequest } from './historyPageController'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { type CaseData, type HistoryTables, type Row } from './backend'
+import { useScreenQuery, useNextPage, type ScreenPage } from './useScreenQuery'
+import { useTablePage } from './useTablePage'
 import { useApp } from '../store'
 
-const located = new Map<string, number>()
-let lastCase: string | undefined
-const saved = new Map<string, { filter: string; offset: number }>()
-const emptyPage = (offset = 0): BundledHistoryPage => ({ items: [], total: 0, offset, limit: 100 })
+const filters = new Map<string, string>()
+useApp.subscribe((state, previous) => {
+  if (state.caseOpening !== previous.caseOpening || state.locked || !state.user) filters.clear()
+})
 
-function selectPage(page: BundledHistoryPage) {
-  const selection = useApp.getState()
-  if (!page.items.some(h => object(h.summary.record).id === selection.selectedRecord &&
-    (!selection.selectedRecordTable || object(h.summary.record).table === selection.selectedRecordTable))) {
-    const record = object(page.items[0]?.summary.record)
-    selection.selectRecord(String(record.id ?? ''), String(record.table ?? ''))
-  }
-}
-
+/** Indexed summaries first; only the selected history needs its replay details. */
 export function useHistoryPage(data: CaseData | null) {
-  const caseId = data?.case.case_id
+  const opening = useApp(s => s.caseOpening)
+  const scope = `${opening}:${data?.case.case_id ?? ''}`
+  const [filter, setFilter] = useState(() => filters.get(scope) ?? '')
+  const [page, setPage] = useTablePage('history-list')
+  const selected = useApp(s => s.selectedRecord)
+  const table = useApp(s => s.selectedRecordTable)
   const navigation = useApp(s => s.recordNavigation)
-  const locked = useApp(s => s.locked)
-  const snapshot = useRef({ data, generation: 0 })
-  if (snapshot.current.data !== data) snapshot.current = { data, generation: snapshot.current.generation + 1 }
-  const generation = snapshot.current.generation
-  const [controller] = useState(() => new HistoryPageController((scope, offset) =>
-    request<BundledHistoryPage>('get_history_page', { case_id: scope.caseId, offset, limit: 100, include_details: true,
-      ...(scope.table ? { database: scope.database, table: scope.table } : {}) })))
-  const [query, setQuery] = useState(() => {
-    if (lastCase !== caseId) saved.clear()
-    lastCase = caseId
-    return { caseId, ...(saved.get(caseId ?? '') ?? { filter: '', offset: 0 }) }
-  })
-  const [tables, setTables] = useState<HistoryTables['tables']>([])
-  const [shown, setShown] = useState<{ data: CaseData | null; filter: string; page: BundledHistoryPage }>(() => {
-    const items = data?.analysis.reconstruction?.details_deferred === false
-      ? (data.analysis.reconstruction.histories as Row[] ?? []).map(detail => ({ summary: detail, detail, findings: [] })) : []
-    return { data, filter: query.filter, page: { ...emptyPage(), items, total: items.length } }
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  useEffect(() => () => controller.dispose(), [controller])
+  const [located, setLocated] = useState(0)
+  const active = useApp(s => s.screen === 'record' && !s.locked)
+  useEffect(() => { setFilter(filters.get(scope) ?? ''); setLocated(0) }, [scope])
+  const changeFilter = useCallback((value: string) => {
+    filters.set(scope, value)
+    if (filters.size > 16) filters.delete(filters.keys().next().value!)
+    setFilter(value)
+  }, [scope])
+  const legacy = Array.isArray(data?.analysis.reconstruction?.histories) && data?.analysis.reconstruction?.details_deferred !== true
+  const tables = useScreenQuery<HistoryTables>('get_history_tables', {}, 'record', !legacy)
+  const payload = { kind: 'histories', offset: page * 100, limit: 100, ...(filter ? { bucket: filter } : {}) }
+  const query = useScreenQuery<ScreenPage>('get_screen_page', payload, 'record', !legacy)
+  useNextPage(query.value, payload, 'record')
+  const location = useScreenQuery<{ table: string; offset: number }>('locate_history_record', { identity: selected, ...(table ? { qualified_table: table } : {}) }, 'record', !!selected && navigation !== located && !legacy)
   useEffect(() => {
-    if (lastCase !== caseId) { saved.clear(); located.clear(); lastCase = caseId }
-    setQuery(q => q.caseId === caseId ? q : { caseId, filter: '', offset: 0 })
-  }, [caseId])
-  useEffect(() => {
-    if (!caseId || query.caseId !== caseId || locked) {
-      controller.dispose()
-      setShown({ data, filter: query.filter, page: emptyPage(query.offset) })
-      setLoading(false)
-      return
+    if (location.value && navigation !== located) {
+      changeFilter(location.value.table); setPage(location.value.offset / 100); setLocated(navigation)
     }
-    let active = true
-    setError('')
-    // Invalidate queued work before waiting for table options or record location.
-    const knownTable = tables.find(t => t.table === query.filter)
-    controller.activate({ caseId, generation, ...(query.filter ? { database: knownTable?.database, table: query.filter } : {}) }, query.offset)
-    const cached = controller.peek(query.offset)
-    const target = useApp.getState().selectedRecord
-    const locating = navigation && target && located.get(caseId) !== navigation
-    setLoading(!cached || !!locating)
-    if (cached && !locating) { setShown({ data, filter: query.filter, page: cached }); selectPage(cached) }
-    else setShown({ data, filter: query.filter, page: emptyPage(query.offset) })
-    const load = async () => {
-      if (locating) {
-        const location = await request<{ table: string; offset: number }>('locate_history_record', { case_id: caseId, identity: target })
-        if (!active) return
-        located.set(caseId, navigation)
-        setQuery({ caseId, filter: location.table, offset: location.offset })
-        return
-      }
-      const options = await controller.tables(caseId, generation, () => request<HistoryTables>('get_history_tables', { case_id: caseId }))
-      if (!active) return
-      setTables(options.tables)
-      const table = options.tables.find(t => t.table === query.filter)
-      if (query.filter && !table) {
-        setShown({ data, filter: query.filter, page: emptyPage() })
-        useApp.getState().selectRecord('')
-        return
-      }
-      controller.activate({ caseId, generation, ...(table ? { database: table.database, table: table.table } : {}) }, query.offset)
-      const page = await controller.load(query.offset)
-      if (!active) return
-      if (query.offset > 0 && !page.items.length) { setQuery(q => ({ ...q, offset: 0 })); return }
-      setShown({ data, filter: query.filter, page })
-      saved.set(caseId, { filter: query.filter, offset: query.offset })
-      selectPage(page)
-    }
-    void load().catch(e => { if (active && !(e instanceof ObsoleteHistoryRequest)) setError(String(e)) })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [caseId, data, generation, query, navigation, locked, controller, tables])
-
-  const visible = !locked && query.caseId === caseId && shown.data === data && shown.filter === query.filter && shown.page.offset === query.offset
-  const result = visible ? shown.page : emptyPage(query.offset)
+  }, [location.value, navigation, located, setPage, changeFilter])
+  const items = useMemo(() => legacy ? (data?.analysis.reconstruction?.histories as Row[] ?? []) : query.value?.items ?? [], [legacy, data?.analysis.reconstruction?.histories, query.value?.items])
+  const shownItems = useMemo(() => legacy ? items.slice(page*100,(page+1)*100) : items,[legacy,items,page])
   useEffect(() => {
-    if (!visible || loading || error || !result.items.length) return
-    // The first frame commits the page; the second allows its paint before IPC.
-    let second = 0
-    const first = requestAnimationFrame(() => {
-      second = requestAnimationFrame(() => { void controller.prefetch(result.total) })
-    })
-    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second) }
-  }, [visible, loading, error, result, controller])
-
-  return { ...result, tables, loading, error, filter: query.filter,
-    changeFilter: (filter: string) => {
-      const table = tables.find(t => t.table === filter)
-      controller.activate({ caseId: caseId ?? '', generation, ...(filter ? { database: table?.database, table: filter } : {}) }, 0)
-      setShown({ data, filter, page: emptyPage() })
-      setLoading(true); setError(''); useApp.getState().selectRecord('')
-      setQuery({ caseId, filter, offset: 0 })
-    },
-    changePage: (offset: number) => {
-      const table = tables.find(t => t.table === query.filter)
-      controller.activate({ caseId: caseId ?? '', generation, ...(table ? { database: table.database, table: table.table } : {}) }, offset)
-      const page = controller.peek(offset)
-      useApp.getState().selectRecord('')
-      setError(''); setLoading(!page)
-      if (page) { setShown({ data, filter: query.filter, page }); selectPage(page) }
-      else setShown({ data, filter: query.filter, page: emptyPage(offset) })
-      setQuery(q => ({ ...q, offset }))
-    } }
+    if (!active || !shownItems.length || (legacy && selected) || (selected && navigation !== located)) return
+    if (!shownItems.some(item => item.record && (item.record as Row).id === selected)) {
+      const record = shownItems[0].record as Row
+      useApp.getState().selectRecord(String(record.id), String(record.table))
+    }
+  }, [active, shownItems, selected, navigation, located, legacy])
+  const summaryItems = legacy ? shownItems.map(detail => ({ summary: detail, detail, findings: [] }))
+    : shownItems.map(summary => ({ summary, detail: undefined, findings: [] }))
+  return { items: summaryItems, total: legacy ? items.length : query.value?.total ?? 0, offset: page * 100, limit: 100,
+    tables: tables.value?.tables ?? [], loading: !legacy && query.loading, error: query.error || tables.error || location.error,
+    retry: query.retry, filter, changeFilter: (value: string) => { changeFilter(value); setPage(0); useApp.getState().selectRecord('') },
+    changePage: (offset: number) => { setPage(offset / 100); if (!legacy) useApp.getState().selectRecord('') } }
 }

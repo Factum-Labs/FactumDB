@@ -45,7 +45,8 @@ const script = [
   'try: serve(sys.stdin, sys.stdout, router)',
   'finally: runtime.close()',
 ].join('\n')
-const child = spawn(python, [...(python === 'py' ? ['-3.11'] : []), '-B', '-u', '-c', script, workspace], {
+// Original evidence lives outside the managed workspace, just as in the app.
+const child = spawn(python, [...(python === 'py' ? ['-3.11'] : []), '-B', '-u', '-c', script, join(workspace, 'managed')], {
   cwd: backend, env: { ...process.env, PYTHONUTF8: '1' }, windowsHide: true, stdio: ['pipe', 'pipe', 'inherit'],
 })
 const lines = createInterface({ input: child.stdout })
@@ -113,7 +114,7 @@ try {
   const log = join(workspace, 'binlog.000001')
   writeFileSync(tablespace, 'test tablespace')
   writeFileSync(log, 'test binary log')
-  assert.equal(await useApp.getState().registerEvidence([tablespace, log]), true)
+  assert.equal(await useApp.getState().registerEvidence([tablespace, log]), true, useApp.getState().error ?? '')
   await analysisReady()
   const evidence = useApp.getState().data!.tables.evidence_files[0]
   await useApp.getState().verifyEvidence(String(evidence.evidence_id))

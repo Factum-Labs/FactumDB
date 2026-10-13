@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "check:progressive": "esbuild checks/progressive.check.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/progressive.check.mjs --log-level=warning && node node_modules/.cache/progressive.check.mjs",
+    "check:progressive-browser": "node checks/progressive.browser.mjs",
     "check:history-cache": "esbuild checks/historyPageController.check.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/historyPageController.check.mjs --log-level=warning && node node_modules/.cache/historyPageController.check.mjs",
     "check:history-browser": "node checks/history.browser.mjs",
     "check:report-browser": "node checks/report.browser.mjs",

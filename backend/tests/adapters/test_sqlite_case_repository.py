@@ -170,9 +170,11 @@ def test_foreign_keys_are_enforced(connection) -> None:
 def test_schema_can_be_created_twice(connection) -> None:
     """Opening an existing case database must not fail."""
     initialise(connection)
+    first = connection.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall()
     initialise(connection)
 
     tables = connection.execute(
         "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'"
     ).fetchone()[0]
-    assert tables == 20
+    assert tables == len(first)
+    assert connection.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall() == first
