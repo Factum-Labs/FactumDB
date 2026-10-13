@@ -33,7 +33,7 @@ Install Linux Node.js 22.12+ (or 24 LTS), a current Rust toolchain, and:
 sudo apt update
 sudo apt install build-essential curl file libwebkit2gtk-4.1-dev \
   libayatana-appindicator3-dev librsvg2-dev patchelf pkg-config libssl-dev \
-  libaio1t64 libnuma1 polkitd pkexec
+  libaio1t64 libnuma1 polkitd pkexec python3-pip
 python3 scripts/build_linux_bundle.py
 ```
 
@@ -74,7 +74,7 @@ password login, case creation and persistence across backend restart:
 
 ```bash
 python3 scripts/check_linux_bundle.py dist/linux/FactumDB_0.1.0_amd64.deb
-# Optional: run all extraction/analysis stages and export using real fixture data.
+# Optional: run all extraction/analysis stages and JSON/PDF export using real fixture data.
 python3 scripts/check_linux_bundle.py dist/linux/FactumDB_0.1.0_amd64.deb \
   --evidence datasets/attack_lab/subjects/06_clean_marketplace
 cd backend
@@ -102,11 +102,16 @@ Uninstall using `sudo apt remove factum-db`; existing examiner data is retained.
 
 ## Verified build
 
-The 2026-10-08 build was installed and checked in Ubuntu 24.04.4 x86-64 WSL:
-1,114 backend tests passed (11 platform/optional tests skipped), all 5 native
-Rust transport tests passed, and the extracted installer completed every
-analysis stage and JSON export on the clean marketplace fixture. Runtime/source
+The 2026-10-13 build was installed and checked in Ubuntu 24.04.4 x86-64 WSL:
+1,319 distinct backend tests passed across the suite and targeted reruns
+(11 platform/optional tests skipped), all 5 native Rust transport tests passed,
+and the extracted installer completed every analysis stage and JSON/PDF export
+on the clean marketplace fixture. The backend test workspace needed links to
+the repository's datasets and rule documentation; these test inputs are not
+included in the installer. Runtime/source
 hashes, automatic tool settings, login/logout, case persistence across restart,
 the installed polkit policy, and desktop startup with renderer-to-backend IPC
 under Xvfb passed. Interactive credential/file dialogs still require a desktop
-session. The installer is approximately 579 MB, including corresponding sources.
+session. The installer is approximately 599 MB, including corresponding sources
+and pinned PDF libraries. `dist/linux/verification.txt` records the checks and
+installer checksum.

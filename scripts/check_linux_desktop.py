@@ -3,6 +3,7 @@ import argparse
 import os
 from pathlib import Path
 import signal
+import shutil
 import sqlite3
 import subprocess
 import tempfile
@@ -45,6 +46,13 @@ def check(binary):
                 except subprocess.TimeoutExpired:
                     os.killpg(process.pid, signal.SIGKILL)
                     process.wait(timeout=10)
+                # The desktop portal can leave a disconnected FUSE mount after
+                # its D-Bus session exits. Detach only this test's private mount
+                # before TemporaryDirectory traverses it during cleanup.
+                fusermount = shutil.which("fusermount3") or shutil.which("fusermount")
+                if fusermount:
+                    subprocess.run([fusermount, "-uz", str(runtime / "doc")],
+                                   capture_output=True, timeout=10, check=False)
 
 
 if __name__ == "__main__":
