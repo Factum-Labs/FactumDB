@@ -134,8 +134,8 @@ class SqliteDomainRepository:
 
     def _save(self, case_id: str, stage: str, result) -> None:
         later = STAGES[STAGES.index(stage) + 1:]
-        payload = json.dumps(encode_reconciliation(result) if stage == "reconciliation"
-                             else encode(result))
+        encoded = encode_reconciliation(result) if stage == "reconciliation" else encode(result)
+        payload = json.dumps(encoded)
         with self._connection:
             if later:
                 self._connection.execute(
@@ -148,6 +148,8 @@ class SqliteDomainRepository:
                 "(case_id, stage, result_json, saved_at) VALUES (?, ?, ?, ?)",
                 (case_id, stage, payload, to_text(self._now())),
             )
+            from adapters.persistence.sqlite_screen_repository import ScreenRepository
+            ScreenRepository(self._connection).rebuild(case_id, stage, encoded)
             if stage == "reconstruction":
                 from adapters.persistence.sqlite_history_summary_repository import HistorySummaries
                 HistorySummaries(self._connection).rebuild(case_id)

@@ -1,4 +1,4 @@
-import { useEffect, type FC } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type FC } from 'react'
 import { useApp } from './store'
 import type { Screen } from './data/types'
 import { A, A_SOFT, GRN } from './lib/tokens'
@@ -49,6 +49,15 @@ const SCREENS: Record<Screen, FC> = {
   settings: SettingsScreen,
 }
 
+function CaseScreens({ screen }: { screen: Screen }) {
+  const [visited, setVisited] = useState<Screen[]>([screen])
+  useEffect(() => { setVisited(items => items.includes(screen) ? items : [...items, screen]) }, [screen])
+  return [...new Set([...visited, screen])].map(id => {
+    const Component = SCREENS[id]
+    return <div key={id} hidden={id !== screen} className={id === 'pipeline' ? 'h-full min-h-0' : undefined}><Component /></div>
+  })
+}
+
 export default function App() {
   useSessionLock()
   const locked = useApp(s => s.locked)
@@ -81,9 +90,14 @@ export default function App() {
   const screen = useApp((s) => s.screen)
   const go = useApp((s) => s.go)
   const pipelineComplete = useApp((s) => s.pipelineComplete)
+  const opening = useApp(s => s.caseOpening)
+  const viewport = useRef<HTMLDivElement>(null)
+  const positions = useRef(new Map<string, number>())
+  const positionKey = `${opening}:${screen}`
+  useLayoutEffect(() => { if (viewport.current) viewport.current.scrollTop = positions.current.get(positionKey) ?? 0 }, [positionKey])
+  useEffect(() => { positions.current.clear() }, [opening, locked, user])
 
   const [title, subtitle] = META[screen]
-  const Screen = SCREENS[screen]
 
   if (!user) return <AuthScreen />
   if (locked) return <LockedScreen />
@@ -154,18 +168,16 @@ export default function App() {
             )}
           </div>
 
-          <div className={'min-h-0 flex-1 overflow-auto px-[18px] pt-4 ' + (screen === 'pipeline' ? 'flex flex-col pb-4' : 'pb-10')}>
+          <div ref={viewport} onScroll={event => { positions.current.set(positionKey, event.currentTarget.scrollTop) }} className={'min-h-0 flex-1 overflow-auto px-[18px] pt-4 ' + (screen === 'pipeline' ? 'flex flex-col pb-4' : 'pb-10')}>
             {error && <div role="alert" className="mb-4 whitespace-pre-wrap rounded border border-red-300 bg-red-50 p-3 text-xs text-red-800">{error}{!ready && <button onClick={() => { void initialize() }} className="ml-3 underline">Retry connection</button>}</div>}
             {activeCaseId && preview && (previewError || analysisError) && ['intake', 'pipeline'].includes(screen) && <div role="alert" className="mb-4 text-xs">{previewError ?? analysisError}<button onClick={retryCaseLoading} className="ml-3 underline">Retry case loading</button></div>}
             {notice && <div role="status" className="mb-4 flex items-center gap-3 rounded border border-green-300 bg-green-50 p-3 text-xs text-green-800">
               <span>{notice}</span><button type="button" aria-label="Dismiss status message" className="ml-auto shrink-0 underline" onClick={() => useApp.setState({ notice: null })}>Dismiss</button>
             </div>}
             <div className={screen === 'pipeline' ? 'min-h-0 flex-1' : 'contents'}>
-              {ready ? (activeCaseId && !data && !['cases', 'settings', 'intake', 'pipeline'].includes(screen)
-                ? <div role={analysisError ? 'alert' : 'status'}>{analysisError ?? 'Loading case analysis?'}{analysisError && <button onClick={retryCaseLoading} className="ml-3 underline">Retry analysis</button>}</div>
-                : activeCaseId && !preview && !data && ['intake', 'pipeline'].includes(screen)
+              {ready ? (activeCaseId && !preview && !data && !['cases', 'settings'].includes(screen)
                   ? <section className="rounded border border-line bg-panel p-4"><p>{listedCase?.name}</p><p>Examiner: {listedCase?.examiner}</p><p role={previewError ? 'alert' : 'status'}>{previewError ?? 'Loading registered evidence and pipeline?'}</p>{previewError && <button onClick={retryCaseLoading}>Retry preview</button>}</section>
-                  : <Screen />) : !error && <p className="text-sm text-muted">Connecting to the Python backend…</p>}
+                  : <CaseScreens key={opening} screen={screen} />) : !error && <p className="text-sm text-muted">Connecting to the Python backend…</p>}
             </div>
           </div>
 

@@ -3,6 +3,7 @@ import { mockIPC } from '@tauri-apps/api/mocks'
 import { RecordHistoryScreen } from '../src/screens/RecordHistoryScreen'
 import { useApp } from '../src/store'
 import type { CaseData, HistoryPageItem } from '../src/lib/backend'
+import { useTablePage } from '../src/lib/useTablePage'
 
 const calls: string[] = []
 const pageCalls: { table: string; offset: number; caseId: string }[] = []
@@ -28,13 +29,19 @@ function item(index: number, table = 'credit.accounts'): HistoryPageItem {
 Object.assign(globalThis, { isTauri: true })
 mockIPC(async (command, args) => {
   if (command !== 'backend_request') throw new Error('Unexpected native command')
-  const name = String(args?.command)
+  let name = String(args?.command)
   const payload = args?.payload as Record<string, unknown>
   const measurement = measurementEpoch
   calls.push(name)
+  if (name === 'get_case_header') return { case: { ...data.case, case_id: payload.case_id }, evidence: [], run: null, pipeline: {metrics:{},summaries:{},warnings:{}} }
+  if (name === 'get_screen_context') return {tables:{}}
+  if (name === 'get_screen_detail') return {detail:item(Number(String(payload.identity).split(':')[1]),String(payload.bucket || 'credit.accounts')).detail,findings:[]}
+  if (name === 'get_case_data') return { ...data, case: { ...data.case, case_id: payload.case_id } }
   if (name === 'get_history_tables') return { tables: [{ database: 'credit', table: 'credit.accounts', count: 205 }, { database: 'other', table: 'other.accounts', count: 2 }], total: 207 }
   if (name === 'locate_history_record') return { table: 'credit.accounts', offset: 100 }
-  if (name !== 'get_history_page' || payload.include_details !== true) throw new Error('Detail requests are forbidden')
+  const screenPage = name === 'get_screen_page' && payload.kind === 'histories'
+  if (screenPage) {name = 'get_history_page'; payload.table = payload.bucket; payload.include_details = true}
+  if (name !== 'get_history_page' || payload.include_details !== true) throw new Error(`Unexpected request: ${name}`)
   const offset = Number(payload.offset)
   const table = String(payload.table || 'credit.accounts')
   const call = { table, offset, caseId: String(payload.case_id) }
@@ -47,7 +54,7 @@ mockIPC(async (command, args) => {
     const response = await (await fetch(`/measured-${measuredMode}.json?offset=${offset}`)).json()
     measuredLatency.push(performance.now() - started)
     activePages--; if (measurement === measurementEpoch) measuredCompleted.add(offset)
-    return response
+    return screenPage ? {...response,items:response.items.map((item:HistoryPageItem)=>item.summary)} : response
   }
   await new Promise(resolve => setTimeout(resolve, table === 'other.accounts' ? 120 : 40))
   activePages--
@@ -57,13 +64,14 @@ mockIPC(async (command, args) => {
   // Match the real IPC boundary rather than sharing mock objects with React.
   const response = JSON.parse(JSON.stringify({ items: Array.from({ length: Math.min(100, total - offset) }, (_, i) => item(offset + i, table)), total, offset, limit: 100 }))
   if (longHistories && measurement === measurementEpoch) measuredCompleted.add(offset)
-  return response
+  return screenPage ? {...response,items:response.items.map((item:HistoryPageItem)=>item.summary)} : response
 })
-useApp.setState({ data, selectedRecord: '', recordNavigation: 0, screen: 'record' })
+useApp.setState({ data, user:{username:'Test'}, selectedRecord: '', recordNavigation: 0, screen: 'record' })
 export default function Fixture() {
   const screen = useApp(state => state.screen)
   const locked = useApp(state => state.locked)
-  return locked ? <p>Locked</p> : screen === 'record' ? <RecordHistoryScreen /> : <p>Other screen</p>
+  const [page, setPage] = useTablePage('lifecycle-probe')
+  return locked ? <p>Locked</p> : screen === 'record' ? <><button onClick={() => setPage(page + 1)}>Probe next</button><output data-testid="table-page">{page}</output><RecordHistoryScreen /></> : <p>Other screen</p>
 }
 createRoot(document.getElementById('root')!).render(<Fixture />)
 const waitFor = async (condition: () => boolean) => {
@@ -80,7 +88,8 @@ Object.assign(window, { runHistoryChecks: async () => {
   const before = calls.length
   records()[1].click()
   await waitFor(() => records()[1].getAttribute('aria-pressed') === 'true')
-  assert(calls.length === before, 'Selection requested backend data')
+  await waitFor(()=>calls.slice(before).includes('get_screen_detail'))
+  assert(calls.slice(before).every(name=>name==='get_screen_detail'), 'Selection should load only its own detail')
   const initialPages = pageCalls.length
   let started = performance.now()
   const button = (text: string) => [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === text)!
@@ -95,7 +104,7 @@ Object.assign(window, { runHistoryChecks: async () => {
   await waitFor(() => records().length === 100 && useApp.getState().selectedRecord === 'accounts:100')
   assert(pageCalls.filter(c => c.offset === 100).length === 1, 'Previous page was fetched again')
   assert(pageCalls.length >= initialPages + 1, 'Next adjacent page was not prefetched')
-  await waitFor(() => completed.filter(c => c.offset === 0).length === 2)
+  assert(completed.filter(c=>c.offset===0).length===1,'Previously visited page should remain cached')
   button('Previous').click()
   await waitFor(() => useApp.getState().selectedRecord === 'accounts:0')
   filter('credit.accounts')
@@ -119,7 +128,7 @@ Object.assign(window, { runHistoryChecks: async () => {
   useApp.setState({ data: { ...data, case: { ...data.case, case_id: 'history-b' } }, recordNavigation: 0, selectedRecord: '' })
   await waitFor(() => useApp.getState().selectedRecord === 'accounts:0')
   const refreshCalls = calls.length
-  useApp.setState({ data: { ...useApp.getState().data! } })
+  useApp.setState({ data: { ...useApp.getState().data! }, preview:{...useApp.getState().preview!,revision:`long-${measurementEpoch}`} })
   await waitFor(() => calls.length > refreshCalls && records().length === 100 && !document.body.textContent!.includes('Loading histories'))
   useApp.setState({ locked: true })
   await waitFor(() => document.body.textContent === 'Locked')
@@ -149,11 +158,46 @@ Object.assign(window, { runHistoryChecks: async () => {
   const signedOutCalls = calls.length
   await new Promise(resolve => setTimeout(resolve, 100))
   assert(calls.length === signedOutCalls, 'Requests continued after sign-out')
-  useApp.setState({ data: { ...data }, recordNavigation: 0 })
+  useApp.setState({ data: { ...data }, user:{username:'Test'}, recordNavigation: 0 })
   await waitFor(() => records().length === 100)
   assert(maximumActivePages === 1, 'Overlapping page requests')
-  assert(!calls.includes('get_analysis_detail'), 'Lazy detail request was made')
-  return `PASS: cached navigation (${cachedNavigationMs.toFixed(1)} ms), reuse, post-display prefetch, filtering, stale responses, navigation, refresh, lock/unmount and background failure recovery.`
+  assert(!calls.includes('get_case_data'), 'History navigation must not load a full case')
+  useApp.setState({ user: { username: 'Test' }, activeCaseId: data.case.case_id })
+  const open = async (id: string) => {
+    await useApp.getState().openCase(id)
+    await waitFor(() => useApp.getState().data?.case.case_id === id)
+    useApp.getState().go('record')
+    await waitFor(() => records().length === 100 && useApp.getState().selectedRecord === 'accounts:0')
+    assert(document.querySelector('[data-testid="table-page"]')?.textContent === '0', 'Table pagination survived reopening')
+    assert(document.querySelector('select')?.value === '', 'History filter survived reopening')
+  }
+  await open(data.case.case_id)
+  filter('credit.accounts')
+  await waitFor(() => records().length === 100 && !document.body.textContent!.includes('Loading histories'))
+  button('Next').click()
+  button('Probe next').click()
+  await waitFor(() => useApp.getState().selectedRecord === 'accounts:100')
+  useApp.getState().go('settings')
+  await waitFor(() => document.body.textContent === 'Other screen')
+  useApp.getState().go('record')
+  await waitFor(() => records().length === 100 && useApp.getState().selectedRecord === 'accounts:100')
+  assert(document.querySelector('select')?.value === 'credit.accounts', 'History filter lost within the same opening')
+  assert(document.querySelector('[data-testid="table-page"]')?.textContent === '1', 'Table page lost within the same opening')
+  useApp.getState().go('cases')
+  assert(useApp.getState().activeCaseId === null && useApp.getState().data === null, 'Cases navigation did not close the case')
+  await open(data.case.case_id)
+  button('Next').click()
+  button('Probe next').click()
+  await waitFor(() => useApp.getState().selectedRecord === 'accounts:100')
+  await open('history-b')
+  button('Next').click()
+  button('Probe next').click()
+  await waitFor(() => useApp.getState().selectedRecord === 'accounts:100')
+  await open(data.case.case_id)
+  button('Next').click()
+  await waitFor(() => useApp.getState().selectedRecord === 'accounts:100')
+  await open(data.case.case_id)
+  return `PASS: cached navigation (${cachedNavigationMs.toFixed(1)} ms), filtering, stale responses, refresh, lock/unmount, background failure recovery, state retained within an opening, reset on close/reopen and A/B/A switching.`
 } })
 Object.assign(window, { loadLongHistoryPage: async () => {
   const started = performance.now()
@@ -161,7 +205,7 @@ Object.assign(window, { loadLongHistoryPage: async () => {
   longHistories = true
   measurementEpoch++; holdAdjacent = true; measuredCompleted.clear()
   filter('')
-  useApp.setState({ data: { ...useApp.getState().data! } })
+  useApp.setState({ data: { ...useApp.getState().data! }, preview:{...useApp.getState().preview!,revision:`measured-${measurementEpoch}`} })
   await waitFor(() => records().length === 100 && document.body.textContent!.includes('400 steps'))
   return { cold_page_ms: performance.now() - started, bytes: new TextEncoder().encode(JSON.stringify(Array.from({ length: 100 }, (_, i) => item(i)))).length }
 } })
