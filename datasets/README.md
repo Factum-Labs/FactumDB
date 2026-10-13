@@ -26,11 +26,31 @@ The evidence files themselves are never committed (see `.gitignore`: the reposit
 | Scenario | What it tests | Evidence |
 |---|---|---|
 | `scenario1_update` | One account inserted and changed twice; no binlog index | 1 `.ibd`, 1 binlog |
-| `scenario2_delete` | Scenario 1, two more accounts, and a deleted row recovered from the page | 1 `.ibd`, 6 binlogs, index |
-| `scenario3_quotes` | Scenario 2, and an owner name with a comma and an apostrophe | 1 `.ibd`, 24 binlogs, index |
-| `scenario4_types` | Common column types, multi-row events, primary key changes, a composite key, a partial row image, `BLOB` and `JSON` | 3 `.ibd`, 22 binlogs, index |
+| `scenario2_delete` | Scenario 1, two more accounts, and a deleted row recovered from the page | 1 `.ibd`, 3 binlogs, index |
+| `scenario3_quotes` | Scenario 2, and an owner name with a comma and an apostrophe | 1 `.ibd`, 3 binlogs, index |
+| `scenario4_types` | Common column types, multi-row events, primary key changes, a composite key, a partial row image, `BLOB` and `JSON` | 3 `.ibd`, 5 binlogs, index |
 
 In all four, the pages agree with what the binlogs say happened. They measure whether the evidence is recovered correctly and whether agreement is reported as agreement, with no false alarms. None of them can measure whether a real disagreement would be missed, because none contains one.
+
+## Acquiring the evidence
+
+The reference copies were acquired on 2026-10-13 from MySQL 8.4.11 on macOS (Homebrew), by running each `generate.sql` on a fresh server. They replace the first copies, acquired on Linux from August to October, and match every expected row, event, transaction, warning and coverage result the first ones did; only the file list and hashes in `expected.json` changed. This also shows the scripts reproduce their scenarios.
+
+Each scenario's README gives its steps. The paths differ by platform:
+
+| | macOS (Homebrew `mysql@8.4`) | Ubuntu (`mysql-server`) |
+|---|---|---|
+| Root session | `mysql -u root` | `sudo mysql` |
+| Tablespaces (`<datadir>`) | `/opt/homebrew/var/mysql` | `/var/lib/mysql` |
+| Binlogs and index (`<binlogdir>`) | `/opt/homebrew/var/mysql` | `/var/log/mysql` |
+| Copying | `cp`, as your own user | `sudo cp`, then `sudo chown -R "$USER":` on the copy |
+
+Two rules matter more than the paths:
+
+- **Start from a server whose binlogs hold nothing else.** Each `generate.sql` replays the earlier scenarios' changes itself (scenario 3 inserts account 101 again, for example), so logs left by an earlier run would count those changes twice. On a server that was used before, run `RESET BINARY LOGS AND GTIDS;` first - only ever on a test server.
+- **Copy a tablespace while `FLUSH TABLES ... FOR EXPORT` holds its lock,** in the same session that ran the script, so the copy is consistent and purge has no time to remove a deleted row.
+
+On macOS, MySQL sets `lower_case_table_names=2` because the file system ignores case. Every name in these scenarios is lowercase, so it makes no difference to the evidence.
 
 ## How the expected results were written
 
@@ -52,3 +72,11 @@ Two cases allow more than one verdict:
 
 - **A record changed through a partial row image** (scenario 4, payment 1). R-RECON-002 makes agreeing values Strong when a partial image is involved; but `binlog_row_image=MINIMAL` only leaves out columns that did not change, so Exact is defensible too. Either counts as correct. Conflicting or Unresolved would not.
 - **A row left on a page under a key that was later changed** (scenario 4, payment 3 and order item `(100, 2)`). InnoDB keeps the old version delete-marked, and the logged key change explains it. It may be reported as its own record, agreeing, or merged into the record under the new key (`may_be_merged_into`).
+
+## Running the evaluation
+
+`evaluate.py` runs the whole pipeline on each scenario's reference evidence, twice, and scores the result against `expected.json`; see `docs/evaluation.md` for what it measures.
+
+```bash
+python3 datasets/evaluate.py --evidence <evidence folder> --out docs/evaluation-results.md
+```
