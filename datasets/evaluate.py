@@ -156,10 +156,12 @@ def run_once(scenario, root):
         "stages": {s.stage.value: (s.attempts[-1].finished_at - s.attempts[-1].started_at).total_seconds()
                    for s in run.stages},
     }
+    # ru_maxrss is in kilobytes on Linux but in bytes on macOS.
+    per_mb = 1024 * 1024 if sys.platform == "darwin" else 1024
     result["memory_mb"] = {
-        "baseline": baseline / 1024,
-        "peak": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024,
-        "largest_tool": resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1024,
+        "baseline": baseline / per_mb,
+        "peak": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / per_mb,
+        "largest_tool": resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / per_mb,
     }
     return result
 
