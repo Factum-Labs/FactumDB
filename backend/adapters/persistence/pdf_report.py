@@ -2,6 +2,7 @@
 
 import hashlib
 import shutil
+from dataclasses import dataclass
 from datetime import datetime
 from functools import cache
 from pathlib import Path
@@ -53,18 +54,24 @@ NAVY = (31, 51, 69)
 PALE = (239, 247, 247)
 MUTED = (90, 105, 116)
 COLORS = {
-    "Exact": (52, 120, 85),
-    "Strong": TEAL,
-    "Partial": (148, 100, 0),
-    "Conflicting": (179, 58, 58),
-    "Unresolved": (111, 78, 146),
-    "Unsupported": (104, 113, 123),
+    "Exact": (0, 168, 107),
+    "Strong": (0, 119, 190),
+    "Partial": (240, 204, 22),
+    "Conflicting": (189, 37, 44),
+    "Unresolved": (132, 60, 152),
+    "Unsupported": (102, 102, 102),
 }
+TEXT_COLORS = {**COLORS, "Partial": (128, 93, 0)}
+
+
+@dataclass(frozen=True)
+class ColourSwatch:
+    color: tuple[int, int, int]
 
 
 class SummaryPDF(FPDF):
     def header(self):
-        self.set_xy(self.l_margin, 18)
+        self.set_xy(self.l_margin, 10)
         self.set_font("Report", size=8)
         self.set_text_color(*TEAL)
         self.cell(0, 4, "FactumDB  /  INVESTIGATOR SUMMARY", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
@@ -131,7 +138,8 @@ class Layout:
         pdf = self.pdf
         for label, value in pairs:
             text = _supported_text(str(value))
-            pdf.set_font("Report", size=10)
+            value_size = 9 if label.endswith("SHA-256") else 10
+            pdf.set_font("Report", size=value_size)
             lines = pdf.multi_cell(
                 pdf.epw - 49, 5.4, text, dry_run=True, output=MethodReturnValue.LINES
             ) or [""]
@@ -140,6 +148,7 @@ class Layout:
                 pdf.set_font("Report", size=10)
                 pdf.set_text_color(*MUTED)
                 pdf.cell(49, 5.4, label if index == 0 else "")
+                pdf.set_font("Report", size=value_size)
                 pdf.set_text_color(*NAVY)
                 pdf.cell(pdf.epw - 49, 5.4, line, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
@@ -175,7 +184,7 @@ class Layout:
                 pdf.multi_cell(
                     width - 3,
                     4,
-                    _supported_text(str(value)),
+                    "" if isinstance(value, ColourSwatch) else _supported_text(str(value)),
                     dry_run=True,
                     output=MethodReturnValue.LINES,
                 )
@@ -192,10 +201,18 @@ class Layout:
                 count = min(remaining - offset, capacity)
                 height = count * 4 + 3
                 y, x = pdf.get_y(), pdf.l_margin
-                pdf.set_fill_color(*(TEAL if header else PALE if alternate else (255, 255, 255)))
+                background = TEAL if header else PALE if alternate else (255, 255, 255)
+                pdf.set_fill_color(*background)
                 pdf.set_text_color(*((255, 255, 255) if header else NAVY))
                 for column, (width, lines) in enumerate(zip(widths, wraps, strict=False)):
                     pdf.rect(x, y, width, height, style="F")
+                    if isinstance(values[column], ColourSwatch):
+                        pdf.set_fill_color(*values[column].color)
+                        pdf.set_draw_color(*MUTED)
+                        pdf.rect(x + (width - 5) / 2, y + (height - 5) / 2, 5, 5, style="DF")
+                        pdf.set_fill_color(*background)
+                        x += width
+                        continue
                     for line_no, line in enumerate(lines[offset : offset + count]):
                         pdf.set_xy(x + 1.5, y + 1.5 + line_no * 4)
                         pdf.cell(
@@ -217,7 +234,7 @@ class Layout:
                         pdf.multi_cell(
                             width - 3,
                             4,
-                            _supported_text(str(value)),
+                            "" if isinstance(value, ColourSwatch) else _supported_text(str(value)),
                             dry_run=True,
                             output=MethodReturnValue.LINES,
                         )
@@ -284,10 +301,10 @@ def render_summary_steps(document):
     if document.redacted:
         layout.notice(document.metadata["redaction"])
         layout.paragraph(
-            "Alias key: CASE = case ID; CASE-NAME = case name; TABLE / DATABASE = schema "
-            "identifiers; FIELD = column; EVIDENCE = evidence ID; SOURCE = filename; "
-            "RUN = tool run; HASH = digest; TIME = recorded timestamp; VERSION = tool "
-            "version; VALUE = other replaced text or values. Aliases apply only to this export; "
+            "Alias key: TABLE / DATABASE = schema identifiers; "
+            "FIELD = column; SOURCE = filename; VALUE = other replaced database text or values. "
+            "Examiner and tool metadata, provenance IDs, hashes and timestamps are retained. "
+            "Aliases apply only to this export; "
             "repeated aliases within a category refer to the same original value.",
             size=8,
             color=MUTED,
@@ -314,11 +331,18 @@ def render_summary_steps(document):
         x += width
     pdf.set_y(y + 7)
     for _ in layout.table(
-        ["Classification", "Records", "Field / presence comparisons"],
-        [60, 35, 79],
-        [(result, totals["records"][result], totals["fields"][result]) for result in COLORS],
+        ["Colour code", "Classification", "Records", "Field / presence comparisons"],
+        [28, 38, 30, 78],
+        [
+            (ColourSwatch(color), result, totals["records"][result], totals["fields"][result])
+            for result, color in COLORS.items()
+        ],
     ):
         yield {"stage": "rendering classification overview", "processed": pdf.page_no()}
+    layout.paragraph(
+        "Bar segment widths show the proportion of classified records; colours match the table.",
+        size=9,
+    )
     layout.paragraph(
         "Exact and Strong have no individual details. Exceptional findings below are grouped, "
         "not sampled. Record and comparison counts measure different things."
@@ -347,6 +371,7 @@ def render_summary_steps(document):
             + f"{row['stored']:,}"
             + " stored"
         )
+    layout.ensure(50)
     layout.heading("Classification totals by table")
 
     def table_totals(measure):
@@ -501,7 +526,7 @@ def render_summary_steps(document):
             layout.paragraph(
                 result + "  /  " + row["table"] + (" / " + row["field"] if row["field"] else ""),
                 size=11,
-                color=COLORS.get(result, COLORS["Partial"]),
+                color=TEXT_COLORS.get(result, TEXT_COLORS["Partial"]),
             )
             layout.paragraph(row["rule_id"] + " — " + row["title"], color=NAVY)
             layout.paragraph(

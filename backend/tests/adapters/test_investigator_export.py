@@ -194,6 +194,119 @@ def test_redaction_is_consistent_and_business_column_names_are_atomic(stores):
         projection.close()
 
 
+@pytest.mark.parametrize("streaming", [False, True])
+def test_sharing_exports_preserve_metadata_and_provenance(stores, streaming):
+    from adapters.persistence.case_export import prepare_export
+
+    connection = connection_of(stores)
+    connection.execute(
+        "UPDATE cases SET examiner='Examiner Alice', "
+        "examiner_notes='private note', case_name='private case' WHERE case_id='case-1'"
+    )
+    connection.execute(
+        "UPDATE tool_runs SET tool_version='custom-version-9', "
+        "executable_sha256='executable-original' WHERE case_id='case-1'"
+    )
+    connection.execute(
+        "UPDATE evidence_files SET acquisition_method='Forensic image', "
+        "actor_username='Recorded Actor' WHERE case_id='case-1'"
+    )
+    connection.execute(
+        "UPDATE physical_records SET values_json=json_set(values_json, "
+        "'$.examiner', 'database-person', '$.tool_version', 'database-version', "
+        "'$.created_at', 'database-time', '$.source_sha256', 'database-hash', "
+        "'$.case_name', 'database-case-name')"
+    )
+    before = case_export(connection, "case-1")["tables"]
+    profile = {
+        "display_name": "Profile Alice",
+        "organization": "Forensic Lab",
+        "examiner_id": "EX-12",
+        "notes": "private profile note",
+    }
+    projection = None
+    if streaming:
+        projection = prepare_projection(
+            connection, "case-1", profile="full", redacted=True, examiner_profile=profile
+        )
+        exported = document(projection)
+        tables = expand_document(exported)["tables"]
+    else:
+        exported = prepare_export(
+            connection,
+            "case-1",
+            redacted=True,
+            preferences={"time_mode": "utc", "utc_offset_minutes": 0},
+            examiner_profile=profile,
+        )
+        tables = exported["tables"]
+    try:
+        assert exported["case_id"] == "case-1"
+        assert exported["redaction"]["version"] == 3
+        assert tables["cases"][0]["case_name"] == "private case"
+        assert exported["presentation"]["examiner_profile"] == {
+            key: profile[key] for key in ("display_name", "organization", "examiner_id")
+        }
+        assert tables["cases"][0]["examiner"] == "Examiner Alice"
+        assert tables["cases"][0]["created_at"] == before["cases"][0]["created_at"]
+        evidence = {row["evidence_id"]: row for row in tables["evidence_files"]}
+        tools = {row["tool_run_id"]: row for row in tables["tool_runs"]}
+        for original in before["evidence_files"]:
+            row = evidence[original["evidence_id"]]
+            for key in (
+                "case_id",
+                "source_sha256",
+                "working_copy_sha256",
+                "registered_at",
+                "actor_username",
+                "acquisition_method",
+            ):
+                assert row[key] == original[key]
+            assert row["filename"] != original["filename"]
+        for original in before["tool_runs"]:
+            row = tools[original["tool_run_id"]]
+            for key in (
+                "case_id",
+                "evidence_id",
+                "tool_name",
+                "tool_version",
+                "executable_sha256",
+                "stdout_sha256",
+                "stderr_sha256",
+                "started_at",
+                "finished_at",
+            ):
+                assert row[key] == original[key]
+        for row in tables["physical_records"]:
+            assert row["evidence_id"] in evidence
+            assert row["tool_run_id"] in tools
+        for row in tables["binlog_events"]:
+            assert row["source_file"] == evidence[row["evidence_id"]]["filename"]
+        if streaming:
+            for obj in exported["objects"]:
+                if obj["kind"] == "source":
+                    source = obj["value"]
+                    assert source["evidence_id"] in evidence
+                    assert source["tool_run_id"] in tools
+                    assert source["source_file"] == evidence[source["evidence_id"]]["filename"]
+        text = json.dumps(exported)
+        for secret in (
+            "private note",
+            "private profile note",
+            "payments",
+            "HYPERLINK",
+            "4000.10",
+            "/seized/",
+            "database-person", "database-version", "database-time", "database-hash",
+            "database-case-name",
+        ):
+            assert secret not in text
+        assert case_export(connection, "case-1")["tables"] == before
+    finally:
+        if projection:
+            projection.close()
+
+
 def test_incremental_json_handles_unicode_numbers_and_empty_arrays():
     class SmallReads(io.BytesIO):
         def read(self, size=-1):

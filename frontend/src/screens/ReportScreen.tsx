@@ -165,7 +165,7 @@ export function ReportScreen() {
         </select>
       </label>
       <p className="text-xs leading-relaxed text-muted">{redacted
-        ? 'Values and text identifiers become aliases. Personal metadata, paths, commands and diagnostic text are removed. Original case data stays intact.'
+        ? 'Database identifiers and values and evidence filenames become aliases. Case names, examiner identity, tool metadata, provenance IDs, hashes, timestamps and acquisition methods are included. Notes, paths, commands and diagnostics are withheld. Original case data stays intact.'
         : 'Includes original identifiers and sensitive metadata. JSON retains all evidence values; PDF presents grouped summaries.'}</p>
       <button type="button" className={`${navigationButton} w-full justify-center`}
         disabled={disabled} onClick={() => { void makePreview() }}>

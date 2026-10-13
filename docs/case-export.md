@@ -4,6 +4,12 @@ The desktop offers exactly two formats after analysis completes. Content follows
 format, with no report-profile or section-selector controls. Redaction remains
 an independent choice and defaults to a pseudonymized sharing copy.
 
+Sharing policy version 3 preserves case names, examiner identity/profile, recorded actors,
+tool names and versions, case/evidence/tool-run IDs, provenance hashes and
+timestamps, and acquisition methods in both formats. Database identifiers and
+values and evidence filenames are aliased. Notes, paths, commands, free-text
+context and diagnostics are withheld. Original-values exports remain unchanged.
+
 ## Full case JSON
 
 Desktop JSON exports use format version 3 and include every unique observation,
@@ -50,10 +56,13 @@ Its independent disk-backed projection includes:
   references without known positions. Endpoints do not imply continuous coverage.
 
 Finding groups overlap, so their record counts must not be summed. Full command
-arguments, raw output hashes, diagnostic messages, values, images, histories and
-speculative details remain in JSON. No arbitrary page or observation cap is used.
+arguments and diagnostic messages appear only in original-values JSON exports;
+output hashes remain readable in sharing JSON. Values, images, histories and
+speculative details remain in JSON, with database content aliased in sharing copies.
+No arbitrary page or observation cap is used.
 
-Summary aliases follow stable canonical traversal with compact S identifiers. Unknown
+Summary aliases follow stable canonical traversal with category labels such as
+`[TABLE-001]`, `[FIELD-001]` and `[SOURCE-001]`. Unknown
 metadata remains explicitly unknown; unrecorded custody transfers are never inferred.
 Redacted PDFs are pseudonymized and unsuitable for independent reanalysis.
 

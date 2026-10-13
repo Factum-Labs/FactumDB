@@ -6,7 +6,7 @@ from pathlib import Path
 
 from adapters.persistence._timestamps import to_text
 from adapters.persistence._reconciliation import expand_reconciliation
-from adapters.persistence.export_redaction import redact_document
+from adapters.persistence.export_redaction import examiner_metadata, redact_document
 from adapters.persistence.export_sections import select_sections, validate_sections
 from adapters.persistence.sqlite_report_repository import SqliteReportRepository
 from core.application.errors import NotFoundError
@@ -116,14 +116,16 @@ def prepare_export(connection, case_id, *, now=_utc_now, preferences=None,
                                validate_sections(sections))
     if redacted:
         document = redact_document(document)
-        examiner_profile = {}
+        examiner_profile = examiner_metadata(examiner_profile or {})
     if preferences is not None:
         document["presentation"] = {
             "timezone": time_label(preferences),
             "examiner_profile": (examiner_profile or {}) if sections is None or "case_details" in sections else {},
             "display_times": report_times(document["tables"], preferences),
-            "note": ("Timestamps are aliased in this sharing copy." if redacted
-                     else "Original timestamps remain unchanged in tables."),
+            "note": (
+                "Provenance timestamps are retained; database evidence values are redacted."
+                if redacted else "Original timestamps remain unchanged in tables."
+            ),
         }
     return document
 

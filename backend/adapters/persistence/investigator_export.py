@@ -18,7 +18,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from adapters.persistence._timestamps import from_text, to_text
-from adapters.persistence.export_redaction import POLICY, make_redactor
+from adapters.persistence.export_redaction import POLICY, examiner_metadata, make_redactor
 from adapters.persistence.export_sections import resolve_sections
 from core.domain.models.classification import ReconResult
 from core.domain.rules import RULES
@@ -253,13 +253,15 @@ class ExportProjection:
         self.sections = set(selection["sections"])
         self.redacted = redacted
         self.visit, self.alias = (
-            make_redactor(DiskAliases(self.db)) if redacted else (lambda v: v, lambda v: v)
+            make_redactor(DiskAliases(self.db))
+            if redacted
+            else (lambda v, **kwargs: v, lambda v: v)
         )
         self.metadata = {
             "format": "factumdb-case-export",
             "format_version": 3,
             "profile": profile,
-            "case_id": self.alias(case_id),
+            "case_id": case_id,
             "exported_at": to_text(moment),
             "engine_revision": ENGINE_REVISION,
             "analysis_format_version": ANALYSIS_FORMAT_VERSION,
@@ -274,7 +276,9 @@ class ExportProjection:
             "presentation": {
                 "timezone": settings.get("timezone", "UTC"),
                 "examiner_profile": {}
-                if redacted or "case_details" not in self.sections
+                if "case_details" not in self.sections
+                else examiner_metadata(settings.get("examiner_profile", {}))
+                if redacted
                 else settings.get("examiner_profile", {}),
             },
             "limitations": [
@@ -424,7 +428,7 @@ class ExportProjection:
 
     def add(self, table, value, *, normalize=True):
         self.origin = table
-        value = self.visit(value)
+        value = self.visit(value, section=table)
         value = self.normalize(value) if normalize else value
         self.add_prepared(table, value)
 
@@ -447,7 +451,7 @@ class ExportProjection:
                     ("R-COV-", "R-PROV-")
                 ):
                     self.remember_sources(value)
-                    self.normalize(self.visit(value))
+                    self.normalize(self.visit(value, section=self.origin))
             else:
                 for key, child in value.items():
                     if key not in VALUE_MAPS | {"context", "log", "phys"}:

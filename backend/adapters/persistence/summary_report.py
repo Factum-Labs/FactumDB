@@ -9,14 +9,14 @@ from pathlib import Path
 
 from adapters.persistence._timestamps import to_text
 from adapters.persistence.case_export import _row
-from adapters.persistence.export_redaction import POLICY, make_redactor
+from adapters.persistence.export_redaction import POLICY, examiner_metadata, make_redactor
 from adapters.persistence.investigator_export import DiskAliases, analysis_members, packed
 from core.application.errors import NotFoundError
 from core.domain.models.classification import ReconResult
 from core.domain.rules import RULES
 from core.engine import ANALYSIS_FORMAT_VERSION, ENGINE_REVISION
 
-TEMPLATE_VERSION = "investigator-summary-3"
+TEMPLATE_VERSION = "investigator-summary-6"
 CLASSIFICATIONS = tuple(result.value for result in ReconResult)
 EXCEPTIONS = set(CLASSIFICATIONS) - {"Exact", "Strong"}
 
@@ -102,16 +102,18 @@ class SummaryProjection:
         self.visit, self.alias = (
             make_redactor(DiskAliases(self.db), typed=True)
             if redacted
-            else (lambda value: value, lambda value, category="VALUE": value)
+            else (lambda value, **kwargs: value, lambda value, category="VALUE": value)
         )
         self.metadata = {
-            "case_id": self.alias(case_id, "CASE"),
+            "case_id": case_id,
             "exported_at": to_text(moment),
             "engine_revision": ENGINE_REVISION,
             "analysis_format_version": ANALYSIS_FORMAT_VERSION,
             "template_version": TEMPLATE_VERSION,
             "timezone": settings.get("preferences", {}).get("time_mode", "utc"),
-            "examiner_profile": {} if redacted else settings.get("examiner_profile", {}),
+            "examiner_profile": examiner_metadata(settings.get("examiner_profile", {}))
+            if redacted
+            else settings.get("examiner_profile", {}),
             "limitations": [
                 "Summary report: complete observations and analysis details "
                 "are in the full case JSON.",
@@ -140,7 +142,7 @@ class SummaryProjection:
         ordinal = self.db.execute(
             "SELECT COALESCE(MAX(ordinal)+1,0) FROM entries WHERE section=?", (section,)
         ).fetchone()[0]
-        rendered = self.visit(value) if redact else value
+        rendered = self.visit(value, section=section) if redact else value
         if redact:
             if section == "coverage_gaps" and value.get("reason") in {
                 "missing_file",
@@ -407,8 +409,8 @@ class SummaryProjection:
                         "rule_id": rule,
                         "kind": kind,
                         "result": result,
-                        "evidence_id": self.alias(ev, "EVIDENCE"),
-                        "tool_run_id": self.alias(tool, "RUN"),
+                        "evidence_id": ev,
+                        "tool_run_id": tool,
                         "source_file": self.alias(file, "SOURCE"),
                         "observed_locations": positions,
                         "first_position": low,
@@ -474,7 +476,7 @@ def prepare_summary_steps(
         analysed_at = connection.execute(
             "SELECT MAX(saved_at) FROM analysis_results WHERE case_id=?", (case_id,)
         ).fetchone()[0]
-        p.metadata["analysed_at"] = p.alias(analysed_at, "TIME") if analysed_at else None
+        p.metadata["analysed_at"] = analysed_at
         normalization = connection.execute(
             "SELECT scope_json,counts_json,normalized_at FROM normalizations WHERE case_id=?",
             (case_id,),
@@ -698,7 +700,7 @@ def prepare_summary_steps(
                 p.add(
                     "log_inventory",
                     {
-                        "evidence_id": p.alias(item["evidence_id"], "EVIDENCE"),
+                        "evidence_id": item["evidence_id"],
                         "category": key.replace("_", " "),
                         "count": len(item[key]),
                     },
