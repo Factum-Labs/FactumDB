@@ -246,7 +246,7 @@ def test_active_background_preparation_renews_and_foreground_adopts_it(runtime, 
     token = slot["preparation"]["token"]
     assert token == initial["preparation_token"]
     slot["preparation"]["expires"] = time.monotonic() + 5
-    progressed = call(runtime, "prepare_background_report", case_id=case_id, format="JSON")
+    call(runtime, "prepare_background_report", case_id=case_id, format="JSON")
     slot = runtime._background_reports[(case_id, "JSON")]
     active = slot["preparation"] or slot["preview"]
     assert active["token"] == token

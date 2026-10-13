@@ -194,10 +194,6 @@ class CoverageReport:
     def complete(self) -> bool:
         return self.inventory is not None and not self.gaps
 
-    def gaps_after(self, source_file: str, sequence_index: int) -> tuple[CoverageWindow, ...]:
-        """Windows that begin at or after the given point in the log sequence."""
-        return tuple(w for w in self.gaps if w.after_file is None or w.after_file == source_file)
-
 
 @dataclass(frozen=True, slots=True)
 class GroupingResult:

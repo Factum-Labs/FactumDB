@@ -79,7 +79,7 @@ def test_deferred_history_keeps_observed_log_images(tmp_path, monkeypatch):
         evidence(runtime, tmp_path, case_id)
         tools(runtime, tmp_path, monkeypatch)
         assert finish(runtime, case_id)["complete"]
-        view = call(runtime, "get_case_data", case_id=case_id)
+        call(runtime, "get_case_data", case_id=case_id)
         record = call(runtime, "get_history_page", case_id=case_id)["items"][0]["record"]
         detail = call(runtime, "get_analysis_detail", case_id=case_id, kind="history", identity=record["id"])["detail"]
         bundled = call(runtime, "get_history_page", case_id=case_id, include_details=True)

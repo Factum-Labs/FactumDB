@@ -46,13 +46,6 @@ TRACEABLE_SECTIONS = {
 }
 
 
-def section_catalog():
-    return [{"id": key, "title": title, "optional": (key, title) in OPTIONAL_SECTIONS,
-             "dependencies": list(DEPENDENCIES.get(key, ())),
-             "default_profiles": ["full"] if (key, title) in OPTIONAL_SECTIONS
-             else ["investigator", "full"]} for key, title in SECTIONS]
-
-
 def resolve_sections(profile, sections):
     if not isinstance(profile, str) or profile not in {"investigator", "full"}:
         raise ValueError("Supported export profiles are investigator and full")
@@ -193,42 +186,3 @@ def select_sections(document, sections):
     result["tables"] = tables
     result["selection"] = {"sections": sections, "partial": len(sections) != len(BASE_SECTIONS)}
     return result
-
-
-def report_sections(document):
-    chosen = document.get("selection", {}).get("sections", [key for key, _ in BASE_SECTIONS])
-    sections = []
-    for index, (key, title) in enumerate(SECTIONS, 1):
-        if key not in chosen:
-            continue
-        rows = []
-        for table in TABLE_SECTIONS.get(key, ()):
-            for row in document["tables"].get(table, []):
-                if table == "cases":
-                    row = (
-                        {"examiner_notes": row.get("examiner_notes")}
-                        if key == "notes"
-                        else {k: v for k, v in row.items() if k != "examiner_notes"}
-                    )
-                rows.append({"table": table, "data": row})
-        rows.extend(
-            {"table": "analysis_results", "data": row}
-            for row in document["tables"].get("analysis_results", [])
-            if STAGE_SECTIONS.get(row["stage"]) == key
-        )
-        if key == "case_details" and "presentation" in document:
-            rows.append({"table": "presentation", "data": document["presentation"]})
-        sections.append(
-            {
-                "id": key,
-                "number": index,
-                "title": title,
-                "rows": rows,
-                "note": (
-                    "FactumDB does not attribute changes to a person or determine intent."
-                    if key == "gaps"
-                    else ""
-                ),
-            }
-        )
-    return sections

@@ -398,7 +398,7 @@ CREATE TABLE field_reconciliations (
 CREATE INDEX idx_field_reconciliations_result ON field_reconciliations(result);
 ```
 
-`(record_id, field)` as the PK - a field is only ever reconciled once per record, and this is also literally the shape `ReconciliationResult.rows_for()` queries by.
+`(record_id, field)` as the PK - a field is only ever reconciled once per record.
 
 `log_json`/`phys_json` hold one `Value` each, using `docs/sqlite-schema.md` decision D's `{"__undecodable__": "reason"}` marker for `UndecodableValue`, plus a new marker for `Unobserved` - `{"__unobserved__": true}` - since decision D only covered the one non-scalar case that existed when Chethana wrote it. See the new decision below.
 

@@ -94,14 +94,6 @@ class EvidenceFile:
         return self.kind.value
 
     @property
-    def file_name(self) -> str:
-        return self.filename
-
-    @property
-    def original_path(self) -> str:
-        return self.source_path
-
-    @property
     def sha256_original(self) -> str:
         return self.source_sha256
 
@@ -177,14 +169,6 @@ class ToolRun:
     def command(self) -> str:
         """Display only; execute using the executable and argument tuple."""
         return shlex.join((self.executable_path, *self.arguments))
-
-    @property
-    def raw_output_path(self) -> str | None:
-        return self.stdout.path if self.stdout else None
-
-    @property
-    def raw_output_sha256(self) -> str | None:
-        return self.stdout.sha256 if self.stdout else None
 
     def succeeded(self) -> bool:
         return self.status is ToolRunStatus.SUCCEEDED and self.exit_code == 0
