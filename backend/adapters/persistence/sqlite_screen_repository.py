@@ -95,6 +95,8 @@ class ScreenRepository:
             identity = hashlib.sha256(dumps(finding).encode()).hexdigest()
             add('findings', i, identity, bucket, finding, finding)
         c.executemany('INSERT INTO screen_items VALUES (?,?,?,?,?,?,?,?)', items)
+        if stage == 'reconciliation':
+            summary['storage_header'] = {key: data[key] for key in ('storage_format', 'storage_version') if key in data}
         summary['indexed'] = True
         c.execute('INSERT INTO screen_summary VALUES (?,?,?)', (case_id, stage, dumps(summary)))
         self.refresh_groups(case_id)
@@ -148,8 +150,21 @@ class ScreenRepository:
           findings AS (SELECT min(value) AS value FROM combined WHERE json_extract(value,'$.severity')!='info'
             GROUP BY json_extract(value,'$.rule_id'),json_extract(value,'$.severity'),json_extract(value,'$.subject'),json_extract(value,'$.context'),json_extract(value,'$.provenance')) '''
 
+    def _cache_storage_header(self, case_id, is_compact):
+        from adapters.persistence._reconciliation import STORAGE_FORMAT, STORAGE_VERSION
+        header = dict(storage_format=STORAGE_FORMAT, storage_version=STORAGE_VERSION) if is_compact else {}
+        self.connection.execute(
+            "INSERT INTO screen_summary VALUES (?,'reconciliation',?) "
+            "ON CONFLICT(case_id,stage) DO UPDATE SET summary_json=json_set(summary_json,'$.storage_header',json(?))",
+            (case_id, dumps(dict(storage_header=header)), dumps(header)),
+        )
+
     def _ensure_legacy_findings(self, case_id):
         if self.connection.execute("SELECT 1 FROM screen_legacy_ready WHERE case_id=? AND kind='findings'", (case_id,)).fetchone():
+            if 'storage_header' not in self.summaries(case_id).get('reconciliation', {}):
+                from sidecar.views import _compact_storage
+                with self.connection:
+                    self._cache_storage_header(case_id, _compact_storage(self.connection, case_id))
             return
         from sidecar.views import _compact_storage
         is_compact=_compact_storage(self.connection, case_id)
@@ -159,6 +174,7 @@ class ScreenRepository:
             if invalid:
                 raise ValueError('Invalid finding reference in saved reconciliation')
         with self.connection:
+            self._cache_storage_header(case_id, is_compact)
             self.connection.execute(self._finding_source(is_compact) + "INSERT INTO screen_legacy_findings SELECT :case_id,row_number() OVER (),json_extract(value,'$.rule_id'),json_extract(value,'$.severity'),json_array(coalesce(json_extract(value,'$.subject.kind'),''),coalesce(json_extract(value,'$.subject.id'),'')),value FROM findings", dict(case_id=case_id))
             self.connection.execute("INSERT INTO screen_legacy_ready VALUES (?,'findings')", (case_id,))
 

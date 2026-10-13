@@ -269,6 +269,7 @@ export function ReconciliationScreen() {
   })), [data?.analysis.reconciliation?.records])
   const resultCounts=savedCounts ? object(savedCounts) : summary?.caseId===data?.case.case_id ? summary?.counts : undefined
   const counts = Object.keys(RESULT_TONE).map(result => [result, legacy ? all.filter(r => r.result === result).length : resultCounts ? Number(resultCounts[result] ?? 0) : null] as const)
+  if (!data) return <StatusMessage>Open a case to view reconciliation.</StatusMessage>
   return <div className="space-y-4">
     <QueryError error={query.error || location.error} retry={query.error ? query.retry : location.retry} />
     <div className="grid grid-cols-6 gap-2">{counts.map(([result, count]) => <div key={result} className={panel}><p className="font-mono text-xl font-semibold">{count ?? '—'}</p><Badge tone={RESULT_TONE[result as ReconResult]}>{result}</Badge></div>)}</div>
@@ -325,6 +326,7 @@ export function ProvenanceScreen() {
   useNextPage(query.value,payload,'prov')
   const location = useScreenQuery<{offset:number}>('locate_screen_item',{kind:'tool_runs',identity:selected},'prov',!legacy && !!selected && !!query.value && !query.value.items.some(run=>run.tool_run_id===selected))
   useEffect(()=>{if(location.value) setPage(location.value.offset/100)},[location.value,setPage])
+  if (!data) return <StatusMessage>Open a case to view provenance.</StatusMessage>
   if (!legacy && !query.value) return <LoadingPanel error={query.error} retry={query.retry} label="Loading source tool runs" />
   return <Table paginationKey="tool-runs" data={legacy ? data?.tables.tool_runs ?? [] : query.value?.items ?? []}
     serverPage={legacy ? undefined : {page,total:query.value?.total ?? 0,change:value=>{useApp.getState().selectTool('');setPage(value)}}}

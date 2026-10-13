@@ -39,9 +39,9 @@ export interface StorageUsage { total_bytes: number; free_bytes: number; categor
 export interface BackupPreview { created_at: string; case_count: number; total_bytes: number; sha256: string; original_evidence_included: boolean }
 export const defaultPreferences: Preferences = { lock_minutes: 15, time_mode: 'utc', utc_offset_minutes: 0 }
 
-export async function request<T>(command: string, payload: Record<string, unknown> = {}, options: { background?: boolean; valid?: () => boolean; key?: string } = {}): Promise<T> {
+export async function request<T>(command: string, payload: Record<string, unknown> = {}, options: { background?: boolean; priority?: number; valid?: () => boolean; key?: string } = {}): Promise<T> {
   if (!isTauri()) throw new Error('Open FactumDB in the desktop app to connect to the backend. Run npm run tauri:dev from the project root.')
-  return requestLane.enqueue(() => invoke<T>('backend_request', { command, payload }), options.background, options.valid, options.key)
+  return requestLane.enqueue(() => invoke<T>('backend_request', { command, payload }), options.background, options.valid, options.key, options.priority, command === 'auth_status' || command === 'auth_touch')
 }
 export const pickEvidence = () => invoke<string[]>('pick_evidence')
 export const pickExportPath = (format: string) => invoke<string | null>('pick_export_path', { format })

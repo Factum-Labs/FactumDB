@@ -154,3 +154,15 @@ Page kinds include `transactions`, `events`, `histories`, `history_steps`,
 Detail kinds are `transactions`, `histories`, and `comparisons`.
 Existing `get_case_preview`, `get_case_data`, history, detail and archival export
 commands remain compatible. See [Progressive case loading](progressive-case-loading.md).
+
+`warm_dependencies` accepts `kind` (`report`, `analysis`, or `pdf`). Authentication
+is required. It imports one feature bundle without opening a case, processing
+evidence or building a report. The frontend schedules it at the lowest priority.
+
+`prepare_background_report` accepts `case_id` and `format` (`PDF` or `JSON`) and
+advances one background batch of the completed case's redacted report. It returns
+preparation progress or a ready preview descriptor. `claim_background_report`
+accepts ordinary preview options and transfers a matching completed sharing copy
+to the active preview, returning null when unavailable or stale.
+`cancel_background_reports` accepts `case_id` and disposes its temporary jobs.
+All three commands require authentication and case ownership.

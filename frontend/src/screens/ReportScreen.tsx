@@ -1,9 +1,12 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { reportProgressDetails, type ReportProgressDetails } from '../lib/reportProgress'
 import { useApp } from '../store'
 import { useScreenQuery, useNextPage, type ScreenPage } from '../lib/useScreenQuery'
+import { backgroundReportReady, refreshBackgroundReports, useReportWarmupVersion } from '../lib/reportWarmup'
 import { useTablePage } from '../lib/useTablePage'
 import { TablePagination } from '../components/TablePagination'
 import { LoadingPanel } from '../components/LoadingPanel'
+import { StatusMessage } from '../components/StatusMessage'
 import { defaultPreferences, display, pickExportPath, request, rows } from '../lib/backend'
 import { navigationButton } from '../components/buttonStyles'
 import { formatTime } from '../lib/timeDisplay'
@@ -18,10 +21,12 @@ interface Preview {
   manifest: { case_id: string; exported_at: string; engine_revision: number; analysis_format_version: number }
 }
 
-interface Preparation { preparation_token: string; stage: string; processed: number }
+interface Preparation { preparation_token: string; stage: string; processed: number; unit?: string }
 
 export function ReportScreen() {
   const state = useApp()
+  const warmupVersion = useReportWarmupVersion()
+  const revision = state.preview?.revision ?? state.data?.run?.run_id ?? ''
   const [historyPage,setHistoryPage] = useTablePage('report-history')
   const legacyHistory = Array.isArray(state.data?.tables?.reports)
   const historyPayload = {kind:'reports',offset:historyPage*100,limit:100}
@@ -35,10 +40,12 @@ export function ReportScreen() {
   const [zoom, setZoom] = useState(1)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [working, setWorking] = useState(false)
-  const [progress, setProgress] = useState('')
+  const [progress, setProgress] = useState<ReportProgressDetails>({ label: '', amount: '' })
   const preparation = useRef('')
+  const previews = useRef(new Map<string, { value: Preview; at: number }>())
+  const jobs = useRef(new Map<string, { token: string; cancelled: boolean; progress: ReportProgressDetails }>())
   const generation = useRef(0)
-  const requestKey = `${caseId}:${state.reportFormat}:${redacted}`
+  const requestKey = `${caseId}:${revision}:${state.reportFormat}:${redacted}`
   const currentKey = useRef(requestKey)
   currentKey.current = requestKey
   const [previewKey, setPreviewKey] = useState('')
@@ -54,55 +61,92 @@ export function ReportScreen() {
   }, [])
 
   useEffect(() => {
+    previews.current.clear()
+    for (const job of jobs.current.values()) job.cancelled = true
+    jobs.current.clear()
+  }, [caseId, revision, redacted])
+  useEffect(() => {
     generation.current++
-    setPreview(null)
-    setWorking(false)
-  }, [caseId, state.reportFormat, redacted])
+    const cached = previews.current.get(requestKey)
+    const job = jobs.current.get(requestKey)
+    setPreview(cached && Date.now() - cached.at < 9 * 60_000 ? cached.value : null)
+    setPreviewKey(requestKey)
+    setWorking(!!job && !job.cancelled)
+    preparation.current = job?.token ?? ''
+    if (job) setProgress(job.progress)
+  }, [requestKey])
   useEffect(() => { setPath('') }, [caseId, state.reportFormat])
-  useEffect(() => () => { generation.current++ }, [])
+  useEffect(() => () => {
+    generation.current++
+    for (const job of jobs.current.values()) job.cancelled = true
+  }, [])
+
+  useEffect(() => {
+    if (working || ready || state.screen !== 'report' || !state.pipelineComplete || !caseId || !redacted ||
+        !backgroundReportReady(caseId, revision, state.reportFormat)) return
+    let alive = true
+    const ticket = generation.current
+    void request<Preview | null>('claim_background_report', {
+      case_id: caseId, format: state.reportFormat, redacted,
+    }, { valid: () => alive && generation.current === ticket && currentKey.current === requestKey }).then(result => {
+      if (alive && result && generation.current === ticket) {
+        previews.current.set(requestKey, { value: result, at: Date.now() })
+        setPreview(result); setPreviewKey(requestKey)
+      } else if (alive && !result && generation.current === ticket) {
+        refreshBackgroundReports(caseId, revision)
+      }
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [warmupVersion, caseId, revision, state.screen, state.pipelineComplete, state.reportFormat, redacted, requestKey, working, ready])
 
   const makePreview = async () => {
-    const ticket = ++generation.current
-    setWorking(true)
-    setPreview(null)
-    setProgress('Starting report preparation…')
-    let activeToken = ''
+    generation.current++
+    const job = { token: '', cancelled: false, progress: { label: 'Starting report preparation…', amount: '' } }
+    const previous = jobs.current.get(requestKey)
+    if (previous) previous.cancelled = true
+    jobs.current.set(requestKey, job)
+    previews.current.delete(requestKey)
+    setWorking(true); setPreview(null); setProgress(job.progress)
+    const visible = () => currentKey.current === requestKey && !job.cancelled
     try {
       let result = await request<Preview | Preparation>('preview_export', {
         case_id: caseId, format: state.reportFormat, redacted, progressive: true,
       })
       while ('preparation_token' in result) {
-        const token = result.preparation_token
-        activeToken = token
-        if (ticket !== generation.current || currentKey.current !== requestKey) {
-          await request('cancel_export_preview', { preparation_token: token })
+        job.token = result.preparation_token
+        if (job.cancelled) {
+          await request('cancel_export_preview', { preparation_token: job.token })
           return
         }
-        preparation.current = token
-        setProgress(`Preparing ${result.stage.replaceAll('_', ' ')} · ${result.processed.toLocaleString()} entries processed`)
+        job.progress = reportProgressDetails(result.stage, result.processed, result.unit)
+        if (visible()) { preparation.current = job.token; setProgress(job.progress) }
         await new Promise(resolve => setTimeout(resolve, 30))
-        if (ticket !== generation.current) {
-          await request('cancel_export_preview', { preparation_token: token })
+        if (job.cancelled) {
+          await request('cancel_export_preview', { preparation_token: job.token })
           return
         }
-        result = await request<Preview | Preparation>('export_preview_status', { preparation_token: token })
+        result = await request<Preview | Preparation>('export_preview_status', { preparation_token: job.token },
+          { background: !visible() || useApp.getState().screen !== 'report', priority: 4 })
       }
-      if (ticket === generation.current && currentKey.current === requestKey) {
-        setPreview(result)
-        setPreviewKey(requestKey)
-      } else if (activeToken) {
-        await request('cancel_export_preview', { preparation_token: activeToken })
+      if (!job.cancelled) {
+        previews.current.set(requestKey, { value: result, at: Date.now() })
+        if (visible()) { setPreview(result); setPreviewKey(requestKey) }
+      } else if (job.token) {
+        await request('cancel_export_preview', { preparation_token: job.token })
       }
-    } catch (error) { if (ticket === generation.current) state.setError(error) }
+    } catch (error) { if (visible()) state.setError(error) }
     finally {
-      if (ticket === generation.current) { setWorking(false); preparation.current = '' }
+      if (jobs.current.get(requestKey) === job) jobs.current.delete(requestKey)
+      if (visible()) { setWorking(false); preparation.current = '' }
     }
   }
   const cancelPreparation = () => {
-    const token = preparation.current
+    const job = jobs.current.get(requestKey)
+    const token = job?.token ?? preparation.current
+    if (job) job.cancelled = true
+    jobs.current.delete(requestKey)
     generation.current++
-    preparation.current = ''
-    setWorking(false)
+    preparation.current = ''; setWorking(false)
     if (token) void request('cancel_export_preview', { preparation_token: token }).catch(state.setError)
   }
   const turnPage = async (page: number) => {
@@ -113,7 +157,9 @@ export function ReportScreen() {
       const result = await request<Preview>('export_preview_page', {
         preview_token: preview.preview_token, page,
       })
-      if (ticket === generation.current && currentKey.current === requestKey) setPreview(result)
+      if (ticket === generation.current && currentKey.current === requestKey) {
+        previews.current.set(requestKey, { value: result, at: Date.now() }); setPreview(result)
+      }
     } catch (error) {
       if (ticket === generation.current) { setPreview(null); state.setError(error) }
     } finally { if (ticket === generation.current) setWorking(false) }
@@ -134,6 +180,7 @@ export function ReportScreen() {
         preview_token: preview.preview_token,
       })
       if (ticket !== generation.current || currentKey.current !== requestKey || useApp.getState().data?.case.case_id !== caseId) return
+      previews.current.delete(requestKey)
       setPreview(null)
       useApp.setState({ notice: `Export saved to ${result.path}` })
       historyQuery.retry()
@@ -142,10 +189,11 @@ export function ReportScreen() {
     } finally { if (ticket === generation.current) setWorking(false) }
   }
   const disabled = working || state.busy || !state.pipelineComplete || definitions.length === 0
+  if (!state.data) return <StatusMessage>Open a case to view reports.</StatusMessage>
   return <div className="grid items-start gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
     <form className="space-y-5 rounded-md border border-line bg-panel p-5"
       onSubmit={event => { event.preventDefault(); void save() }}>
-      <fieldset disabled={disabled} className="space-y-3">
+      <fieldset disabled={state.busy || !state.pipelineComplete || definitions.length === 0} className="space-y-3">
         <legend className="mb-3 text-sm font-semibold">Format</legend>
         <div className="flex overflow-hidden rounded border border-line-input">
           {definitions.map(({ format }) => <button key={format} type="button"
@@ -237,11 +285,32 @@ export function ReportScreen() {
             <dt>Analysis version</dt><dd>{preview.manifest.analysis_format_version}</dd>
           </dl>
         </div>}
-      </> : <div className="py-24 text-center text-sm text-muted" role="status">
-        {working ? <><p>{progress || 'Preparing the selected report…'}</p>
-          <button type="button" className={navigationButton} onClick={cancelPreparation}>Cancel preparation</button>
-        </> : 'Select Preview export to review the full JSON manifest or rendered PDF.'}
-      </div>}
+      </> : working ? <div className="flex min-h-[420px] items-center justify-center py-12">
+        <div className="w-full max-w-md rounded-xl border border-line-soft bg-thead p-6 text-center shadow-sm sm:p-8">
+          <div aria-hidden="true" className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-xl border border-line bg-panel text-accent shadow-sm">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" />
+              <path d="M14 3v6h6M8 13h8M8 17h5" />
+            </svg>
+          </div>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-accent">{state.reportFormat} export</p>
+          <h3 className="text-lg font-semibold tracking-tight text-ink">Preparing your report</h3>
+          <p className="mt-2 text-xs leading-relaxed text-muted">Building the preview for your review.</p>
+          <div role="progressbar" aria-label="Report preparation" aria-valuetext={[progress.label, progress.amount].filter(Boolean).join(' · ') || 'Starting report preparation'}
+            className="mt-6 h-1.5 overflow-hidden rounded-full bg-line">
+            <div className="report-preparation-activity h-full w-1/3 rounded-full bg-accent" />
+          </div>
+          <div role="status" aria-atomic="true" className="mt-3 min-h-[3.5rem] space-y-1 text-xs leading-relaxed text-muted">
+            <p>{progress.label || 'Preparing the selected report…'}</p>
+            <p className="font-medium tabular-nums text-ink-3">{progress.amount || '\u00a0'}</p>
+          </div>
+          <div className="mt-5 border-t border-line-soft pt-5">
+            <button type="button" className={`${navigationButton} min-h-9 px-4`} onClick={cancelPreparation}>Cancel preparation</button>
+          </div>
+        </div>
+      </div> : <p className="py-24 text-center text-sm text-muted" role="status">
+        Select Preview export to review the full JSON manifest or rendered PDF.
+      </p>}
     </section>
   </div>
 }

@@ -6,13 +6,14 @@ import { screenCache } from '../src/lib/useScreenQuery'
 import { defaultPreferences, type CasePreview, type Row } from '../src/lib/backend'
 
 const calls: { command: string; kind: string; offset: number }[] = []
-let active = 0, maximum = 0, revision = 'one', failPage = false
+let active = 0, maximum = 0, revision = 'one', failPage = false, savedComplete = false
+const reportSteps = new Map<string, number>()
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message) }
 const header = (): CasePreview => ({ revision,
   indexed_screens:['transactions','histories','reconciliation','finding_groups'],
   case: { case_id: 'case-a', case_name: 'Progressive case', examiner: 'Examiner', examiner_notes: 'Saved notes', workspace_path: '', created_at: '' },
-  evidence: [{ evidence_id: 'file', filename: 'accounts.ibd', kind: 'ibd', verification_status: 'verified' }], run: null,
+  evidence: [{ evidence_id: 'file', filename: 'accounts.ibd', kind: 'ibd', verification_status: 'verified' }], run: savedComplete ? { run_id: 'saved-run', case_id: 'case-a', complete: true, stopped: false, cancel_requested: false, stages: [] } : null,
   pipeline: { metrics: { transactions: 205, records: 205, exact: 205 }, summaries: {}, warnings: {} },
 })
 const transaction = (n: number) => ({ id: `tx-${n}`, status: 'committed', source_file: 'mysql-bin.000001', event_count: 1 })
@@ -24,9 +25,17 @@ mockIPC(async (command, args) => {
   if (command !== 'backend_request') throw new Error(`Unexpected ${command}`)
   const name = String(args?.command), payload = (args?.payload ?? {}) as Record<string, unknown>
   active++; maximum = Math.max(maximum, active)
-  calls.push({ command: name, kind: String(payload.kind ?? ''), offset: Number(payload.offset ?? 0) })
+  calls.push({ command: name, kind: String(payload.kind ?? (name === 'prepare_background_report' ? payload.format : '') ?? ''), offset: Number(payload.offset ?? 0) })
   try {
     await wait(name === 'get_screen_page' ? 60 : 5)
+    if (name === 'cancel_background_reports') return { cancelled: true }
+    if (name === 'prepare_background_report') {
+      const format = String(payload.format)
+      const steps = (reportSteps.get(format) ?? 0) + 1; reportSteps.set(format, steps)
+      return steps % 2 ? { preparation_token: `preparing-${format}`, stage: 'rendering', processed: 0 }
+        : { preview_token: `ready-${format}` }
+    }
+    if (name === 'warm_dependencies') return { ready: true }
     if (name === 'get_case_data') throw new Error('Full case loading is forbidden')
     if (name === 'get_case_header') return header()
     if (name === 'auth_status') return { user: useApp.getState().user, locked: useApp.getState().locked }
@@ -78,11 +87,24 @@ Object.assign(window, { runCasePreviewChecks: async () => {
   const textarea = visible<HTMLTextAreaElement>('textarea')[0]
   Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, 'Unsaved edits')
   textarea.dispatchEvent(new Event('input', { bubbles: true })); await wait(20)
+  const warmKinds = ['transactions','histories','reconciliation','finding_groups','warning_groups','tool_runs','reports']
+  await until(() => warmKinds.every(kind => calls.some(c => c.kind === kind && c.offset === 0)) && !active)
+  assert(!calls.some(c => c.command === 'get_screen_detail' || ['findings','comparisons','events','steps'].includes(c.kind)), 'Opening warms only main tables, leaving details on demand')
+  await until(() => calls.filter(c => c.command === 'warm_dependencies').length === 3 && !active)
+  const firstWarm = calls.findIndex(c => c.command === 'warm_dependencies')
+  assert(warmKinds.every(kind => calls.findIndex(c => c.command === 'get_screen_page' && c.kind === kind) < firstWarm), 'Dependency imports follow every main-table first page')
+  assert(!calls.some(c => c.command === 'prepare_background_report'), 'An incomplete case does not prepare reports')
+  useApp.setState({ pipelineComplete: true })
+  await until(() => reportSteps.get('PDF') === 2 && reportSteps.get('JSON') === 2 && !active)
+  const firstReport = calls.findIndex(c => c.command === 'prepare_background_report')
+  assert(calls.filter(c => c.command === 'warm_dependencies').every(c => calls.indexOf(c) < firstReport), 'Reports follow dependency imports after analysis completes')
+  const initialTransactions = calls.filter(c => c.command === 'get_screen_page' && c.kind === 'transactions' && c.offset === 0).length
   button('Transactions').click()
   await until(() => visible('button[aria-pressed]').length === 100)
   await until(() => calls.some(c => c.kind === 'transactions' && c.offset === 100) && !active)
+  assert(calls.filter(c => c.command === 'get_screen_page' && c.kind === 'transactions' && c.offset === 0).length === initialTransactions, 'First visit reuses its warmed table')
   const before = calls.filter(c => c.kind === 'transactions' && c.offset === 100).length
-  assert(calls.some(c=>c.kind==='histories'),'An indexed likely next screen should be prefetched after the adjacent page')
+  assert(calls.some(c=>c.kind==='histories'),'Every main table should be prefetched on opening')
   button('Next').click()
   await until(() => visible<HTMLButtonElement>('button[aria-pressed]')[0]?.textContent?.includes('tx-100') === true)
   assert(calls.filter(c => c.kind === 'transactions' && c.offset === 100).length === before, 'Next page uses its cached response')
@@ -126,6 +148,15 @@ Object.assign(window, { runCasePreviewChecks: async () => {
   await until(()=>!active && !visible('[role=alert]').length)
   assert(!calls.some(c => c.command === 'get_case_data'), 'No screen triggers a full-case read')
   assert(maximum === 1, 'IPC requests share one lane')
+  // Reopening an already completed saved case automatically prepares both reports.
+  savedComplete = true; revision = 'saved-complete'; reportSteps.clear()
+  await useApp.getState().refreshSelected()
+  await useApp.getState().openCase('case-a')
+  await until(() => reportSteps.get('PDF') === 2 && reportSteps.get('JSON') === 2 && !active)
+  assert(useApp.getState().pipelineComplete, 'A completed saved case warms both report formats on opening')
+  const preparedCalls = calls.filter(c => c.command === 'prepare_background_report').length
+  await useApp.getState().openCase('case-a'); await wait(500)
+  assert(calls.filter(c => c.command === 'prepare_background_report').length === preparedCalls, 'Reopening an unchanged completed case reuses its prepared reports')
   await useApp.getState().lockSession()
   assert(screenCache.size().entries === 0 && !useApp.getState().data, 'Lock clears cached evidence')
   return { cached_open_ms: Math.round(openingMs), max_in_flight: maximum, independent_screens: 4, full_case_requests: 0 }
