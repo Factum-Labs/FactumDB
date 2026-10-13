@@ -1,5 +1,6 @@
 """Disk-backed, grouped investigator summaries. No record values enter the PDF."""
 
+from collections import OrderedDict
 import hashlib
 import json
 import sqlite3
@@ -10,7 +11,12 @@ from pathlib import Path
 from adapters.persistence._timestamps import to_text
 from adapters.persistence.case_export import _row
 from adapters.persistence.export_redaction import POLICY, examiner_metadata, make_redactor
-from adapters.persistence.investigator_export import DiskAliases, analysis_members, packed
+from adapters.persistence.investigator_export import (
+    STREAM_PROGRESS,
+    DiskAliases,
+    analysis_members,
+    packed,
+)
 from core.application.errors import NotFoundError
 from core.domain.models.classification import ReconResult
 from core.domain.rules import RULES
@@ -98,6 +104,11 @@ class SummaryProjection:
                                   PRIMARY KEY(section,table_name,label));
             CREATE TABLE record_tables(record_id TEXT PRIMARY KEY, table_name TEXT);
         """)
+        self._totals = {}
+        self._counters = {}
+        self._group_ids = OrderedDict()
+        self._seen_groups = OrderedDict()
+        self._ordinals = {}
         self.redacted = redacted
         self.visit, self.alias = (
             make_redactor(DiskAliases(self.db), typed=True)
@@ -185,18 +196,28 @@ class SummaryProjection:
     def table_label(self, table):
         return table if table in {"Unknown", "Case / unknown table"} else self.alias(table, "TABLE")
 
-    def tally(self, table, granularity, result):
-        self.db.execute(
-            "INSERT INTO totals VALUES (?,?,?,1) ON CONFLICT DO UPDATE SET count=count+1",
-            (table, granularity, result),
+    def _flush_counts(self):
+        self.db.executemany(
+            "INSERT INTO totals VALUES (?,?,?,?) ON CONFLICT DO UPDATE SET count=count+excluded.count",
+            ((*key, count) for key, count in self._totals.items()),
         )
+        self.db.executemany(
+            "INSERT INTO counters VALUES (?,?,?,?) ON CONFLICT DO UPDATE SET count=count+excluded.count",
+            ((*key, count) for key, count in self._counters.items()),
+        )
+        self._totals.clear(); self._counters.clear()
+
+    def tally(self, table, granularity, result):
+        key = (table, granularity, result)
+        self._totals[key] = self._totals.get(key, 0) + 1
+        if len(self._totals) > 512:
+            self._flush_counts()
 
     def count(self, section, table, label, amount=1):
-        self.db.execute(
-            "INSERT INTO counters VALUES (?,?,?,?) "
-            "ON CONFLICT DO UPDATE SET count=count+excluded.count",
-            (section, table, label, amount),
-        )
+        key = (section, table, label)
+        self._counters[key] = self._counters.get(key, 0) + amount
+        if len(self._counters) > 512:
+            self._flush_counts()
 
     def group(
         self,
@@ -214,22 +235,37 @@ class SummaryProjection:
         provenance=(),
     ):
         key = (kind, table, field, result, rule_id, severity, evidence_id)
-        identifier = digest(key)
-        self.db.execute(
-            "INSERT OR IGNORE INTO groups(id,kind,table_name,field,result,rule_id,"
-            "severity,evidence_id) VALUES (?,?,?,?,?,?,?,?)",
-            (identifier, *key),
-        )
+        identifier = self._group_ids.get(key)
+        if identifier is None:
+            identifier = digest(key)
+            self.db.execute(
+                "INSERT OR IGNORE INTO groups(id,kind,table_name,field,result,rule_id,"
+                "severity,evidence_id) VALUES (?,?,?,?,?,?,?,?)", (identifier, *key),
+            )
+            self._group_ids[key] = identifier
+            if len(self._group_ids) > 512:
+                self._group_ids.popitem(last=False)
+        else:
+            self._group_ids.move_to_end(key)
+        refs = list(sources(provenance))
+        context_hash = digest(context)
+        observation_identity = identity or context_hash
+        observation = (identifier, observation_identity, context_hash, record_id, digest(refs))
+        if observation in self._seen_groups:
+            self._seen_groups.move_to_end(observation)
+            return identifier
+        self._seen_groups[observation] = True
+        if len(self._seen_groups) > 2048:
+            self._seen_groups.popitem(last=False)
         # Count logical observations, not their repeated nested presentation copies.
         inserted = self.db.execute(
             "INSERT OR IGNORE INTO occurrences VALUES (?,?,?)",
-            (identifier, identity or digest(context), digest(context)),
+            (identifier, observation_identity, context_hash),
         )
         if inserted.rowcount:
             self.db.execute("UPDATE groups SET occurrences=occurrences+1 WHERE id=?", (identifier,))
         if record_id:
             self.db.execute("INSERT OR IGNORE INTO members VALUES (?,?)", (identifier, record_id))
-        refs = list(sources(provenance))
         if not refs:
             refs = [
                 {
@@ -255,7 +291,7 @@ class SummaryProjection:
                     "INSERT OR IGNORE INTO unknown_refs VALUES (?,?,?,?,?)",
                     (
                         identifier,
-                        identity or digest(context),
+                        observation_identity,
                         ref.get("evidence_id") or "Unknown",
                         ref.get("tool_run_id") or "Unknown",
                         ref.get("source_file") or "Unknown",
@@ -297,6 +333,7 @@ class SummaryProjection:
         )
 
     def finish(self):
+        self._flush_counts()
         self.metadata["classification_totals"] = {
             granularity: {
                 result: self.db.execute(
@@ -559,8 +596,11 @@ def prepare_summary_steps(
         for stage, fields in stages.items():
             include = set(fields) | {"findings", "coverage"}
             for processed, (member, index, value, _) in enumerate(
-                analysis_members(connection, case_id, stage, include=include, item_fields=fields)
+                analysis_members(connection, case_id, stage, include=include, item_fields=fields, checkpoints=True)
             ):
+                if member is STREAM_PROGRESS:
+                    yield {"stage": "reading_" + stage, **value}
+                    continue
                 if processed % 32 == 0:
                     yield {"stage": stage, "processed": processed}
                 if index == -1:

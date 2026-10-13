@@ -33,16 +33,10 @@ from adapters.filesystem.workspace_backup import (
     usage,
 )
 from adapters.persistence.case_export import write_json
-from adapters.persistence.investigator_export import prepare_projection_steps
-from adapters.persistence.pdf_report import write_pdf
-from adapters.persistence.summary_report import (
-    SummaryProjection, export_definitions, prepare_summary_steps,
-)
 from adapters.persistence.sqlite_accounts import SqliteAccountStore
 from adapters.persistence.sqlite_case_repository import SqliteCaseRepository
 from adapters.persistence.sqlite_case_ownership import SqliteCaseOwnership
 from adapters.persistence.sqlite_database import open_case_database
-from adapters.persistence.sqlite_integration import build_sqlite_application_stores
 from adapters.persistence.sqlite_pipeline_repository import SqlitePipelineRepository
 from adapters.security import device_security
 from core.application.authentication import AuthenticationService
@@ -54,12 +48,6 @@ from core.application.preferences import DEFAULTS, validate_preferences
 from core.application.use_cases.audit import ToolRunAuditService
 from core.application.use_cases.cases import CreateCaseUseCase
 from sidecar.commands import COMMAND_FIELDS, _validate
-from sidecar.composition import (
-    PipelineDependencies,
-    build_application_services,
-    build_tool_adapters,
-)
-from sidecar.main import build_router
 from sidecar.native_verification import NativeVerificationBridge
 from sidecar.protocol import CommandRouter, SidecarRequest, serve
 from sidecar.views import analysis_detail, case_view, case_preview
@@ -89,6 +77,7 @@ class DesktopRuntime:
         self.sessions = {}
         self.export_preview = None
         self.export_preparation = None
+        self._background_reports = {}
         self._preview_lock = threading.RLock()
         self._preview_timer = None
         self.settings = {
@@ -132,6 +121,7 @@ class DesktopRuntime:
     @preview_locked
     def close(self):
         self._clear_export_preview()
+        self._clear_background_reports()
         for connection, *_ in self.sessions.values():
             connection.close()
         self.catalog.close()
@@ -153,14 +143,64 @@ class DesktopRuntime:
                 self.export_preparation["read_connection"].close()
             self.export_preparation = None
 
+    def _park_export_preview(self):
+        active = self.export_preparation or self.export_preview
+        if active is None:
+            return
+        key = (active["case_id"], active["format"])
+        self._dispose_background_report(key)
+        self._background_reports[key] = {
+            "preview": self.export_preview, "preparation": self.export_preparation,
+            "timer": self._preview_timer,
+        }
+        self.export_preview = self.export_preparation = self._preview_timer = None
+
+    def _activate_export_token(self, token):
+        active = self.export_preparation or self.export_preview
+        if active is not None and active["token"] == token:
+            return
+        for key, slot in list(self._background_reports.items()):
+            saved = slot["preparation"] or slot["preview"]
+            if saved is not None and saved["token"] == token:
+                self._background_reports.pop(key)
+                self._park_export_preview()
+                self.export_preview, self.export_preparation, self._preview_timer = (
+                    slot["preview"], slot["preparation"], slot["timer"],
+                )
+                return
+
+    def _dispose_background_report(self, key):
+        slot = self._background_reports.pop(key, None)
+        if not slot:
+            return
+        if slot["timer"] is not None:
+            slot["timer"].cancel()
+        preview, job = slot["preview"], slot["preparation"]
+        if preview is not None:
+            preview["document"].close()
+        if job is not None:
+            try:
+                job["steps"].close()
+            finally:
+                job["read_connection"].close()
+
+    def _clear_background_reports(self):
+        for key in list(self._background_reports):
+            self._dispose_background_report(key)
+
     @preview_locked
     def _expire_export_preview(self):
+        for key, slot in list(self._background_reports.items()):
+            cached = slot["preparation"] or slot["preview"]
+            if cached is not None and cached["expires"] <= time.monotonic():
+                self._dispose_background_report(key)
         active = self.export_preparation or self.export_preview
         if active is not None and active["expires"] <= time.monotonic():
             self._clear_export_preview()
 
 
     def session(self, case_id):
+        from adapters.persistence.sqlite_integration import build_sqlite_application_stores
         safe_component(case_id, "case id")
         self.ownership.require_owner(case_id, self.auth.require_actor()["actor_id"])
         case = self.cases.get(case_id)
@@ -177,6 +217,9 @@ class DesktopRuntime:
         return self.sessions[case_id]
 
     def services(self, case_id):
+        from sidecar.composition import (
+            PipelineDependencies, build_application_services, build_tool_adapters,
+        )
         _, stores, pipelines = self.session(case_id)
         actor = self.auth.require_actor()
         audit = ToolRunAuditService(
@@ -430,6 +473,7 @@ class DesktopRuntime:
         return repository.page(case_id, payload.get("database"), payload.get("table"), payload.get("offset", 0), payload.get("limit", 100), payload.get("include_details", False))
 
     def application_command(self, command, payload):
+        from sidecar.main import build_router
         values = _validate(payload, COMMAND_FIELDS[command])
         if "case_id" in values:
             case_id = values["case_id"]
@@ -659,11 +703,14 @@ class DesktopRuntime:
         return values, {"redacted": redacted}
 
     def export_definitions(self, payload):
+        from adapters.persistence.summary_report import export_definitions
         if payload:
             raise ValueError("Export definitions take no arguments")
         return export_definitions()
 
     def _prepare_report_steps(self, connection, case_id, format, settings, options):
+        from adapters.persistence.investigator_export import prepare_projection_steps
+        from adapters.persistence.summary_report import prepare_summary_steps
         document = None
         try:
             if format == "JSON":
@@ -702,7 +749,33 @@ class DesktopRuntime:
         payload = {k: v for k, v in payload.items() if k != "progressive"}
         values, options = self._export_options(payload)
         connection, settings = self._export_source(values["case_id"])
-        self._clear_export_preview()
+        for saved_key in list(self._background_reports):
+            if saved_key[0] != values["case_id"]:
+                self._dispose_background_report(saved_key)
+        key = (values["case_id"], values["format"])
+        slot = self._background_reports.get(key)
+        if slot is not None and (slot["preparation"] or slot["preview"])["options"] == options:
+            active = slot["preparation"] or slot["preview"]
+            if (active["fingerprint"] == self._export_fingerprint(connection, values["case_id"], settings)
+                    and active["expires"] > time.monotonic()):
+                self._background_reports.pop(key)
+                self._park_export_preview()
+                self.export_preview, self.export_preparation, self._preview_timer = (
+                    slot["preview"], slot["preparation"], slot["timer"],
+                )
+                if self.export_preview is not None:
+                    return self._preview_page(1)
+                if progressive:
+                    return {"preparation_token": active["token"], "stage": "resuming", "processed": 0}
+                while self.export_preparation is not None:
+                    result = self.export_preview_status({"preparation_token": active["token"]})
+                return result
+            self._dispose_background_report(key)
+        active = self.export_preparation or self.export_preview
+        if active is not None and active["case_id"] == values["case_id"] and active["format"] != values["format"]:
+            self._park_export_preview()
+        else:
+            self._clear_export_preview()
         fingerprint = self._export_fingerprint(connection, values["case_id"], settings)
         if progressive:
             database = connection.execute("PRAGMA database_list").fetchone()[2]
@@ -749,9 +822,10 @@ class DesktopRuntime:
         return self._preview_page(1)
 
     @preview_locked
-    def export_preview_status(self, payload):
+    def export_preview_status(self, payload, *, budget=0.15):
         if set(payload) != {"preparation_token"}:
             raise ValueError("Invalid preview preparation request")
+        self._activate_export_token(payload["preparation_token"])
         job = self.export_preparation
         if job is None or job["token"] != payload["preparation_token"]:
             raise PrerequisiteError("Refresh the export preview")
@@ -759,7 +833,15 @@ class DesktopRuntime:
         if job["fingerprint"] != self._export_fingerprint(connection, job["case_id"], settings):
             self._clear_export_preview()
             raise PrerequisiteError("Case data changed; refresh the export preview")
-        deadline = time.monotonic() + 0.15
+        # Renew active jobs without creating a timer thread for every batch.
+        if job["expires"] - time.monotonic() < 300:
+            job["expires"] = time.monotonic() + 600
+            if self._preview_timer is not None:
+                self._preview_timer.cancel()
+            self._preview_timer = threading.Timer(600, self._expire_export_preview)
+            self._preview_timer.daemon = True
+            self._preview_timer.start()
+        deadline = time.monotonic() + budget
         document = None
         try:
             while True:
@@ -792,6 +874,7 @@ class DesktopRuntime:
     def cancel_export_preview(self, payload):
         if set(payload) != {"preparation_token"}:
             raise ValueError("Invalid preview cancellation request")
+        self._activate_export_token(payload["preparation_token"])
         active = self.export_preparation or self.export_preview
         if active and active["token"] == payload["preparation_token"]:
             self._clear_export_preview()
@@ -799,6 +882,7 @@ class DesktopRuntime:
 
     @preview_locked
     def _preview_page(self, page):
+        from adapters.persistence.summary_report import SummaryProjection
         preview = self.export_preview
         if preview is None or preview["expires"] < time.monotonic():
             self._clear_export_preview()
@@ -821,6 +905,7 @@ class DesktopRuntime:
 
     @preview_locked
     def export_preview_pdf(self, payload):
+        from adapters.persistence.summary_report import SummaryProjection
         if set(payload) != {"preview_token", "offset", "length"}:
             raise ValueError("Invalid PDF preview request")
         self.export_preview_page({"preview_token": payload["preview_token"], "page": 1})
@@ -842,6 +927,7 @@ class DesktopRuntime:
     def export_preview_page(self, payload):
         if set(payload) != {"preview_token", "page"}:
             raise ValueError("Invalid preview request")
+        self._activate_export_token(payload["preview_token"])
         preview = self.export_preview
         if preview is None or payload["preview_token"] != preview["token"]:
             raise PrerequisiteError("Refresh the export preview")
@@ -859,6 +945,7 @@ class DesktopRuntime:
         actor = self.auth.require_actor()
         document = None
         if "preview_token" in payload:
+            self._activate_export_token(payload["preview_token"])
             preview = self.export_preview
             if (preview is None or payload["preview_token"] != preview["token"]
                     or preview["expires"] < time.monotonic()
@@ -871,6 +958,7 @@ class DesktopRuntime:
         if values["format"] == "JSON":
             path = write_json(connection, values["case_id"], values["path"], profile="full", **options, **actor)
         else:
+            from adapters.persistence.pdf_report import write_pdf
             if document is None:
                 options.pop("prepared_document")
                 options.pop("prepared_document", None)
@@ -919,6 +1007,106 @@ class DesktopRuntime:
             "path": output.path,
         }
 
+    @preview_locked
+    def prepare_background_report(self, payload):
+        values = _validate(payload, ("case_id", "format"))
+        if values["format"] not in {"PDF", "JSON"}:
+            raise ValueError("Supported export formats are JSON and PDF")
+        connection, settings = self._export_source(values["case_id"])
+        key = (values["case_id"], values["format"])
+        if self.export_preview is not None and self.export_preview["case_id"] != values["case_id"]:
+            self._clear_export_preview()
+        fingerprint = self._export_fingerprint(connection, values["case_id"], settings)
+        if (self.export_preparation is not None and self.export_preparation["case_id"] == key[0]
+                and self.export_preparation["format"] == key[1]
+                and self.export_preparation["options"]["redacted"]
+                and self.export_preparation["fingerprint"] == fingerprint):
+            return {"preparation_token": self.export_preparation["token"], "stage": "foreground", "processed": 0}
+        if (self.export_preview is not None and self.export_preview["case_id"] == key[0]
+                and self.export_preview["format"] == key[1]
+                and self.export_preview["options"]["redacted"]
+                and self.export_preview["fingerprint"] == fingerprint):
+            return self._preview_page(1)
+        # Only this case's two sharing copies are retained, on temporary disk.
+        for other, slot in list(self._background_reports.items()):
+            job = slot["preparation"] or slot["preview"]
+            if (other[0] != key[0] or job["fingerprint"] != fingerprint
+                    or job["expires"] <= time.monotonic()):
+                self._dispose_background_report(other)
+        slot = self._background_reports.get(key, {"preview": None, "preparation": None, "timer": None})
+        foreground = (self.export_preview, self.export_preparation, self._preview_timer)
+        self.export_preview, self.export_preparation, self._preview_timer = (
+            slot["preview"], slot["preparation"], slot["timer"],
+        )
+        try:
+            if self.export_preview is not None:
+                return self._preview_page(1)
+            if self.export_preparation is None:
+                return self.preview_export({**values, "redacted": True, "progressive": True})
+            return self.export_preview_status(
+                {"preparation_token": self.export_preparation["token"]}, budget=0.025,
+            )
+        except BaseException:
+            self._clear_export_preview()
+            raise
+        finally:
+            if self.export_preview is not None or self.export_preparation is not None:
+                self._background_reports[key] = {
+                    "preview": self.export_preview, "preparation": self.export_preparation,
+                    "timer": self._preview_timer,
+                }
+            else:
+                self._background_reports.pop(key, None)
+            self.export_preview, self.export_preparation, self._preview_timer = foreground
+
+    @preview_locked
+    def claim_background_report(self, payload):
+        values, options = self._export_options(payload)
+        connection, settings = self._export_source(values["case_id"])
+        key = (values["case_id"], values["format"])
+        active = self.export_preview
+        if (active is not None and active["case_id"] == values["case_id"]
+                and active["format"] == values["format"] and active["options"] == options
+                and active["expires"] > time.monotonic()
+                and active["fingerprint"] == self._export_fingerprint(connection, values["case_id"], settings)):
+            return self._preview_page(1)
+        slot = self._background_reports.get(key)
+        if slot is None or slot["preview"] is None or not options["redacted"]:
+            return None
+        preview = slot["preview"]
+        if (preview["expires"] <= time.monotonic() or
+                preview["fingerprint"] != self._export_fingerprint(connection, values["case_id"], settings)):
+            self._dispose_background_report(key)
+            return None
+        self._background_reports.pop(key)
+        self._park_export_preview()
+        self.export_preview = preview
+        self._preview_timer = slot["timer"]
+        return self._preview_page(1)
+
+    @preview_locked
+    def cancel_background_reports(self, payload):
+        values = _validate(payload, ("case_id",))
+        self.ownership.require_owner(values["case_id"], self.auth.require_actor()["actor_id"])
+        for key in list(self._background_reports):
+            if key[0] == values["case_id"]:
+                self._dispose_background_report(key)
+        return {"cancelled": True}
+
+    def warm_dependencies(self, payload):
+        """Import one feature bundle without opening a case or running analysis."""
+        from importlib import import_module
+        values = _validate(payload, ("kind",))
+        modules = {
+            "report": "adapters.persistence.summary_report",
+            "pdf": "adapters.persistence.pdf_report",
+            "analysis": "sidecar.composition",
+        }
+        if values["kind"] not in modules:
+            raise ValueError("Unknown dependency bundle")
+        import_module(modules[values["kind"]])
+        return {"kind": values["kind"], "ready": True}
+
     def router(self):
         public = {
             "health",
@@ -936,6 +1124,7 @@ class DesktopRuntime:
                 self.auth.require_user()
             if command in {"auth_logout", "auth_lock"}:
                 self._clear_export_preview()
+                self._clear_background_reports()
                 for connection, *_ in self.sessions.values():
                     connection.close()
                 self.sessions.clear()
@@ -979,6 +1168,10 @@ class DesktopRuntime:
         for name, kind in (("get_history_tables", "tables"), ("get_history_page", "page"), ("locate_history_record", "locate")):
             router.register(name, lambda payload, kind=kind: self.history_query(kind, payload))
         router.register("save_case_notes", self.save_case_notes)
+        router.register("prepare_background_report", self.prepare_background_report)
+        router.register("claim_background_report", self.claim_background_report)
+        router.register("cancel_background_reports", self.cancel_background_reports)
+        router.register("warm_dependencies", self.warm_dependencies)
         router.register("get_settings", self.get_settings)
         router.register("configure_settings", self.configure)
         router.register("configure_preferences", self.configure_preferences)

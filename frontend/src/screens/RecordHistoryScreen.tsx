@@ -749,11 +749,7 @@ export function RecordHistoryScreen() {
   const page = list.offset / 100;
   const pages = Math.max(1, Math.ceil(list.total / 100));
   if (!data)
-    return (
-      <div className="rounded-md border border-line bg-panel p-4 text-sm text-muted">
-        No results available yet.
-      </div>
-    );
+    return <StatusMessage>Open a case to view record history.</StatusMessage>;
   return (
     <div className="grid max-w-[1180px] items-start gap-4 lg:grid-cols-[250px_minmax(0,1fr)]">
       <section

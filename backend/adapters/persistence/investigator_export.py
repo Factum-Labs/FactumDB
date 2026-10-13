@@ -25,6 +25,8 @@ from core.domain.rules import RULES
 from core.engine import ANALYSIS_FORMAT_VERSION, ENGINE_REVISION
 
 
+STREAM_PROGRESS = object()
+
 def packed(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -41,11 +43,13 @@ class JsonMembers:
         self.stream = stream
         self.buffer = ""
         self.eof = False
+        self.bytes_read = 0
         self.utf8 = codecs.getincrementaldecoder("utf-8")()
         self.decoder = json.JSONDecoder()
 
-    def fill(self):
-        chunk = self.stream.read(65536)
+    def fill(self, size=65536):
+        chunk = self.stream.read(size)
+        self.bytes_read += len(chunk)
         self.eof = not chunk
         self.buffer += self.utf8.decode(chunk, final=self.eof)
 
@@ -75,10 +79,16 @@ class JsonMembers:
             except json.JSONDecodeError:
                 if self.eof:
                     raise ValueError("Invalid stored analysis JSON") from None
-                self.fill()
+                # Avoid reparsing a large item after every tiny read. The read
+                # size stays bounded; skipped containers still checkpoint at 64 KiB.
+                self.fill(min(max(len(self.buffer), 65536), 1024 * 1024))
 
     def skip_value(self):
-        """Skip an unselected JSON container without allocating its contents."""
+        for _ in self.skip_value_steps():
+            pass
+
+    def skip_value_steps(self):
+        """Skip without allocating the container, yielding at stream boundaries."""
         first = self.peek()
         if first not in {"{", "[", '"'}:
             self.value()
@@ -87,37 +97,46 @@ class JsonMembers:
         quoted = first == '"'
         escaped = False
         self.buffer = self.buffer[1:]
-        tokens = re.compile(r'["\\{}\[\]]')
+        tokens = re.compile(r'["{}\[\]]')
+        # Match an entire string span in C instead of visiting every quote/escape
+        # token in Python. Named endings distinguish a closing from an escaped quote.
+        string_span = re.compile(r'[^"\\]*(?:\\.[^"\\]*)*(?:(?P<closed>")|(?P<pending>\\)?$)')
         while True:
             position = 1 if escaped else 0
             escaped = False
-            while token := tokens.search(self.buffer, position):
+            while position <= len(self.buffer):
+                if quoted:
+                    token = string_span.match(self.buffer, position)
+                    if token is None:
+                        raise ValueError("Invalid stored analysis JSON string")
+                    position = token.end()
+                    if token.group("closed") is None:
+                        escaped = token.group("pending") is not None
+                        break
+                    quoted = False
+                    if not stack:
+                        self.buffer = self.buffer[position:]
+                        return
+                    continue
+                token = tokens.search(self.buffer, position)
+                if token is None:
+                    break
                 char = token.group()
                 position = token.end()
-                if quoted:
-                    if char == "\\":
-                        escaped = token.end() == len(self.buffer)
-                        if not escaped:
-                            position += 1
-                    elif char == '"':
-                        quoted = False
-                        if not stack:
-                            self.buffer = self.buffer[token.end():]
-                            return
-                elif char == '"':
+                if char == '"':
                     quoted = True
                 elif char in {"{", "["}:
                     stack.append("}" if char == "{" else "]")
-                elif char in {"}", "]"}:
-                    if not stack or stack.pop() != char:
-                        raise ValueError("Invalid stored analysis JSON")
-                    if not stack:
-                        self.buffer = self.buffer[token.end():]
-                        return
+                elif not stack or stack.pop() != char:
+                    raise ValueError("Invalid stored analysis JSON")
+                elif not stack:
+                    self.buffer = self.buffer[position:]
+                    return
             if self.eof:
                 raise ValueError("Unterminated stored analysis JSON")
             self.buffer = ""
             self.fill()
+            yield self.bytes_read
 
     def selected_object(self, fields):
         if self.peek() != "{":
@@ -140,7 +159,7 @@ class JsonMembers:
         self.take("}")
         return result
 
-    def members(self, include=None, item_fields=None):
+    def members(self, include=None, item_fields=None, *, checkpoints=False):
         self.take("{")
         if self.peek() == "}":
             self.take("}")
@@ -151,7 +170,9 @@ class JsonMembers:
                 raise ValueError("Invalid analysis member")
             self.take(":")
             if include is not None and member not in include:
-                self.skip_value()
+                for consumed in self.skip_value_steps():
+                    if checkpoints:
+                        yield STREAM_PROGRESS, None, {"processed": consumed, "unit": "bytes"}
                 if self.peek() != ",":
                     break
                 self.take(",")
@@ -297,6 +318,9 @@ class ExportProjection:
                 "Summarized investigator report, not the complete evidence dataset."
             )
         self.origin = ""
+        self._ordinals = {}
+        self._stats = {}
+        self._totals = {}
 
     def close(self):
         if self.db is not None:
@@ -304,17 +328,32 @@ class ExportProjection:
             self.db = None
             self.temporary.cleanup()
 
+    def _flush_counts(self):
+        self.db.executemany(
+            "INSERT INTO stats(name,included,summarized,excluded) VALUES (?,?,?,?) "
+            "ON CONFLICT(name) DO UPDATE SET included=included+excluded.included, "
+            "summarized=summarized+excluded.summarized, excluded=excluded+excluded.excluded",
+            ((name, *counts) for name, counts in self._stats.items()),
+        )
+        self.db.executemany(
+            "INSERT INTO totals VALUES (?,?,?,?) ON CONFLICT DO UPDATE SET count=count+excluded.count",
+            ((*key, count) for key, count in self._totals.items()),
+        )
+        self._stats.clear(); self._totals.clear()
+
     def stat(self, name, category, count=1):
         if category not in {"included", "summarized", "excluded"}:
             raise ValueError("Invalid count category")
-        self.db.execute("INSERT OR IGNORE INTO stats(name) VALUES (?)", (name,))
-        self.db.execute(f"UPDATE stats SET {category}={category}+? WHERE name=?", (count, name))
+        counters = self._stats.setdefault(name, [0, 0, 0])
+        counters[{"included": 0, "summarized": 1, "excluded": 2}[category]] += count
+        if len(self._stats) > 256:
+            self._flush_counts()
 
     def tally(self, table, granularity, result):
-        self.db.execute(
-            "INSERT INTO totals VALUES (?,?,?,1) ON CONFLICT DO UPDATE SET count=count+1",
-            (table, granularity, result),
-        )
+        key = (table, granularity, result)
+        self._totals[key] = self._totals.get(key, 0) + 1
+        if len(self._totals) > 512:
+            self._flush_counts()
 
     def selected_record(self, identifier):
         return (
@@ -433,10 +472,13 @@ class ExportProjection:
         self.add_prepared(table, value)
 
     def add_prepared(self, table, value):
-        self.db.execute("INSERT OR IGNORE INTO tables VALUES (?)", (table,))
-        ordinal = self.db.execute(
-            "SELECT COALESCE(MAX(ordinal)+1,0) FROM entries WHERE name=?", (table,)
-        ).fetchone()[0]
+        if table not in self._ordinals:
+            self.db.execute("INSERT OR IGNORE INTO tables VALUES (?)", (table,))
+            self._ordinals[table] = self.db.execute(
+                "SELECT COALESCE(MAX(ordinal)+1,0) FROM entries WHERE name=?", (table,)
+            ).fetchone()[0]
+        ordinal = self._ordinals[table]
+        self._ordinals[table] += 1
         self.db.execute("INSERT INTO entries VALUES (?,?,?)", (table, ordinal, packed(value)))
 
     def collect_findings(self, value):
@@ -484,34 +526,57 @@ class ExportProjection:
                 ],
             }
 
-    def write_json(self, output):
-        output.write("{")
+    def json_chunks(self):
+        yield "{"
         for index, (key, value) in enumerate(self.metadata.items()):
             if index:
-                output.write(",")
-            output.write(packed(key) + ":" + packed(value))
-        output.write(',"tables":{')
+                yield ","
+            yield packed(key) + ":" + packed(value)
+        yield ',"tables":{'
         for index, name in enumerate(self.table_names()):
             if index:
-                output.write(",")
-            output.write(packed(name) + ":[")
+                yield ","
+            yield packed(name) + ":["
             for ordinal, row in enumerate(
                 self.db.execute(
                     "SELECT payload FROM entries WHERE name=? ORDER BY ordinal", (name,)
                 )
             ):
                 if ordinal:
-                    output.write(",")
-                output.write(row[0])
-            output.write("]")
-        output.write('},"objects":[')
+                    yield ","
+                yield row[0]
+            yield "]"
+        yield '},"objects":['
         for index, obj in enumerate(self.objects()):
             if index:
-                output.write(",")
-            output.write(packed(obj))
-        output.write("]}\n")
+                yield ","
+            yield packed(obj)
+        yield "]}\n"
 
-    def finish(self):
+    def write_json(self, output):
+        if hasattr(self, "json_path"):
+            with self.json_path.open(encoding="utf-8") as cached:
+                while chunk := cached.read(65536):
+                    output.write(chunk)
+        else:
+            for chunk in self.json_chunks():
+                output.write(chunk)
+
+    def prepare_json_steps(self):
+        path = Path(self.temporary.name) / "prepared.json"
+        size = 0
+        with path.open("wb") as output:
+            for index, chunk in enumerate(self.json_chunks()):
+                encoded = chunk.encode("utf-8")
+                output.write(encoded)
+                size += len(encoded)
+                if index % 100 == 0:
+                    yield {"stage": "rendering_json", "processed": size, "unit": "bytes"}
+        self.json_path = path
+        self.json_size = size
+
+    def finish(self, *, measure=True):
+        self._flush_counts()
         # Remove sensitive alias mappings once the frozen projection is built.
         self.metadata["counts"] = {
             row[0]: {"included": row[1], "summarized": row[2], "excluded": row[3]}
@@ -558,38 +623,56 @@ class ExportProjection:
             def write(_, text):
                 self.json_size += len(text.encode("utf-8"))
 
-        self.write_json(Counter())
+        if measure:
+            self.write_json(Counter())
 
 
-def analysis_members(connection, case_id, stage, include=None, item_fields=None):
+def analysis_members(connection, case_id, stage, include=None, item_fields=None, *, checkpoints=False):
     row = connection.execute(
         "SELECT rowid,saved_at FROM analysis_results WHERE case_id=? AND stage=?", (case_id, stage)
     ).fetchone()
     if row:
         if stage == "reconciliation":
-            with connection.blobopen(
-                "analysis_results", "result_json", row[0], readonly=True
-            ) as stream:
-                headers = {member: value for member, _, value in JsonMembers(stream).members(
-                    include={"storage_format", "storage_version"}
-                )}
+            headers = None
+            if connection.execute("SELECT 1 FROM sqlite_master WHERE name='screen_summary'").fetchone():
+                cached = connection.execute(
+                    "SELECT json_extract(summary_json,'$.storage_header') FROM screen_summary WHERE case_id=? AND stage=?",
+                    (case_id, stage),
+                ).fetchone()
+                if cached and cached[0] is not None:
+                    headers = json.loads(cached[0])
+            if headers is None:
+                with connection.blobopen(
+                    "analysis_results", "result_json", row[0], readonly=True
+                ) as stream:
+                    headers = {}
+                    for member, _, value in JsonMembers(stream).members(
+                        include={"storage_format", "storage_version"}, checkpoints=checkpoints,
+                    ):
+                        if member is STREAM_PROGRESS:
+                            yield member, None, value, row[1]
+                        else:
+                            headers[member] = value
             if "storage_format" in headers:
                 from adapters.persistence._reconciliation import check_storage
                 check_storage(headers["storage_format"], headers.get("storage_version"))
-                yield from compact_analysis_members(connection, row, include, item_fields)
+                yield from compact_analysis_members(connection, row, include, item_fields, checkpoints=checkpoints)
                 return
         with connection.blobopen(
             "analysis_results", "result_json", row[0], readonly=True
         ) as stream:
             for member, index, value in JsonMembers(stream).members(
-                include=include, item_fields=item_fields
+                include=include, item_fields=item_fields, checkpoints=checkpoints
             ):
+                if member is STREAM_PROGRESS:
+                    yield member, index, value, row[1]
+                    continue
                 if not re.fullmatch(r"[a-z][a-z0-9_]*", member):
                     raise ValueError("Unsupported analysis member")
                 yield member, index, value, row[1]
 
 
-def compact_analysis_members(connection, row, include, item_fields):
+def compact_analysis_members(connection, row, include, item_fields, *, checkpoints=False):
     """Resolve compact references through disk pools, retaining one output item at a time."""
     from dataclasses import fields
 
@@ -610,7 +693,9 @@ def compact_analysis_members(connection, row, include, item_fields):
             with connection.blobopen(
                 "analysis_results", "result_json", row[0], readonly=True
             ) as stream:
-                for member, index, value in JsonMembers(stream).members():
+                for ordinal, (member, index, value) in enumerate(JsonMembers(stream).members()):
+                    if checkpoints and ordinal % 32 == 0:
+                        yield STREAM_PROGRESS, None, {"processed": ordinal, "unit": "entries"}, row[1]
                     db.execute("INSERT INTO pool VALUES (?,?,?)",
                                (member, -2 if index is None else index, packed(value)))
             db.commit()
@@ -660,9 +745,11 @@ def compact_analysis_members(connection, row, include, item_fields):
                         or (member != "coverage" and indexes == -2)):
                     raise ValueError(f"reconciliation.{member}: missing or invalid member")
             # Validate all pool entries, including ones not referenced by selected records.
-            for (payload,) in db.execute(
+            for ordinal, (payload,) in enumerate(db.execute(
                 "SELECT payload FROM pool WHERE member='finding_pool' AND ordinal>=0"
-            ):
+            )):
+                if checkpoints and ordinal % 32 == 0:
+                    yield STREAM_PROGRESS, None, {"processed": ordinal, "unit": "entries"}, row[1]
                 finding(json.loads(payload))
             transforms = (
                 ("coverage", lambda value: attributes(value, CoverageReport)),
@@ -671,9 +758,11 @@ def compact_analysis_members(connection, row, include, item_fields):
             )
             for member, transform in transforms:
                 source = "finding_refs" if member == "findings" else member
-                for index, payload in db.execute(
+                for ordinal, (index, payload) in enumerate(db.execute(
                     "SELECT ordinal,payload FROM pool WHERE member=? ORDER BY ordinal", (source,)
-                ):
+                )):
+                    if checkpoints and ordinal % 32 == 0:
+                        yield STREAM_PROGRESS, None, {"processed": ordinal, "unit": "entries"}, row[1]
                     value = None if index == -1 else transform(json.loads(payload))
                     if include is None or member in include:
                         selected = (item_fields or {}).get(member)
@@ -731,9 +820,12 @@ def prepare_projection_steps(
         exact = "exact_matches" in s
         # Reconciliation is scanned first to identify the supporting record set.
         relevant = s & {"reconciliation", "histories", "timeline", "gaps", "intermediate_analysis"}
-        reconciliation = analysis_members(connection, case_id, "reconciliation") if relevant else ()
+        reconciliation = analysis_members(connection, case_id, "reconciliation", checkpoints=True) if relevant else ()
         reconciliation_saved_at = None
         for processed, (member, index, value, saved_at) in enumerate(reconciliation):
+            if member is STREAM_PROGRESS:
+                yield {"stage": "reading_reconciliation", **value}
+                continue
             if processed % 32 == 0:
                 yield {"stage": "reconciliation", "processed": processed}
             reconciliation_saved_at = saved_at
@@ -798,11 +890,14 @@ def prepare_projection_steps(
                 else False
             )
             stage_values = (
-                analysis_members(connection, case_id, stage)
+                analysis_members(connection, case_id, stage, checkpoints=True)
                 if (stage_section in s or all_stage or "gaps" in s)
                 else ()
             )
             for processed, (member, index, value, _saved_at) in enumerate(stage_values):
+                if member is STREAM_PROGRESS:
+                    yield {"stage": "reading_" + stage, **value}
+                    continue
                 if processed % 32 == 0:
                     yield {"stage": stage, "processed": processed}
                 p.origin = f"analysis_{stage}_{member}"
@@ -1091,7 +1186,8 @@ def prepare_projection_steps(
             ):
                 p.add("pipeline_runs", _row(row))
         yield {"stage": "finalizing selected data", "processed": 0}
-        p.finish()
+        p.finish(measure=False)
+        yield from p.prepare_json_steps()
         return p
     except BaseException:
         p.close()

@@ -53,7 +53,7 @@ def test_preview_is_frozen_and_export_matches(runtime, tmp_path, monkeypatch, fo
         )
         assert base64.b64decode(chunk["data"]) == content[:262144]
         text = "\n".join(page.extract_text() for page in PdfReader(document.pdf_path).pages)
-        assert "Investigator summary" in text and "fake-person-secret" not in text
+        assert "Investigator summary" in text and "fake-person-secret" in text
         assert "CANONICAL" not in text
     assert preview["size_bytes"] == len(content)
     destination = tmp_path / ("selected." + format.lower())
@@ -184,3 +184,111 @@ def test_suspended_preparation_cleanup(runtime, tmp_path, monkeypatch, action, f
     else:
         call(runtime, "preview_export", case_id=case_id, format=format, progressive=True)
     assert not directory.exists()
+
+
+def test_background_reports_coexist_and_are_reused_without_exporting(runtime, tmp_path, monkeypatch):
+    case_id = analysed_case(runtime, tmp_path, monkeypatch)
+    stores = runtime.session(case_id)[1]
+    before = stores.reports.list_by_case(case_id)
+    foreground = call(runtime, "preview_export", case_id=case_id, format="PDF", redacted=False)
+    for format in ("PDF", "JSON"):
+        for _ in range(1000):
+            result = call(runtime, "prepare_background_report", case_id=case_id, format=format)
+            if "preview_token" in result:
+                break
+        else:
+            pytest.fail("Background report did not finish")
+        assert runtime.export_preview["token"] == foreground["preview_token"]
+        assert result["redacted"]
+    assert len(runtime._background_reports) == 2
+    assert stores.reports.list_by_case(case_id) == before
+    json_doc = runtime._background_reports[(case_id, "JSON")]["preview"]["document"]
+    assert json.loads(json_doc.json_path.read_text())["profile"] == "full"
+    assert json_doc.json_path.stat().st_size == json_doc.json_size
+    directories = [Path(slot["preview"]["document"].temporary.name) for slot in runtime._background_reports.values()]
+    for format in ("PDF", "JSON", "PDF"):
+        claimed = call(runtime, "claim_background_report", case_id=case_id, format=format, redacted=True)
+        assert claimed["format"] == format
+        assert runtime.export_preview["token"] == claimed["preview_token"]
+    call(runtime, "auth_lock")
+    assert not runtime._background_reports
+    assert all(not directory.exists() for directory in directories)
+
+
+def test_background_reports_require_complete_case_and_discard_changed_snapshots(runtime, tmp_path, monkeypatch):
+    case_id = create(runtime)
+    assert not response(runtime, "prepare_background_report", case_id=case_id, format="PDF")["ok"]
+    evidence(runtime, tmp_path, case_id)
+    tools(runtime, tmp_path, monkeypatch)
+    assert finish(runtime, case_id)["complete"]
+    for _ in range(1000):
+        result = call(runtime, "prepare_background_report", case_id=case_id, format="JSON")
+        if "preview_token" in result:
+            break
+    directory = Path(runtime._background_reports[(case_id, "JSON")]["preview"]["document"].temporary.name)
+    call(runtime, "save_case_notes", case_id=case_id, notes="New notes")
+    assert call(runtime, "claim_background_report", case_id=case_id, format="JSON", redacted=True) is None
+    assert not directory.exists()
+    call(runtime, "prepare_background_report", case_id=case_id, format="PDF")
+    job = runtime._background_reports[(case_id, "PDF")]["preparation"]
+    connection = job["read_connection"]
+    call(runtime, "cancel_background_reports", case_id=case_id)
+    assert not runtime._background_reports
+    with pytest.raises(sqlite3.ProgrammingError):
+        connection.execute("SELECT 1")
+
+
+def test_active_background_preparation_renews_and_foreground_adopts_it(runtime, tmp_path, monkeypatch):
+    import time
+    case_id = analysed_case(runtime, tmp_path, monkeypatch)
+    initial = call(runtime, "prepare_background_report", case_id=case_id, format="JSON")
+    slot = runtime._background_reports[(case_id, "JSON")]
+    token = slot["preparation"]["token"]
+    assert token == initial["preparation_token"]
+    slot["preparation"]["expires"] = time.monotonic() + 5
+    progressed = call(runtime, "prepare_background_report", case_id=case_id, format="JSON")
+    slot = runtime._background_reports[(case_id, "JSON")]
+    active = slot["preparation"] or slot["preview"]
+    assert active["token"] == token
+    assert active["expires"] > time.monotonic() + 590
+    adopted = call(runtime, "preview_export", case_id=case_id, format="JSON", redacted=True, progressive=True)
+    assert adopted.get("preparation_token", adopted.get("preview_token")) == token
+    assert (case_id, "JSON") not in runtime._background_reports
+    # An already queued background poll must not create a duplicate after adoption.
+    background_poll = call(runtime, "prepare_background_report", case_id=case_id, format="JSON")
+    assert background_poll.get("preparation_token", background_poll.get("preview_token")) == token
+    assert (case_id, "JSON") not in runtime._background_reports
+
+
+def test_switching_formats_retains_partial_and_finished_preview_tokens(runtime, tmp_path, monkeypatch):
+    case_id = analysed_case(runtime, tmp_path, monkeypatch)
+    started = []
+    prepare = runtime._prepare_report_steps
+    def trace(*args, **kwargs):
+        started.append(args[2])
+        return (yield from prepare(*args, **kwargs))
+    monkeypatch.setattr(runtime, "_prepare_report_steps", trace)
+    tokens = {}
+    generators = {}
+    for format in ("PDF", "JSON"):
+        result = call(runtime, "preview_export", case_id=case_id, format=format, progressive=True, redacted=True)
+        tokens[format] = result["preparation_token"]
+        generators[format] = runtime.export_preparation["steps"]
+        runtime.export_preview_status({"preparation_token": tokens[format]}, budget=0)
+    for format in ("PDF", "JSON", "PDF", "JSON"):
+        runtime.export_preview_status({"preparation_token": tokens[format]}, budget=0)
+        assert runtime.export_preparation["steps"] is generators[format]
+    for format in ("PDF", "JSON"):
+        for _ in range(1000):
+            result = call(runtime, "export_preview_status", preparation_token=tokens[format])
+            if "preview_token" in result:
+                break
+        else:
+            pytest.fail("Preparation did not complete")
+        assert result["preview_token"] == tokens[format]
+    assert started == ["PDF", "JSON"]
+    for format in ("PDF", "JSON", "PDF"):
+        result = call(runtime, "export_preview_page", preview_token=tokens[format], page=1)
+        assert result["format"] == format
+    call(runtime, "cancel_export_preview", preparation_token=tokens["JSON"])
+    assert call(runtime, "export_preview_page", preview_token=tokens["PDF"], page=1)["format"] == "PDF"

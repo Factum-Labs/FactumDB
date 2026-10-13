@@ -6,6 +6,7 @@ import { Logo } from './components/Logo'
 import { navigationButton } from './components/buttonStyles'
 import { AuthScreen } from './screens/AuthScreen'
 import { LockedScreen } from './screens/LockedScreen'
+import { useCaseWarmup } from './lib/useScreenQuery'
 import { useSessionLock } from './lib/useSessionLock'
 
 import { CasesScreen, IntakeScreen, PipelineScreen, TimelineScreen, RecordHistoryScreen, ReconciliationScreen, GapsScreen, ProvenanceScreen, ReportScreen, SettingsScreen } from './screens/ConnectedScreens'
@@ -60,6 +61,7 @@ function CaseScreens({ screen }: { screen: Screen }) {
 
 export default function App() {
   useSessionLock()
+  useCaseWarmup()
   const locked = useApp(s => s.locked)
   const user = useApp(s => s.user)
   const displayName = useApp(s => s.settings?.profile?.display_name)

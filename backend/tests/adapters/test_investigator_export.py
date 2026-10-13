@@ -472,3 +472,58 @@ def test_multiple_rows_at_one_log_position_keep_distinct_source_identity(stores)
         assert {row["row_index"] for row in rows if row["log_position"] == 2338} == {0, 1}
     finally:
         projection.close()
+
+
+def test_stream_checkpoints_preserve_selected_values_and_release_long_skips():
+    import io
+    import json
+    from adapters.persistence.investigator_export import JsonMembers, STREAM_PROGRESS
+    content = json.dumps({"large": [{"text": "x" * 1000}] * 2000, "selected": [1, 2]}).encode()
+    normal = list(JsonMembers(io.BytesIO(content)).members(include={"selected"}))
+    stream = io.BytesIO(content)
+    steps = JsonMembers(stream).members(include={"selected"}, checkpoints=True)
+    assert next(steps)[0] is STREAM_PROGRESS
+    assert stream.tell() < len(content), "The first checkpoint must precede reading the whole container"
+    steps.close()
+    cooperative = list(JsonMembers(io.BytesIO(content)).members(include={"selected"}, checkpoints=True))
+    assert sum(member is STREAM_PROGRESS for member, _, _ in cooperative) >= 20
+    assert [row for row in cooperative if row[0] is not STREAM_PROGRESS] == normal
+
+
+def test_full_reference_counts_and_origins_are_preserved():
+    from adapters.persistence.investigator_export import ExportProjection
+    from adapters.persistence.export_sections import resolve_sections
+    from datetime import datetime, UTC
+    projection = ExportProjection(profile="full", selection=resolve_sections("full", None),
+        case_id="case", moment=datetime.now(UTC), redacted=False, settings={})
+    try:
+        projection.origin = "first"
+        identifier = projection.intern("value", "repeated")["$ref"]
+        for _ in range(10): projection.intern("value", "repeated")
+        for index in range(4200): projection.intern("value", f"unique-{index}")
+        projection.origin = "second"
+        for _ in range(5): projection.intern("value", "repeated")
+        value = next(item for item in projection.objects() if item["id"] == identifier)
+        assert value["occurrences"] == 16
+        assert value["associations"] == [{"origin": "first", "occurrences": 11}, {"origin": "second", "occurrences": 5}]
+    finally:
+        projection.close()
+
+
+def test_validated_screen_header_avoids_a_second_analysis_scan(case, analysed):
+    connection = connection_of(case)
+    opened = []
+    class TraceConnection:
+        def execute(self, *args, **kwargs):
+            return connection.execute(*args, **kwargs)
+        def blobopen(self, *args, **kwargs):
+            opened.append(args)
+            return connection.blobopen(*args, **kwargs)
+    assert list(analysis_members(TraceConnection(), "case-1", "reconciliation"))
+    assert len(opened) == 1
+    # Updating authoritative analysis invalidates the cached header automatically.
+    stored = json.loads(connection.execute("SELECT result_json FROM analysis_results WHERE case_id='case-1' AND stage='reconciliation'").fetchone()[0])
+    stored["storage_version"] = 999
+    connection.execute("UPDATE analysis_results SET result_json=? WHERE case_id='case-1' AND stage='reconciliation'", (json.dumps(stored),))
+    with pytest.raises(ValueError):
+        list(analysis_members(TraceConnection(), "case-1", "reconciliation"))
