@@ -36,6 +36,7 @@ def check(resources, evidence=None):
         print(result.stdout.strip(), flush=True)
     with tempfile.TemporaryDirectory(prefix="factumdb linux bundle ") as directory:
         workspace = Path(directory)
+        app_workspace = workspace / "app"
         source = resources / "backend"
         # Seed a test-only account directly in the temporary database. Production
         # sign-up still requires polkit; no bypass is added to the application.
@@ -45,10 +46,10 @@ def check(resources, evidence=None):
                 "r=DesktopRuntime(sys.argv[2]); salt=bytes(range(16)); "
                 "r.auth.accounts.create('BundleTest','bundletest',salt,"
                 "AuthenticationService.digest('Bundle test password 123',salt),r.auth.device.identity()); r.close()")
-        subprocess.run([str(python), "-B", "-c", seed, str(source), directory], env=env, check=True)
+        subprocess.run([str(python), "-B", "-c", seed, str(source), str(app_workspace)], env=env, check=True)
         args = [str(python), "-B", "-u", "-X", "utf8", "-c",
                 "import runpy,sys; sys.path.insert(0,sys.argv.pop(1)); runpy.run_module('sidecar.desktop',run_name='__main__')",
-                str(source), "--workspace", directory]
+                str(source), "--workspace", str(app_workspace)]
 
         def request(process, command, payload=None, error=None):
             process.stdin.write(json.dumps({"request_id": "bundle", "command": command, "payload": payload or {}}) + "\n")
@@ -89,10 +90,15 @@ def check(resources, evidence=None):
                                     break
                                 run = request(process, "run_next_stage", {"run_id": run["run_id"]})
                             assert run["complete"], run
+                            print("PASS: real bundled tools and all pipeline stages", flush=True)
                             exported = workspace / "report.json"
                             request(process, "export_case", {"case_id": case_id, "format": "JSON", "path": str(exported)})
                             assert json.loads(exported.read_text())
-                            print("PASS: real bundled tools, all pipeline stages and JSON export", flush=True)
+                            print("PASS: packaged JSON export", flush=True)
+                            pdf = workspace / "report.pdf"
+                            request(process, "export_case", {"case_id": case_id, "format": "PDF", "path": str(pdf)})
+                            assert pdf.read_bytes().startswith(b"%PDF-"), "Invalid packaged PDF export"
+                            print("PASS: real bundled tools, all pipeline stages and JSON/PDF export", flush=True)
                     assert len(request(process, "list_cases")) == 1
                     assert request(process, "get_case_data", {"case_id": case_id})["case"]["examiner"] == "BundleTest"
                     request(process, "auth_logout")

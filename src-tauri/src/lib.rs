@@ -469,7 +469,8 @@ mod tests {
             )
             .unwrap();
         let case_id = created["case_id"].as_str().unwrap();
-        let index = workspace.join("binlog.index");
+        // Files inside the app workspace must belong to an owned case.
+        let index = workspace.join("cases").join(case_id).join("binlog.index");
         std::fs::write(&index, b"binlog.000001\n").unwrap();
         process
             .request(
