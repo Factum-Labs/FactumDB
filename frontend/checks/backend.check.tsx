@@ -16,7 +16,7 @@ import { useApp } from '../src/store'
 import App from '../src/App'
 import { request, display, defaultPreferences, type CaseData, type Row } from '../src/lib/backend'
 import { formatTime } from '../src/lib/timeDisplay'
-import { CasesScreen, IntakeScreen, PipelineScreen, TimelineScreen, RecordHistoryScreen, ReconciliationScreen, GapsScreen, ProvenanceScreen, ReportScreen, SettingsScreen } from '../src/screens/ConnectedScreens'
+import { CasesScreen, IntakeScreen, PipelineScreen, TimelineScreen, RecordHistoryScreen, ReconciliationScreen, GapsScreen, ProvenanceScreen, SettingsScreen } from '../src/screens/ConnectedScreens'
 
 const prefix = join(tmpdir(), 'factumdb-ui-check-')
 const workspace = mkdtempSync(prefix)
@@ -200,7 +200,8 @@ try {
   useApp.setState({ data: seeded, pipelineComplete: true, error: null })
   // SSR uses the hydration snapshot; render the state just returned by Python.
   React.useSyncExternalStore = (subscribe, getSnapshot) => originalSnapshotHook(subscribe, getSnapshot, getSnapshot)
-  for (const Component of [CasesScreen, IntakeScreen, PipelineScreen, TimelineScreen, RecordHistoryScreen, ReconciliationScreen, GapsScreen, ProvenanceScreen, ReportScreen, SettingsScreen]) {
+  // ReportScreen uses a client subscription; check:report-browser covers its rendering.
+  for (const Component of [CasesScreen, IntakeScreen, PipelineScreen, TimelineScreen, RecordHistoryScreen, ReconciliationScreen, GapsScreen, ProvenanceScreen, SettingsScreen]) {
     const html = renderToStaticMarkup(<Component />)
     assert.ok(html.length > 100, Component.name)
   }
@@ -247,7 +248,7 @@ try {
   assert.equal(useApp.getState().screen, 'cases')
   assert.equal(useApp.getState().cases.some(item => item.id === caseId), false)
   await assert.rejects(request('get_case_data', { case_id: caseId }), /NotFoundError/)
-  console.log('PASS: account signup, sign-in/out, guarded access, examiner identity, frontend workflow, SQLite export, and all ten screens.')
+  console.log('PASS: account signup, sign-in/out, guarded access, examiner identity, frontend workflow, SQLite export, and nine screens; report rendering is covered by check:report-browser.')
 } finally {
   clearTimeout(deadline)
   React.useSyncExternalStore = originalSnapshotHook

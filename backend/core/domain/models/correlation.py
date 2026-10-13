@@ -36,14 +36,6 @@ class MatchMethod(StrEnum):
     UNSUPPORTED_PARTIAL_KEY = "key_columns_not_in_row_image"
 
     @property
-    def is_supported(self) -> bool:
-        return self not in {
-            MatchMethod.UNSUPPORTED_NO_PK,
-            MatchMethod.UNSUPPORTED_NO_SCHEMA,
-            MatchMethod.UNSUPPORTED_PARTIAL_KEY,
-        }
-
-    @property
     def is_ambiguous(self) -> bool:
         return self is MatchMethod.AMBIGUOUS
 

@@ -121,6 +121,3 @@ class ReconciliationResult:
             if entry.record.id == record_id:
                 return entry
         return None
-
-    def rows_for(self, record_id: str) -> tuple[FieldReconciliation, ...]:
-        return tuple(r for r in self.rows if r.record_id == record_id)

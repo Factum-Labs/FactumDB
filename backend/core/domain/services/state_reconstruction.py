@@ -45,7 +45,6 @@ from core.domain.models.history import (
     RecordHistory,
     StepKind,
 )
-from core.domain.models.identity import RecordKey, UnrenderableKey, render_key_value
 from core.domain.models.transactions import (
     CoverageWindow,
     GroupingResult,
@@ -550,22 +549,6 @@ class StateReconstructionService:
         self, correlation: RecordCorrelation, schema: Schema
     ) -> PhysicalRecord | None:
         return self._physical_index.selected(correlation)
-
-    @staticmethod
-    def _key_of(record: PhysicalRecord, schema: Schema) -> RecordKey | None:
-        try:
-            values = tuple(
-                render_key_value(c.name, record.values[c.name])
-                for c in schema.primary_key_columns()
-            )
-        except (UnrenderableKey, KeyError):
-            return None
-        return RecordKey(
-            database=schema.database,
-            table=schema.table,
-            columns=tuple(c.name for c in schema.primary_key_columns()),
-            values=values,
-        )
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 

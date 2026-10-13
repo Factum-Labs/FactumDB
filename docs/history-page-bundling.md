@@ -1,5 +1,10 @@
 # Record-history page bundles
 
+This document records the earlier bundled-page implementation and its measurements.
+The current screen loads indexed summaries and only the selected record's details
+through the shared progressive cache; see [progressive case loading](progressive-case-loading.md).
+The backend `include_details` API remains supported for integrations.
+
 `get_history_page` accepts `include_details: true`. Each item then contains
 `summary`, `detail`, and `findings`. Omitting the flag preserves the summary-only
 response. Both forms use the same filters, ordering, totals and 100-record limit.
@@ -81,8 +86,8 @@ its benefit comes from reusing the completed response during navigation.
 
 Run the backend regression suite with `python -m pytest backend/tests -q`.
 Frontend checks include `npm --prefix frontend run build`, `lint`, `check:backend`,
-`check:history-cache`, and `check:history-browser`. Controller checks cover cache
-reuse, deduplication, request priority, sequential prefetch, eviction and failures.
+`check:progressive`, and `check:history-browser`. Shared-cache checks cover cache
+reuse, deduplication, request priority, prefetch and failures.
 Browser checks verify post-display prefetch, cached navigation, filtering, stale
 responses, cross-screen navigation, case switching, analysis refresh, lock,
 sign-out, unmount and background-failure recovery.

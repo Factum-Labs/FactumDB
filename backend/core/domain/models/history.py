@@ -100,10 +100,6 @@ class ReconstructedState:
     def value(self, column: str) -> Value:
         return self.values.get(column, UNOBSERVED)
 
-    @property
-    def observed_columns(self) -> tuple[str, ...]:
-        return tuple(sorted(c for c, v in self.values.items() if v is not UNOBSERVED))
-
 
 @dataclass(frozen=True, slots=True)
 class RecordHistory:

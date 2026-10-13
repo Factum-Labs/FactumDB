@@ -25,7 +25,6 @@ from collections.abc import Iterable, Sequence
 
 from core.domain.models.canonical import (
     Column,
-    PhysicalRecord,
     ProvenanceReference,
     Schema,
 )
@@ -37,12 +36,7 @@ from core.domain.models.correlation import (
 )
 from core.domain.models.findings import Finding, SubjectKind, SubjectRef
 from core.domain.models.history import ReconstructionResult, RecordHistory
-from core.domain.models.identity import (
-    RecordKey,
-    RecordRef,
-    UnrenderableKey,
-    render_key_value,
-)
+from core.domain.models.identity import RecordRef
 from core.domain.models.reconciliation import (
     PRESENCE_FIELD,
     FieldProvenance,
@@ -523,22 +517,6 @@ class ReconciliationService:
             return None
         record = self._physical_index.selected(correlation)
         return dict(record.values) if record is not None else None
-
-    @staticmethod
-    def _key_of(record: PhysicalRecord, schema: Schema) -> RecordKey | None:
-        try:
-            values = tuple(
-                render_key_value(c.name, record.values[c.name])
-                for c in schema.primary_key_columns()
-            )
-        except (UnrenderableKey, KeyError):
-            return None
-        return RecordKey(
-            database=schema.database,
-            table=schema.table,
-            columns=tuple(c.name for c in schema.primary_key_columns()),
-            values=values,
-        )
 
     @staticmethod
     def _field_provenance(

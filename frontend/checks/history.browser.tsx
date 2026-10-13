@@ -153,7 +153,7 @@ Object.assign(window, { runHistoryChecks: async () => {
   await waitFor(() => useApp.getState().selectedRecord === 'accounts:100' && records().length === 100)
   assert(pageCalls.filter(c => c.offset === 100).length === started + 1, 'Navigation did not retry failed prefetch')
   useApp.setState({ data: null, selectedRecord: '', user: null })
-  await waitFor(() => document.body.textContent!.includes('No results available yet'))
+  await waitFor(() => document.body.textContent!.includes('Open a case to view record history'))
   await new Promise(resolve => setTimeout(resolve, 120))
   const signedOutCalls = calls.length
   await new Promise(resolve => setTimeout(resolve, 100))

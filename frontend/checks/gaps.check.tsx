@@ -56,7 +56,7 @@ try {
   for (const text of ['Warning groups', 'Notice groups', 'Extraction warning groups', 'Distinct subjects', 'Known title', 'visits.ibd', 'R-UNKNOWN']) assert.ok(html.includes(text), text)
   assert.equal((html.match(/View findings/g) ?? []).length, expected.length)
   assert.equal((html.match(/View warnings/g) ?? []).length, warningGroups.length)
-  useApp.setState({ data: { ...data, findings: [], tables: {} } })
+  useApp.setState({ data: { ...data, findings: [], tables: { warnings: [] } } })
   assert.match(renderToStaticMarkup(<GapsScreen />), /No warning or notice findings available/)
   assert.match(renderToStaticMarkup(<GapsScreen />), /No extraction warnings available/)
 } finally { React.useSyncExternalStore = originalSnapshot }
