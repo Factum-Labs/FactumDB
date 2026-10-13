@@ -71,7 +71,7 @@ try {
     console.log(JSON.stringify({ ...retained, preview_cache_heap_increase_bytes: after.usedSize - before.usedSize }))
   }
   assert.deepEqual(exceptions, [])
-  console.log('PASS: preview ordering, immediate View, Pipeline before full data, errors/retry, unsaved notes, rapid selection, failure retry and lock guards.')
+  console.log('PASS: independent screens, cached pages, deferred dropdowns, retained notes and rows, and lock guards.')
 } finally {
   socket?.close()
   processHandle.kill()

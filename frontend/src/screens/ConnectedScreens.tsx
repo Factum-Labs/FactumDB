@@ -9,6 +9,9 @@ import { CorrelationGraph } from '../components/CorrelationGraph'
 import { buildFlaggedGroups } from '../lib/correlation'
 import { useAnalysisDetail } from '../lib/useAnalysisDetail'
 import { useTablePage } from '../lib/useTablePage'
+import { useScreenQuery, useNextPage, type ScreenPage } from '../lib/useScreenQuery'
+import { LoadingPanel, QueryError } from '../components/LoadingPanel'
+import { CoverageDetails } from '../components/CoverageDetails'
 import { useRevealRow } from '../lib/useRevealRow'
 import { RESULT_TONE, type CorrelationEdge, type ReconResult, type ReconRow, type RecordRef, type Transaction, type TxStatus, type EventType } from '../data/types'
 
@@ -36,27 +39,28 @@ function ProvenanceLinks({ value }: { value: Json | undefined }) {
     useApp.getState().selectTool(id); useApp.getState().go('prov')
   }}>Inspect source tool run · {id.slice(0, 8)}</Button>)}</div>
 }
-function Table({ data, columns, paginationKey, onSelect, selected, actionLabel = 'View', renderExpanded, rowKey = 'record_id', expandedRowId, onToggleExpanded, rowActions }: {
+function Table({ data, columns, paginationKey, onSelect, selected, actionLabel = 'View', renderExpanded, rowKey = 'record_id', expandedRowId, onToggleExpanded, rowActions, serverPage }: {
   data: Row[]; columns: [string, string][]; paginationKey: string; onSelect?: (row: Row) => void; selected?: (row: Row) => boolean; actionLabel?: string; renderExpanded?: (row: Row) => ReactNode; rowKey?: string; expandedRowId?: string; onToggleExpanded?: (row: Row) => void
   rowActions?: (row: Row) => ReactNode
+  serverPage?: { page: number; total: number; change: (page: number) => void }
 }) {
   const [page, setPage] = useTablePage(paginationKey, paginationKey !== 'cases')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const size = 100
-  const pages = Math.max(1, Math.ceil(data.length / size))
-  const current = Math.min(page, pages - 1)
+  const pages = Math.max(1, Math.ceil((serverPage?.total ?? data.length) / size))
+  const current = Math.min(serverPage?.page ?? page, pages - 1)
   const activeId = expandedRowId ?? expandedId
   const tableRef = useRevealRow(`${activeId ?? ''}:${current}`)
   const expandedIndex = expandedRowId ? data.findIndex(row => String(row[rowKey]) === expandedRowId) : -1
   useEffect(() => {
-    if (expandedIndex >= 0) setPage(Math.floor(expandedIndex / size))
-  }, [expandedRowId, expandedIndex, setPage])
+    if (!serverPage && expandedIndex >= 0) setPage(Math.floor(expandedIndex / size))
+  }, [expandedRowId, expandedIndex, setPage, serverPage])
   if (!data.length) return <Empty>No results available yet.</Empty>
   return <div ref={tableRef} className="overflow-auto rounded-md border border-line bg-panel">
     <table className="w-full text-left text-xs"><thead className="bg-thead text-dim"><tr>
       {columns.map(([key, label]) => <th key={key} className="px-3 py-2 font-semibold">{label}</th>)}
       {(onSelect || renderExpanded) && <th className="px-3 py-2">{rowActions ? 'Actions' : renderExpanded && rowKey === 'record_id' ? 'Comparisons' : 'Details'}</th>}
-    </tr></thead><tbody>{data.slice(current * size, (current + 1) * size).map((row, index) =>
+    </tr></thead><tbody>{(serverPage ? data : data.slice(current * size, (current + 1) * size)).map((row, index) =>
       <Fragment key={renderExpanded ? String(row[rowKey]) : current * size + index}><tr data-selected={selected?.(row) || !!(renderExpanded && activeId === String(row[rowKey]))} className={'border-t border-line ' + (selected?.(row) || (renderExpanded && activeId === String(row[rowKey])) ? 'bg-accent-soft' : '')}>
         {columns.map(([key]) => <td key={key} className={'max-w-xs break-words px-3 py-2 ' + (paginationKey === 'reconciliation' && key === 'result' ? '' : 'font-mono')}>
           {paginationKey === 'reconciliation' && key === 'result'
@@ -68,7 +72,7 @@ function Table({ data, columns, paginationKey, onSelect, selected, actionLabel =
           <span className="underline">{rowKey === 'record_id' ? `${activeId === String(row[rowKey]) ? 'Hide' : 'View'} comparisons` : activeId === String(row[rowKey]) ? 'Hide run' : actionLabel}</span><span aria-hidden="true" className="text-[16px] leading-none">{activeId === String(row[rowKey]) ? '▴' : '▾'}</span>
         </button></td>}
       </tr>{renderExpanded && activeId === String(row[rowKey]) && <tr className="border-t border-line bg-thead"><td colSpan={columns.length + 1} className="p-3">{renderExpanded(row)}</td></tr>}</Fragment>)}</tbody></table>
-    <TablePagination page={current} count={data.length} onPage={setPage} />
+    <TablePagination page={current} count={serverPage?.total ?? data.length} onPage={serverPage?.change ?? setPage} />
   </div>
 }
 
@@ -152,11 +156,55 @@ function graphData(data: ReturnType<typeof useApp.getState>['data']) {
   const recon: ReconRow[] = rows(data?.analysis.reconciliation?.rows).map(r => ({ recordId: String(r.record_id), field: String(r.field), log: String(r.log_display), phys: String(r.phys_display), result: String(r.result) as ReconResult }))
   return buildFlaggedGroups(recordRefs, transactions, edges, recon)
 }
+function ProgressiveGraphs({ data }: { data: CaseData }) {
+  const [loaded, setLoaded] = useState<CaseData>()
+  const [error, setError] = useState('')
+  const [attempt, setAttempt] = useState(0)
+  const loadedKey = useRef('')
+  const active = useApp(s => s.screen === 'recon' && !s.locked)
+  const revision = useApp(s => s.preview?.revision)
+  const expanded = useApp(s => s.expandedGroups)
+  useEffect(() => {
+    if (!active) return
+    const key = `${data.case.case_id}:${revision}:${attempt}`
+    if (loaded && loadedKey.current === key) return
+    let alive = true
+    const load = async () => {
+      const collections: Record<string, Row[]> = {}
+      for (const kind of ['graph_records', 'graph_edges', 'transactions', 'comparisons']) {
+        const values: Row[] = []
+        let offset = 0, total = Infinity
+        while (alive && offset < total) {
+          const page = await request<ScreenPage>('get_screen_page', { case_id: data.case.case_id, kind, offset, limit: 100 }, { valid: () => alive, background: true })
+          if (!alive) return
+          values.push(...page.items); total = page.total; offset += 100
+        }
+        if (!alive) return
+        collections[kind] = values
+      }
+      if (alive) { loadedKey.current=key; setLoaded({ ...data, analysis: { correlation: { records: collections.graph_records, edges: collections.graph_edges },
+        grouping: { transactions: collections.transactions }, reconciliation: { rows: collections.comparisons } } }) }
+    }
+    setError('')
+    void load().catch(e => { if (alive) setError(String(e)) })
+    return () => { alive = false }
+  }, [active, data, revision, attempt, loaded])
+  const groups = useMemo(() => graphData(loaded ?? null), [loaded])
+  if (!loaded) return <LoadingPanel error={error} retry={() => setAttempt(n => n + 1)} label="Loading correlation graphs" />
+  return <>{groups.map(group => <div key={group.id} className="space-y-2"><Button onClick={() => useApp.getState().toggleGroup(group.id)}>{expanded.includes(group.id) ? 'Hide' : 'Show'} correlation graph · {group.records.length} records</Button>{expanded.includes(group.id) && <CorrelationGraph group={group} />}</div>)}{!groups.length && <StatusMessage>No flagged correlation groups.</StatusMessage>}</>
+}
+
 function RecordComparisons({ recordId, comparisons, data }: { recordId: string; comparisons: Row[]; data: CaseData }) {
   const [detail, setDetail] = useState<Row | null>(null)
-  const sourceComparison = detail ?? comparisons[0]
-  const loaded = useAnalysisDetail(data.case.case_id, 'comparison', sourceComparison, data.analysis.reconciliation?.details_deferred === true, sourceComparison ? String(sourceComparison.field) : undefined)
+  const [page, setPage] = useTablePage(`comparisons:${recordId}`)
+  const legacy = Array.isArray(data.analysis.reconciliation?.rows)
+  const payload = { kind: 'comparisons', identity: recordId, offset: page * 100, limit: 100 }
+  const query = useScreenQuery<ScreenPage>('get_screen_page', payload, 'recon', !legacy)
+  useNextPage(query.value, payload, 'recon')
+  const fields = legacy ? comparisons : query.value?.items ?? []
+  const loaded = useAnalysisDetail(data.case.case_id, 'comparison', detail ?? undefined, !legacy || data.analysis.reconciliation?.details_deferred === true, detail ? String(detail.field) : undefined)
   return <div className="space-y-3">
+    <QueryError error={query.error || loaded.error} retry={query.error ? query.retry : loaded.retry} />
     <div className="flex flex-wrap items-center justify-between gap-2">
       <span className="text-xs font-medium text-ink">Individual comparisons · {recordId}</span>
       <div className="flex flex-wrap items-center gap-2">
@@ -166,13 +214,14 @@ function RecordComparisons({ recordId, comparisons, data }: { recordId: string; 
     </div>
     <div className="overflow-auto rounded border border-line bg-panel"><table className="w-full text-left text-xs">
       <thead className="bg-thead text-dim"><tr>{['Field', 'Log-derived', 'Physical', 'Result', 'Rule', 'Details'].map(label => <th key={label} className="px-3 py-2 font-semibold">{label}</th>)}</tr></thead>
-      <tbody>{comparisons.map(field => <tr key={String(field.field)} className={'border-t border-line ' + (detail?.field === field.field ? 'bg-accent-soft' : '')}>
+      <tbody>{fields.map(field => <tr key={String(field.field)} className={'border-t border-line ' + (detail?.field === field.field ? 'bg-accent-soft' : '')}>
         <td className="px-3 py-2 font-mono">{display(field.field)}</td><td className="max-w-xs break-words px-3 py-2 font-mono">{display(field.log_display)}</td><td className="max-w-xs break-words px-3 py-2 font-mono">{display(field.phys_display)}</td>
         <td className="px-3 py-2"><Badge tone={RESULT_TONE[String(field.result) as ReconResult] ?? 'neutral'}>{display(field.result)}</Badge></td><td className="px-3 py-2 font-mono">{display(field.rule_id)}</td>
         <td className="px-3 py-2"><button type="button" className="text-accent underline" onClick={() => setDetail(field)}>View</button></td>
       </tr>)}</tbody>
     </table></div>
-    {!comparisons.length && <StatusMessage>No individual comparisons available.</StatusMessage>}
+    {!legacy && !query.value ? <LoadingPanel error={query.error} retry={query.retry} label="Loading comparisons" /> : !fields.length && <StatusMessage>No individual comparisons available.</StatusMessage>}
+    {!legacy && query.value && <TablePagination page={page} count={query.value.total} onPage={setPage} />}
     {detail && (loaded.detail ? <section aria-label="Comparison values, rule and source provenance" className="overflow-hidden rounded border border-line bg-panel">
       <div className="flex items-center justify-between gap-3 border-b border-line bg-thead px-3 py-2">
         <h3 className="text-xs font-semibold text-ink">Comparison values, rule and source provenance</h3>
@@ -187,7 +236,20 @@ export function ReconciliationScreen() {
   const data = useApp(s => s.data)
   const selectedRecord = useApp(s => s.selectedRecord)
   const [filter, setFilter] = useState('')
-  useEffect(() => { setFilter('') }, [selectedRecord])
+  const [page, setPage] = useTablePage(`reconciliation:${filter}`)
+  const legacy = Array.isArray(data?.analysis.reconciliation?.records)
+  const payload = { kind: 'reconciliation', offset: page * 100, limit: 100, ...(filter ? { bucket: filter } : {}) }
+  const query = useScreenQuery<ScreenPage>('get_screen_page', payload, 'recon', !legacy)
+  useNextPage(query.value, payload, 'recon')
+  const location = useScreenQuery<{ offset: number }>('locate_screen_item', { kind: 'reconciliation', identity: selectedRecord }, 'recon', !legacy && !filter && !!selectedRecord && !!query.value && !query.value.items.some(r => r.record_id === selectedRecord))
+  useEffect(() => { if (location.value) setPage(location.value.offset / 100) }, [location.value, setPage])
+  const [showGraphs, setShowGraphs] = useState(false)
+  const [summary,setSummary] = useState<{caseId:string;counts:Row}>()
+  const savedCounts=query.value?.summaries?.reconciliation?.counts
+  const caseId=data?.case.case_id
+  useEffect(()=>{if(savedCounts && caseId) setSummary({caseId,counts:object(savedCounts)})},[savedCounts,caseId])
+  const navigation = useApp(s => s.reconciliationNavigation)
+  useEffect(() => { if(navigation) setFilter('') }, [navigation])
   const expanded = useApp(s => s.expandedGroups)
   const groups = useMemo(() => graphData(data), [data])
   const comparisonsByRecord = useMemo(() => {
@@ -205,16 +267,21 @@ export function ReconciliationScreen() {
     summary: record.rollup_label, rule_id: record.rollup_rule_id,
     field_count: record.field_count ?? rows(record.fields).length,
   })), [data?.analysis.reconciliation?.records])
-  const counts = Object.keys(RESULT_TONE).map(result => [result, all.filter(r => r.result === result).length] as const)
+  const resultCounts=savedCounts ? object(savedCounts) : summary?.caseId===data?.case.case_id ? summary?.counts : undefined
+  const counts = Object.keys(RESULT_TONE).map(result => [result, legacy ? all.filter(r => r.result === result).length : resultCounts ? Number(resultCounts[result] ?? 0) : null] as const)
   return <div className="space-y-4">
-    <div className="grid grid-cols-6 gap-2">{counts.map(([result, count]) => <div key={result} className={panel}><p className="font-mono text-xl font-semibold">{count}</p><Badge tone={RESULT_TONE[result as ReconResult]}>{result}</Badge></div>)}</div>
-    <label className="flex items-center gap-2 text-xs text-muted">Filter result<select className={select} value={filter} onChange={e => setFilter(e.target.value)}><option value="">All results</option>{counts.map(([r]) => <option key={r}>{r}</option>)}</select></label>
+    <QueryError error={query.error || location.error} retry={query.error ? query.retry : location.retry} />
+    <div className="grid grid-cols-6 gap-2">{counts.map(([result, count]) => <div key={result} className={panel}><p className="font-mono text-xl font-semibold">{count ?? '—'}</p><Badge tone={RESULT_TONE[result as ReconResult]}>{result}</Badge></div>)}</div>
+    <label className="flex items-center gap-2 text-xs text-muted">Filter result<select className={select} value={filter} onChange={e => {setFilter(e.target.value);useApp.getState().selectRecord('')}}><option value="">All results</option>{counts.map(([r]) => <option key={r}>{r}</option>)}</select></label>
     <p className="text-xs text-muted">Results count records. Expand a row to inspect its individual field comparisons.</p>
-    <Table key={`${data?.case.case_id}:${data?.run?.run_id}`} paginationKey="reconciliation" data={all.filter(r => !filter || r.result === filter)} columns={[['record_id', 'Record'], ['result', 'Result'], ['summary', 'Summary'], ['field_count', 'Comparisons'], ['rule_id', 'Rule']]}
+    {!legacy && !query.value ? <LoadingPanel error={query.error} retry={query.retry} label="Loading reconciliation" /> : <Table paginationKey="reconciliation" data={legacy ? all.filter(r => !filter || r.result === filter) : query.value?.items ?? []} columns={[['record_id', 'Record'], ['result', 'Result'], ['summary', 'Summary'], ['field_count', 'Comparisons'], ['rule_id', 'Rule']]}
+      serverPage={legacy ? undefined : { page, total: query.value?.total ?? 0, change: value => { useApp.getState().selectRecord(''); setPage(value) } }}
       expandedRowId={selectedRecord} onToggleExpanded={record => useApp.getState().selectRecord(selectedRecord === String(record.record_id) ? '' : String(record.record_id))}
-      renderExpanded={record => data && <RecordComparisons key={String(record.record_id)} recordId={String(record.record_id)} comparisons={comparisonsByRecord.get(String(record.record_id)) ?? []} data={data} />} />
+      renderExpanded={record => data && <RecordComparisons key={String(record.record_id)} recordId={String(record.record_id)} comparisons={comparisonsByRecord.get(String(record.record_id)) ?? []} data={data} />} />}
     {groups.map(group => <div key={group.id} className="space-y-2"><Button onClick={() => useApp.getState().toggleGroup(group.id)}>{expanded.includes(group.id) ? 'Hide' : 'Show'} correlation graph · {group.records.length} records</Button>{expanded.includes(group.id) && <CorrelationGraph group={group} />}</div>)}
     {data?.analysis.reconciliation?.coverage && <Detail value={data.analysis.reconciliation.coverage} title="Coverage and limits" />}
+    {!legacy && data && <><Button onClick={() => setShowGraphs(!showGraphs)}>{showGraphs ? 'Hide' : 'Show'} correlation graphs</Button>{showGraphs && <ProgressiveGraphs data={data} />}</>}
+    {!legacy && <CoverageDetails kind="reconciliation" screen="recon" title="Coverage and limits" />}
   </div>
 }
 
@@ -251,7 +318,16 @@ function ToolRunDetails({ run, caseId }: { run: Row; caseId: string }) {
 export function ProvenanceScreen() {
   const data = useApp(s => s.data)
   const selected = useApp(s => s.selectedTool)
-  return <Table key={`${data?.case.case_id}:${data?.run?.run_id}`} paginationKey="tool-runs" data={data?.tables.tool_runs ?? []}
+  const [page,setPage] = useTablePage('tool-run-pages')
+  const legacy = Array.isArray(data?.tables.tool_runs)
+  const payload = {kind:'tool_runs',offset:page*100,limit:100}
+  const query = useScreenQuery<ScreenPage>('get_screen_page',payload,'prov',!legacy)
+  useNextPage(query.value,payload,'prov')
+  const location = useScreenQuery<{offset:number}>('locate_screen_item',{kind:'tool_runs',identity:selected},'prov',!legacy && !!selected && !!query.value && !query.value.items.some(run=>run.tool_run_id===selected))
+  useEffect(()=>{if(location.value) setPage(location.value.offset/100)},[location.value,setPage])
+  if (!legacy && !query.value) return <LoadingPanel error={query.error} retry={query.retry} label="Loading source tool runs" />
+  return <Table paginationKey="tool-runs" data={legacy ? data?.tables.tool_runs ?? [] : query.value?.items ?? []}
+    serverPage={legacy ? undefined : {page,total:query.value?.total ?? 0,change:value=>{useApp.getState().selectTool('');setPage(value)}}}
     columns={[['tool_name', 'Utility'], ['tool_version', 'Version'], ['status', 'Status'], ['exit_code', 'Exit'], ['evidence_id', 'Evidence'], ['started_at', 'Started']]}
     rowKey="tool_run_id" actionLabel="Inspect run" expandedRowId={selected}
     onToggleExpanded={run => useApp.getState().selectTool(selected === String(run.tool_run_id) ? '' : String(run.tool_run_id))}

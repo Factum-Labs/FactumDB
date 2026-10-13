@@ -1,6 +1,7 @@
 """Read-only desktop projections, using the same tagged values as case exports."""
 
 import json
+import hashlib
 
 from adapters.persistence.case_export import _TABLES, _row
 from adapters.persistence._reconciliation import check_storage, references
@@ -10,30 +11,45 @@ from core.domain.rules import RULES, describe
 from core.engine import ENGINE_REVISION, ANALYSIS_FORMAT_VERSION
 
 
-def case_preview(case_id, connection, stores, pipelines):
+def case_preview(case_id, connection, stores, pipelines, *, fast=False):
     """A consistent, bounded projection; analysis arrays stay inside SQLite."""
     connection.execute("SAVEPOINT case_preview")
     try:
         case = connection.execute("SELECT * FROM cases WHERE case_id = ?", (case_id,)).fetchone()
         if case is None:
             raise NotFoundError(f"case not found: {case_id}")
-        _compact_storage(connection, case_id)
+        if not fast:
+            _compact_storage(connection, case_id)
+        from adapters.persistence.sqlite_screen_repository import ScreenRepository
+        saved = ScreenRepository(connection).summaries(case_id) if fast else {}
         evidence = [_row(r) for r in connection.execute(
             "SELECT * FROM evidence_files WHERE case_id = ? ORDER BY evidence_id", (case_id,))]
         run = pipelines.latest_for_case(case_id)
         run_view = _pipeline_result(run) if run else None
         def length(stage, path):
+            if fast:
+                return saved.get(stage, {}).get(path.rsplit('.', 1)[-1])
             row = connection.execute("SELECT json_array_length(result_json, ?) FROM analysis_results WHERE case_id = ? AND stage = ?",
                                      (path, case_id, stage)).fetchone()
             return row[0] if row else None
         def count(table):
+            if fast and table == 'physical_records':
+                normalized = connection.execute('SELECT counts_json FROM normalizations WHERE case_id=?', (case_id,)).fetchone()
+                if normalized:
+                    value = json.loads(normalized[0]).get('physical_records')
+                    if value:
+                        return value[1]
+                stage = next((s for s in (run_view or {}).get('stages', []) if s['stage']=='extract_physical_rows'), None)
+                if stage and stage['status']=='succeeded' and stage['attempts']:
+                    return stage['attempts'][-1]['item_count']
+                return None
             return connection.execute(f"SELECT count(*) FROM {table} t JOIN evidence_files e ON e.evidence_id = t.evidence_id WHERE e.case_id = ?", (case_id,)).fetchone()[0]
         parsed = count('schemas')
         columns = connection.execute("SELECT count(*) FROM schema_columns c JOIN schemas s ON s.schema_id=c.schema_id JOIN evidence_files e ON e.evidence_id=s.evidence_id WHERE e.case_id=?", (case_id,)).fetchone()[0]
         integrity = connection.execute("SELECT count(*), sum(total_pages), sum(damaged_pages), sum(total_pages IS NULL), sum(status != 'valid') FROM integrity_results t JOIN evidence_files e ON e.evidence_id=t.evidence_id WHERE e.case_id=?", (case_id,)).fetchone()
         missing = connection.execute("SELECT count(DISTINCT j.value) FROM binlog_inventory t JOIN evidence_files e ON e.evidence_id=t.evidence_id, json_each(t.missing_files_json) j WHERE e.case_id=?", (case_id,)).fetchone()[0]
-        comparisons = length('reconciliation', '$.rows')
-        exact, unresolved = connection.execute("SELECT coalesce(sum(json_extract(j.value,'$.result')='Exact'),0), coalesce(sum(json_extract(j.value,'$.result')='Unresolved'),0) FROM analysis_results a, json_each(a.result_json,'$.rows') j WHERE a.case_id=? AND a.stage='reconciliation'", (case_id,)).fetchone()
+        comparisons = saved.get('reconciliation', {}).get('comparisons') if fast else length('reconciliation', '$.rows')
+        exact, unresolved = (saved.get('reconciliation', {}).get('exact'), saved.get('reconciliation', {}).get('unresolved')) if fast else connection.execute("SELECT coalesce(sum(json_extract(j.value,'$.result')='Exact'),0), coalesce(sum(json_extract(j.value,'$.result')='Unresolved'),0) FROM analysis_results a, json_each(a.result_json,'$.rows') j WHERE a.case_id=? AND a.stage='reconciliation'", (case_id,)).fetchone()
         metrics = dict(evidence=len(evidence), verified=sum(e['verification_status']=='verified' for e in evidence),
                        tables=parsed if parsed or (run_view and any(s['stage'] == 'extract_schema' and s['status'] == 'succeeded' for s in run_view['stages'])) else None,
                        transactions=length('grouping', '$.transactions'), records=length('correlation', '$.records'),
@@ -50,7 +66,19 @@ def case_preview(case_id, connection, stores, pipelines):
             'reconstruct_state': f"{length('reconstruction', '$.histories')} histories",
             'reconcile_records': f"{comparisons} comparisons",
         }
-        return _present({'case': _row(case), 'evidence': evidence, 'run': _pipeline_result(run) if run else None,
+        if fast:
+            summaries = {key: value.replace('None', 'Unknown') for key,value in summaries.items()}
+        revision = connection.execute("SELECT coalesce(group_concat(stage || ':' || saved_at),'') FROM (SELECT stage,saved_at FROM analysis_results WHERE case_id=? ORDER BY stage)", (case_id,)).fetchone()[0]
+        revision += ':' + str(connection.execute('SELECT count(*) FROM warnings WHERE case_id=?', (case_id,)).fetchone()[0])
+        revision += ':' + json.dumps(run_view, sort_keys=True, separators=(',', ':'), default=str)
+        revision = hashlib.sha256(revision.encode()).hexdigest()[:24]
+        indexed = []
+        if fast:
+            indexed = [kind for kind,stage in [('transactions','grouping'),('histories','reconstruction'),('reconciliation','reconciliation')] if saved.get(stage, {}).get('indexed')]
+            indexed += [r[0] for r in connection.execute('SELECT kind FROM screen_legacy_ready WHERE case_id=?', (case_id,))]
+            if connection.execute('SELECT 1 FROM screen_group_ready WHERE case_id=?', (case_id,)).fetchone():
+                indexed.append('finding_groups')
+        return _present({'case': _row(case), 'evidence': evidence, 'run': _pipeline_result(run) if run else None, **({'revision': revision, 'indexed_screens': indexed} if fast else {}),
                          'pipeline': {'metrics': metrics, 'summaries': summaries, 'warnings': {
                              'validate_pages': bool(integrity[4]), 'decode_binary_logs': bool(missing),
                              'group_transactions': bool(metrics['gaps'])}}})

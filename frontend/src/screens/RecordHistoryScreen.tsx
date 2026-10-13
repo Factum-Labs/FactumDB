@@ -1,4 +1,7 @@
 import { useHistoryPage } from "../lib/useHistoryPage";
+import { useAnalysisDetail } from '../lib/useAnalysisDetail';
+import { useScreenContext, useScreenQuery, useNextPage, type ScreenPage } from '../lib/useScreenQuery';
+import { LoadingPanel, QueryError } from '../components/LoadingPanel';
 import { useMemo } from "react";
 import { Badge } from "../components/Badge";
 import { StatusMessage } from "../components/StatusMessage";
@@ -32,7 +35,7 @@ function Pagination({
 }) {
   return (
     <nav
-      aria-label="Record history pagination"
+      aria-label="History steps pagination"
       className="flex flex-wrap items-center justify-center gap-3 border-t border-line bg-thead px-3 py-2.5 text-xs"
     >
       <button
@@ -432,9 +435,18 @@ function HistoryDetail({ history, data }: { history: Row; data: CaseData }) {
   );
   const record = object(history.record);
   const steps = rows(history.steps);
+  const seed = steps.find(step => step.kind === 'earliest_observed_state');
+  const firstEvent = steps.find(step => ['event', 'rolled_back_event', 'uncommitted_event'].includes(String(step.kind)));
+  const startsWithInsert = !!(seed && firstEvent && object(history.earliest_state).presence === 'absent'
+    && eventKey(seed.ref) === eventKey(firstEvent.ref)
+    && rows(history.events).some(event => eventKey([event.source_file, event.log_position, event.row_index]) === eventKey(firstEvent.ref) && event.event_type === 'INSERT'));
+  const totalSteps = history.steps_paginated === true ? Number(history.step_count) - (startsWithInsert ? 1 : 0) : steps.length - (startsWithInsert ? 1 : 0);
+  const stepPayload = { kind: 'history_steps', bucket: JSON.stringify([record.table, record.id]), offset: page * 100 + (startsWithInsert ? 1 : 0), limit: 100 };
+  const stepQuery = useScreenQuery<ScreenPage & { events: Row[] }>('get_screen_page', stepPayload, 'record', history.steps_paginated === true && page > 0);
+  useNextPage(history.steps_paginated === true ? { items: [], total: Number(history.step_count), offset: stepPayload.offset, limit: 100 } : undefined, stepPayload, 'record');
   const eventMap = useMemo(() => {
     const map = new Map<string, Row>();
-    for (const event of rows(history.events))
+    for (const event of rows(page > 0 ? stepQuery.value?.events : history.events))
       map.set(
         JSON.stringify([
           event.source_file,
@@ -467,24 +479,9 @@ function HistoryDetail({ history, data }: { history: Row; data: CaseData }) {
       );
     }
     return map;
-  }, [data.analysis.grouping, history.events]);
-  const seed = steps.find((step) => step.kind === "earliest_observed_state");
-  const firstEvent = steps.find((step) =>
-    ["event", "rolled_back_event", "uncommitted_event"].includes(
-      String(step.kind),
-    ),
-  );
-  const startsWithInsert = !!(
-    seed &&
-    firstEvent &&
-    object(history.earliest_state).presence === "absent" &&
-    eventKey(seed.ref) === eventKey(firstEvent.ref) &&
-    eventMap.get(eventKey(firstEvent.ref))?.event_type === "INSERT"
-  );
-  const timelineSteps = startsWithInsert
-    ? steps.filter((step) => step !== seed)
-    : steps;
-  const pages = Math.max(1, Math.ceil(timelineSteps.length / 100));
+  }, [data.analysis.grouping, history.events, page, stepQuery.value]);
+  const timelineSteps = history.steps_paginated === true && page > 0 ? stepQuery.value?.items ?? [] : startsWithInsert ? steps.filter(step => step !== seed) : steps;
+  const pages = Math.max(1, Math.ceil(totalSteps / 100));
   const current = Math.min(page, pages - 1);
   const states = [
     object(history.earliest_state),
@@ -498,7 +495,7 @@ function HistoryDetail({ history, data }: { history: Row; data: CaseData }) {
   const partial = Array.isArray(history.partial_image_columns)
     ? history.partial_image_columns
     : [];
-  const comparisons = rows(data.analysis.reconciliation?.rows).filter(
+  const comparisons = rows(history.comparisons ?? data.analysis.reconciliation?.rows).filter(
     (row) => row.record_id === record.id,
   );
   return (
@@ -591,8 +588,7 @@ function HistoryDetail({ history, data }: { history: Row; data: CaseData }) {
           </details>
         )}
         <ol className="px-3.5 pt-1">
-          {timelineSteps
-            .slice(current * 100, (current + 1) * 100)
+          {(history.steps_paginated === true ? timelineSteps.slice(0, 100) : timelineSteps.slice(current * 100, (current + 1) * 100))
             .map((step, index) => (
               <Step
                 key={String(step.index)}
@@ -603,14 +599,12 @@ function HistoryDetail({ history, data }: { history: Row; data: CaseData }) {
                 firstInsert={startsWithInsert && step === firstEvent}
                 last={
                   index ===
-                  Math.min(100, timelineSteps.length - current * 100) - 1
+                  Math.min(100, history.steps_paginated === true ? timelineSteps.length : timelineSteps.length - current * 100) - 1
                 }
               />
             ))}
         </ol>
-        {!timelineSteps.length && (
-          <StatusMessage>No history steps available.</StatusMessage>
-        )}
+        {!timelineSteps.length && (history.steps_paginated === true && page > 0 && !stepQuery.value ? <LoadingPanel error={stepQuery.error} retry={stepQuery.retry} label="Loading history steps" /> : <StatusMessage>No history steps available.</StatusMessage>)}
         {pages > 1 && (
           <Pagination
             page={current}
@@ -694,6 +688,7 @@ function HistoryDetail({ history, data }: { history: Row; data: CaseData }) {
           <p className="mt-1 text-[11px] text-muted">
             The reconciliation result for each field, including row presence.
           </p>
+          {Number(history.comparison_count)>comparisons.length && <p className="mt-1 text-[11px] text-muted">Showing the first {comparisons.length} of {Number(history.comparison_count)} comparisons. Open reconciliation to inspect every field.</p>}
           <div className="mt-2 flex flex-wrap gap-2">
             {comparisons.map((comparison) => (
               <div
@@ -716,8 +711,7 @@ function HistoryDetail({ history, data }: { history: Row; data: CaseData }) {
             type="button"
             className={button + " mt-2"}
             onClick={() => {
-              useApp.getState().selectRecord(String(record.id));
-              useApp.getState().go("recon");
+              useApp.getState().openReconciliation(String(record.id));
             }}
           >
             Open reconciliation
@@ -727,7 +721,7 @@ function HistoryDetail({ history, data }: { history: Row; data: CaseData }) {
       <Findings findings={rows(history.findings)} data={data} />
       <details className="rounded-md border border-line bg-panel p-3 text-[11px]">
         <summary className="cursor-pointer font-medium">
-          Full history, observed values and provenance
+          {history.steps_paginated === true ? 'History metadata, initial steps and provenance' : 'Full history, observed values and provenance'}
         </summary>
         <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-all font-mono">
           {JSON.stringify(history, null, 2)}
@@ -738,18 +732,20 @@ function HistoryDetail({ history, data }: { history: Row; data: CaseData }) {
 }
 
 export function RecordHistoryScreen() {
-  const data = useApp((s) => s.data);
+  const { data } = useScreenContext('record');
   const selected = useApp((s) => s.selectedRecord);
   const selectedTable = useApp((s) => s.selectedRecordTable);
   const list = useHistoryPage(data);
   const histories = list.items.map(item => item.summary);
+  const fullHistories = data?.analysis.reconstruction?.details_deferred !== true ? rows(data?.analysis.reconstruction?.histories) : [];
   const current =
-    histories.find(
+    (fullHistories.length ? fullHistories : histories).find(
       (h) =>
         object(h.record).id === selected &&
         (!selectedTable || object(h.record).table === selectedTable),
     ) ?? histories[0];
-  const loaded = list.items.find(item => item.summary === current);
+  const detail = useAnalysisDetail(data?.case.case_id, 'history', current, !fullHistories.length);
+  const loaded = { detail: detail.detail ?? list.items.find(item => item.summary === current)?.detail, findings: detail.findings };
   const page = list.offset / 100;
   const pages = Math.max(1, Math.ceil(list.total / 100));
   if (!data)
@@ -770,6 +766,7 @@ export function RecordHistoryScreen() {
         >
           Correlated records
         </h2>
+        <QueryError error={detail.error} retry={detail.retry} />
         <label className="block px-3 py-2 text-[11px]">
           Table
           <select
@@ -788,17 +785,17 @@ export function RecordHistoryScreen() {
         </label>
         {list.error && (
           <p role="alert" className="px-3">
-            {list.error}
+            {list.error} <button onClick={list.retry}>Retry</button>
           </p>
         )}
-        {list.loading ? (
+        {list.loading && !histories.length ? (
           <p role="status" className="px-3">
             Loading histories...
           </p>
         ) : !histories.length ? (
           <p className="px-3">No histories for this selection.</p>
         ) : null}
-        <div className="max-h-[640px] overflow-auto">
+        <div className="max-h-[640px] overflow-auto" style={{ minHeight: list.total > 100 ? 640 : undefined }}>
           {histories.map((history) => {
             const record = object(history.record);
             const count = history.step_count ?? rows(history.steps).length;
@@ -834,7 +831,7 @@ export function RecordHistoryScreen() {
           })}
         </div>
         {pages > 1 && (
-          <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-muted">
+          <nav aria-label="Record history pagination" className="flex items-center gap-2 px-3 py-2 text-[11px] text-muted">
             <button
               type="button"
               className={button}
@@ -854,19 +851,17 @@ export function RecordHistoryScreen() {
             >
               Next
             </button>
-          </div>
+          </nav>
         )}
       </section>
-      {current && !list.loading && loaded?.detail ? (
+      {current && loaded?.detail ? (
         <HistoryDetail
           key={`${data.case.case_id}:${object(current.record).table}:${object(current.record).id}`}
           history={loaded.detail}
           data={{ ...data, findings: [...data.findings, ...loaded.findings] }}
         />
       ) : (
-        <p role="status" className="text-sm text-muted">
-          {list.error || (list.loading ? "Loading record history..." : "No record history selected.")}
-        </p>
+        current || list.loading ? <LoadingPanel error={detail.error || list.error} retry={detail.error ? detail.retry : list.retry} label="Loading record history" /> : <StatusMessage>No record history selected.</StatusMessage>
       )}
     </div>
   );

@@ -192,6 +192,8 @@ CREATE TABLE IF NOT EXISTS analysis_results (
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_binlog_row_ref ON binlog_events(source_file, log_position, row_index);
+-- Cover header revision checks without touching large result_json overflow pages.
+CREATE INDEX IF NOT EXISTS idx_analysis_revision ON analysis_results(case_id,stage,saved_at);
 
 CREATE TABLE IF NOT EXISTS table_creations (
     evidence_id TEXT NOT NULL REFERENCES evidence_files(evidence_id),
@@ -239,4 +241,79 @@ CREATE TRIGGER IF NOT EXISTS history_update AFTER UPDATE ON analysis_results
 WHEN OLD.stage = 'reconstruction' BEGIN
  DELETE FROM history_summaries WHERE case_id = OLD.case_id;
  DELETE FROM history_summary_ready WHERE case_id = OLD.case_id;
+END;
+
+CREATE TABLE IF NOT EXISTS screen_items (
+ case_id TEXT NOT NULL REFERENCES cases(case_id), stage TEXT NOT NULL,
+ kind TEXT NOT NULL, ordinal INTEGER NOT NULL, identity TEXT NOT NULL,
+ bucket TEXT NOT NULL, summary_json TEXT NOT NULL, detail_json TEXT NOT NULL,
+ PRIMARY KEY(case_id, stage, kind, bucket, ordinal)
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_screen_page ON screen_items(case_id, kind, bucket, ordinal);
+CREATE INDEX IF NOT EXISTS idx_screen_identity ON screen_items(case_id, kind, identity, bucket);
+CREATE TABLE IF NOT EXISTS screen_summary (
+ case_id TEXT NOT NULL REFERENCES cases(case_id), stage TEXT NOT NULL,
+ summary_json TEXT NOT NULL, PRIMARY KEY(case_id, stage)
+) STRICT;
+CREATE TABLE IF NOT EXISTS screen_coverage (
+ case_id TEXT NOT NULL REFERENCES cases(case_id), stage TEXT NOT NULL,
+ coverage_json TEXT NOT NULL, PRIMARY KEY(case_id, stage)
+) STRICT;
+CREATE TABLE IF NOT EXISTS screen_finding_pool (
+ case_id TEXT NOT NULL REFERENCES cases(case_id), ordinal INTEGER NOT NULL,
+ finding_json TEXT NOT NULL, PRIMARY KEY(case_id, ordinal)
+) STRICT;
+CREATE TABLE IF NOT EXISTS screen_groups (
+ case_id TEXT NOT NULL REFERENCES cases(case_id), ordinal INTEGER NOT NULL,
+ group_json TEXT NOT NULL, PRIMARY KEY(case_id, ordinal)
+) STRICT;
+CREATE TABLE IF NOT EXISTS screen_group_ready (case_id TEXT PRIMARY KEY REFERENCES cases(case_id)) STRICT;
+CREATE TABLE IF NOT EXISTS screen_legacy_pages (
+ case_id TEXT NOT NULL REFERENCES cases(case_id), kind TEXT NOT NULL,
+ ordinal INTEGER NOT NULL, identity TEXT, bucket TEXT, summary_json TEXT NOT NULL,
+ PRIMARY KEY(case_id, kind, ordinal)
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_legacy_screen_filter ON screen_legacy_pages(case_id,kind,bucket,ordinal);
+CREATE INDEX IF NOT EXISTS idx_legacy_screen_identity ON screen_legacy_pages(case_id,kind,identity,ordinal);
+CREATE TABLE IF NOT EXISTS screen_legacy_ready (
+ case_id TEXT NOT NULL REFERENCES cases(case_id), kind TEXT NOT NULL, PRIMARY KEY(case_id,kind)
+) STRICT;
+CREATE TABLE IF NOT EXISTS screen_legacy_findings (
+ case_id TEXT NOT NULL REFERENCES cases(case_id), ordinal INTEGER NOT NULL,
+ rule TEXT NOT NULL, severity TEXT NOT NULL, subject_json TEXT NOT NULL,
+ finding_json TEXT NOT NULL, PRIMARY KEY(case_id,ordinal)
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_legacy_finding_group ON screen_legacy_findings(case_id,rule,severity,ordinal);
+CREATE TRIGGER IF NOT EXISTS screen_delete AFTER DELETE ON analysis_results BEGIN
+ DELETE FROM screen_items WHERE case_id=OLD.case_id AND stage=OLD.stage;
+ DELETE FROM screen_summary WHERE case_id=OLD.case_id AND stage=OLD.stage;
+ DELETE FROM screen_coverage WHERE case_id=OLD.case_id AND stage=OLD.stage;
+ DELETE FROM screen_groups WHERE case_id=OLD.case_id;
+ DELETE FROM screen_group_ready WHERE case_id=OLD.case_id;
+ DELETE FROM screen_legacy_pages WHERE case_id=OLD.case_id;
+ DELETE FROM screen_legacy_ready WHERE case_id=OLD.case_id;
+ DELETE FROM screen_legacy_findings WHERE case_id=OLD.case_id;
+ DELETE FROM screen_finding_pool WHERE case_id=OLD.case_id AND OLD.stage='reconciliation';
+END;
+CREATE TRIGGER IF NOT EXISTS screen_update AFTER UPDATE ON analysis_results BEGIN
+ DELETE FROM screen_items WHERE case_id=OLD.case_id AND stage=OLD.stage;
+ DELETE FROM screen_summary WHERE case_id=OLD.case_id AND stage=OLD.stage;
+ DELETE FROM screen_coverage WHERE case_id=OLD.case_id AND stage=OLD.stage;
+ DELETE FROM screen_groups WHERE case_id=OLD.case_id;
+ DELETE FROM screen_group_ready WHERE case_id=OLD.case_id;
+ DELETE FROM screen_legacy_pages WHERE case_id=OLD.case_id;
+ DELETE FROM screen_legacy_ready WHERE case_id=OLD.case_id;
+ DELETE FROM screen_legacy_findings WHERE case_id=OLD.case_id;
+ DELETE FROM screen_finding_pool WHERE case_id=OLD.case_id AND OLD.stage='reconciliation';
+END;
+CREATE TRIGGER IF NOT EXISTS screen_insert AFTER INSERT ON analysis_results BEGIN
+ DELETE FROM screen_items WHERE case_id=NEW.case_id AND stage=NEW.stage;
+ DELETE FROM screen_summary WHERE case_id=NEW.case_id AND stage=NEW.stage;
+ DELETE FROM screen_coverage WHERE case_id=NEW.case_id AND stage=NEW.stage;
+ DELETE FROM screen_groups WHERE case_id=NEW.case_id;
+ DELETE FROM screen_group_ready WHERE case_id=NEW.case_id;
+ DELETE FROM screen_legacy_pages WHERE case_id=NEW.case_id;
+ DELETE FROM screen_legacy_ready WHERE case_id=NEW.case_id;
+ DELETE FROM screen_legacy_findings WHERE case_id=NEW.case_id;
+ DELETE FROM screen_finding_pool WHERE case_id=NEW.case_id AND NEW.stage='reconciliation';
 END;

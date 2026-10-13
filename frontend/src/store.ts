@@ -17,10 +17,12 @@ interface AppState {
   signOut: () => Promise<void>
   screen: Screen; data: CaseData | null; cases: CaseSummary[]; settings: Settings | null
   tablePages: Record<string, number>
+  caseOpening: number
   setTablePage: (key: string, page: number) => void
   busy: boolean; ready: boolean; error: string | null; notice: string | null
   pipelineComplete: boolean; stagesDone: number; runningStage: number | null; cancelRequested: boolean
   recordNavigation: number; selectedRecordTable: string;
+  reconciliationNavigation: number; openReconciliation: (id: string) => void
   selectedTx: string; selectedRecord: string; selectedTool: string; reportFormat: 'JSON' | 'PDF'; expandedGroups: string[]
   go: (screen: Screen) => void
   initialize: () => Promise<void>
@@ -53,9 +55,13 @@ const signedOut: Partial<AppState> = {
   error: null, notice: null,
   tablePages: {},
 }
+const initialCaseView = {
+  tablePages: {}, recordNavigation: 0, reconciliationNavigation: 0, selectedRecordTable: '', selectedTx: '',
+  selectedRecord: '', selectedTool: '', expandedGroups: [], reportFormat: 'JSON' as const,
+}
 export const useApp = create<AppState>((set, get) => {
-  const previews = new CasePreviewController(async <T,>(command: string, payload: Record<string, unknown>) => {
-    try { return await request<T>(command, payload) }
+  const previews = new CasePreviewController(async <T,>(command: string, payload: Record<string, unknown>, options?: Parameters<typeof request>[2]) => {
+    try { return await request<T>(command, payload, options) }
     catch (error) {
       if (String(error).includes('AuthenticationRequiredError:')) get().setError(error)
       throw error
@@ -64,39 +70,24 @@ export const useApp = create<AppState>((set, get) => {
   let lockedCaseId: string | null = null
   let sessionGeneration = 0
   let selection = 0
-  let loadingToken = -1
-  const releaseSelected = () => { selection++; set({ activeCaseId: null, preview: null, data: null, previewLoading: false, previewError: null, analysisLoading: false, analysisError: null, pipelineComplete: false, stagesDone: 0 }) }
+  const releaseSelected = () => { selection++; set({ ...initialCaseView, caseOpening: get().caseOpening + 1, activeCaseId: null, preview: null, data: null, previewLoading: false, previewError: null, analysisLoading: false, analysisError: null, pipelineComplete: false, stagesDone: 0 }) }
   const clearSession = () => { sessionGeneration++; previews.clear(); releaseSelected() }
-  const full = (id: string, token: number) => {
-    if (get().busy || get().locked || selection !== token || get().activeCaseId !== id) return
-    if (loadingToken === token) return
-    loadingToken = token
-    set({ analysisLoading: true, analysisError: null })
-    void previews.full(id, () => selection === token && get().activeCaseId === id && !get().locked && !!get().user).then(data => {
-      if (data) { apply(data); set({ analysisLoading: false }) }
-    }).catch(error => {
-      if (selection === token) { loadingToken = -1; set({ analysisLoading: false, analysisError: String(error) }) }
-    })
-  }
+  const headerData = (preview: CasePreview): CaseData => ({ case: preview.case, run: preview.run,
+    tables: { evidence_files: preview.evidence }, analysis: {}, findings: [] })
   const loadSelected = async (fresh: boolean) => {
     const id = get().activeCaseId
     if (!id || get().locked || !get().user) return
     const token = ++selection
     if (fresh) previews.invalidate(id)
-    set({ previewLoading: true, previewError: null, analysisLoading: true, analysisError: null, data: null })
+    set({ previewLoading: true, previewError: null, analysisLoading: false, analysisError: null })
     try {
       const preview = await previews.preview(id, true)
       if (!preview || selection !== token || get().activeCaseId !== id) return
-      set({ preview, previewLoading: false, pipelineComplete: preview.run?.complete ?? false,
+      set({ preview, data: headerData(preview), previewLoading: false, pipelineComplete: preview.run?.complete ?? false,
         stagesDone: preview.run?.stages.filter(s => ['succeeded', 'skipped'].includes(s.status)).length ?? 0 })
-      afterPaint(() => full(id, token))
     } catch (error) { if (selection === token) set({ previewLoading: false, previewError: String(error), analysisLoading: false, analysisError: String(error) }) }
   }
 
-  const apply = (data: CaseData) => set({
-    data, pipelineComplete: data.run?.complete ?? false,
-    stagesDone: data.run?.stages.filter(s => ['succeeded', 'skipped'].includes(s.status)).length ?? 0,
-  })
   const refresh = async (all = false) => {
     if (get().locked) return
     const session = sessionGeneration
@@ -105,9 +96,9 @@ export const useApp = create<AppState>((set, get) => {
     if (all) previews.clear()
     set({ cases })
     const id = get().activeCaseId
-    if (id && !cases.some(c => c.id === id)) { selection++; previews.invalidate(id); set({ activeCaseId: null, preview: null, data: null, screen: 'cases', analysisLoading: false, previewLoading: false }) }
+    if (id && !cases.some(c => c.id === id)) { previews.invalidate(id); releaseSelected(); set({ screen: 'cases' }) }
     await loadSelected(true)
-    afterPaint(() => { if (session === sessionGeneration && !get().locked && get().user) previews.prefetch(get().cases.map(c => c.id)) })
+    afterPaint(() => { if (session === sessionGeneration && !get().locked && get().user) previews.prefetch(get().cases.slice(0,20).map(c => c.id)) })
   }
   const action = async (work: () => Promise<void>, mutatesCase = false): Promise<boolean> => {
     if (get().busy) return false
@@ -115,7 +106,7 @@ export const useApp = create<AppState>((set, get) => {
     set({ busy: true, error: null, notice: null })
     try { await work(); return true }
     catch (error) { get().setError(error); return false }
-    finally { set({ busy: false, runningStage: null }); const id = get().activeCaseId; if (id && !get().data && !get().previewError) afterPaint(() => full(id, selection)) }
+    finally { set({ busy: false, runningStage: null }) }
   }
   const caseId = () => {
     const id = get().activeCaseId ?? get().data?.case.case_id
@@ -184,15 +175,20 @@ export const useApp = create<AppState>((set, get) => {
     },
     user: null, authChecked: false,
     tablePages: {},
+    caseOpening: 0,
     setTablePage: (key, page) => set(state => ({ tablePages: { ...state.tablePages, [key]: page } })),
     activeCaseId: null, preview: null, previewLoading: false, previewError: null, analysisLoading: false, analysisError: null,
-    prefetchCases: () => { if (get().ready && get().user && !get().locked) previews.prefetch(get().cases.map(c => c.id)) },
+    prefetchCases: () => { if (get().ready && get().user && !get().locked) previews.prefetch(get().cases.slice(0,20).map(c => c.id)) },
     retryCaseLoading: () => { void loadSelected(true) },
     refreshSelected: () => loadSelected(true),
     screen: 'cases', data: null, cases: [], settings: null, busy: false, ready: false, error: null, notice: null,
     pipelineComplete: false, stagesDone: 0, runningStage: null, cancelRequested: false,
-    recordNavigation: 0, selectedRecordTable: '', selectedTx: '', selectedRecord: '', selectedTool: '', reportFormat: 'JSON', expandedGroups: [],
-    go: screen => { if (!get().busy || screen !== 'cases') set({ screen }) },
+    recordNavigation: 0, reconciliationNavigation: 0, selectedRecordTable: '', selectedTx: '', selectedRecord: '', selectedTool: '', reportFormat: 'JSON', expandedGroups: [],
+    go: screen => {
+      if (get().busy && screen === 'cases') return
+      if (screen === 'cases' && get().activeCaseId) releaseSelected()
+      set({ screen })
+    },
     setError: error => {
       const message = error instanceof Error ? error.message : String(error)
       const authentication = message.startsWith('AuthenticationRequiredError:')
@@ -234,8 +230,8 @@ export const useApp = create<AppState>((set, get) => {
       if (get().busy || get().locked) return
       const cached = previews.cached(id)
       selection++
-      set({ activeCaseId: id, data: null, preview: cached ?? null, screen: 'intake', previewLoading: !cached,
-        previewError: null, analysisLoading: true, analysisError: null, pipelineComplete: cached?.run?.complete ?? false,
+      set({ ...initialCaseView, caseOpening: get().caseOpening + 1, activeCaseId: id, data: cached ? headerData(cached) : null, preview: cached ?? null, screen: 'intake', previewLoading: !cached,
+        previewError: null, analysisLoading: false, analysisError: null, pipelineComplete: cached?.run?.complete ?? false,
         stagesDone: cached?.run?.stages.filter(s => ['succeeded', 'skipped'].includes(s.status)).length ?? 0,
         selectedTx: '', selectedRecord: '', selectedTool: '', expandedGroups: [] })
       // Cached snapshots render first, then revalidate before loading analysis.
@@ -244,7 +240,7 @@ export const useApp = create<AppState>((set, get) => {
     },
     createCase: name => action(async () => {
       const result = await request<{ case_id: string }>('create_case', { case_name: name })
-      set({ activeCaseId: result.case_id, preview: null, data: null })
+      set({ ...initialCaseView, caseOpening: get().caseOpening + 1, activeCaseId: result.case_id, preview: null, data: null })
       await refresh()
       set({ screen: 'intake', selectedTx: '', selectedRecord: '', selectedTool: '', expandedGroups: [] })
     }),
@@ -303,5 +299,6 @@ export const useApp = create<AppState>((set, get) => {
     toggleGroup: id => set(s => ({ expandedGroups: s.expandedGroups.includes(id) ? s.expandedGroups.filter(g => g !== id) : [...s.expandedGroups, id] })),
     openTransaction: selectedTx => set({ screen: 'timeline', selectedTx }),
     openRecord: selectedRecord => set(s => ({ screen: 'record', selectedRecord, selectedRecordTable: '', recordNavigation: s.recordNavigation + 1 })),
+    openReconciliation: selectedRecord => set(s => ({ screen: 'recon', selectedRecord, reconciliationNavigation: s.reconciliationNavigation + 1 })),
   }
 })

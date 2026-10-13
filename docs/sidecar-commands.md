@@ -134,3 +134,23 @@ The JSON-lines tests exercise all eight commands through real application use
 cases, composed pipeline handlers and domain services with controlled dependencies.
 They cover validation, result serialization, failures, cancellation between stages,
 retry, missing identifiers and unconfigured service behavior.
+# Progressive desktop reads
+
+The authenticated desktop router additionally supports these case-scoped commands:
+
+| Command | Payload beyond `case_id` | Result |
+| --- | --- | --- |
+| `get_case_header` | None | Metadata, evidence, pipeline counts/status, revision, ready projection names |
+| `get_screen_page` | `kind`, optional `offset`, `limit` (1–100), `bucket`, `identity` | `items`, complete filtered `total`, `offset`, `limit`, optional saved summaries |
+| `get_screen_detail` | `kind`, `identity`, optional `bucket` (qualified table or comparison field) | Selected `detail` and described `findings` |
+| `get_screen_context` | `kind` | Screen-specific schema/tool metadata |
+| `get_screen_summary` | None | Saved stage summaries; populate missing older-case summaries once |
+| `get_screen_coverage` | `kind`: `grouping` or `reconciliation` | Coverage, requested only on expansion |
+| `locate_screen_item` | `kind`, `identity` | The containing page's offset |
+
+Page kinds include `transactions`, `events`, `histories`, `history_steps`,
+`reconciliation`, `comparisons`, `finding_groups`, `findings`, `warning_groups`,
+`warning_entries`, `tool_runs`, `reports`, `graph_records`, and `graph_edges`.
+Detail kinds are `transactions`, `histories`, and `comparisons`.
+Existing `get_case_preview`, `get_case_data`, history, detail and archival export
+commands remain compatible. See [Progressive case loading](progressive-case-loading.md).

@@ -1,5 +1,9 @@
 # Case preview prefetch
 
+> Superseded application loading flow: see [Progressive case loading](progressive-case-loading.md).
+> The legacy preview/full commands remain compatible, but case opening now uses a
+> cheap header and independent screen pages, without automatic full-case loading.
+
 After the case list paints, the authenticated session queues lightweight case previews in the list's newest-created-first order. One preview or selected full-data request runs at a time. View switches to Evidence immediately, uses a cached preview or prioritizes its pending request, and revalidates cached snapshots. Full analysis loads after the selected preview paints, ahead of remaining queued background work.
 
 `get_case_preview` returns case metadata/notes, registered evidence metadata, the latest pipeline stages and attempts, scalar summaries, dashboard counts, and stage warning flags. SQLite computes analysis counts without Python decoding full analysis arrays. Exact and Unresolved are field comparison counts. Unavailable metrics are null. A savepoint keeps all preview reads in one consistent snapshot. Existing full-data, detail, and export commands remain compatible; no schema migration is required.

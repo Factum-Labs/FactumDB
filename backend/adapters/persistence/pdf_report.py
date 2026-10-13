@@ -2,6 +2,7 @@
 
 import hashlib
 import shutil
+from dataclasses import dataclass
 from datetime import datetime
 from functools import cache
 from pathlib import Path
@@ -53,23 +54,30 @@ NAVY = (31, 51, 69)
 PALE = (239, 247, 247)
 MUTED = (90, 105, 116)
 COLORS = {
-    "Exact": (52, 120, 85),
-    "Strong": TEAL,
-    "Partial": (148, 100, 0),
-    "Conflicting": (179, 58, 58),
-    "Unresolved": (111, 78, 146),
-    "Unsupported": (104, 113, 123),
+    "Exact": (0, 168, 107),
+    "Strong": (0, 119, 190),
+    "Partial": (240, 204, 22),
+    "Conflicting": (189, 37, 44),
+    "Unresolved": (132, 60, 152),
+    "Unsupported": (102, 102, 102),
 }
+TEXT_COLORS = {**COLORS, "Partial": (128, 93, 0)}
+
+
+@dataclass(frozen=True)
+class ColourSwatch:
+    color: tuple[int, int, int]
 
 
 class SummaryPDF(FPDF):
     def header(self):
+        self.set_xy(self.l_margin, 10)
         self.set_font("Report", size=8)
         self.set_text_color(*TEAL)
         self.cell(0, 4, "FactumDB  /  INVESTIGATOR SUMMARY", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         self.set_draw_color(*TEAL)
         self.line(self.l_margin, 15, self.w - self.r_margin, 15)
-        self.set_y(21)
+        self.set_y(25)
 
     def footer(self):
         self.set_y(-12)
@@ -105,27 +113,78 @@ class Layout:
         pdf.cell(0, 7, text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.ln(2)
 
-    def paragraph(self, text, *, size=8, color=MUTED):
+    def paragraph(self, text, *, size=10, color=MUTED):
         pdf = self.pdf
         pdf.set_font("Report", size=size)
         pdf.set_text_color(*color)
         # Each operation remains small even when notes contain a long unbroken string.
         text = _supported_text(str(text))
-        lines = pdf.multi_cell(pdf.epw, 4.2, text, dry_run=True, output=MethodReturnValue.LINES)
+        leading = size * 0.48 + 0.6
+        lines = pdf.multi_cell(pdf.epw, leading, text, dry_run=True, output=MethodReturnValue.LINES)
         for line in lines or [""]:
-            self.ensure(4.2)
-            pdf.cell(0, 4.2, line, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.ensure(leading)
+            pdf.set_font("Report", size=size)
+            pdf.set_text_color(*color)
+            pdf.cell(0, leading, line, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    def divider(self):
+        self.pdf.ln(3)
+        self.pdf.set_draw_color(*PALE)
+        y = self.pdf.get_y()
+        self.pdf.line(self.pdf.l_margin, y, self.pdf.w - self.pdf.r_margin, y)
+        self.pdf.ln(3)
+
+    def labels(self, pairs):
+        pdf = self.pdf
+        for label, value in pairs:
+            text = _supported_text(str(value))
+            value_size = 9 if label.endswith("SHA-256") else 10
+            pdf.set_font("Report", size=value_size)
+            lines = pdf.multi_cell(
+                pdf.epw - 49, 5.4, text, dry_run=True, output=MethodReturnValue.LINES
+            ) or [""]
+            for index, line in enumerate(lines):
+                self.ensure(5.4)
+                pdf.set_font("Report", size=10)
+                pdf.set_text_color(*MUTED)
+                pdf.cell(49, 5.4, label if index == 0 else "")
+                pdf.set_font("Report", size=value_size)
+                pdf.set_text_color(*NAVY)
+                pdf.cell(pdf.epw - 49, 5.4, line, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    def notice(self, text):
+        pdf = self.pdf
+        pdf.set_font("Report", size=9)
+        lines = pdf.multi_cell(
+            pdf.epw - 8, 4.8, text, dry_run=True, output=MethodReturnValue.LINES
+        ) or [""]
+        height = len(lines) * 4.8 + 8
+        self.ensure(height)
+        pdf.set_font("Report", size=9)
+        y = pdf.get_y()
+        pdf.set_fill_color(*PALE)
+        pdf.rect(pdf.l_margin, y, pdf.epw, height, style="F")
+        pdf.set_text_color(*NAVY)
+        for index, line in enumerate(lines):
+            pdf.set_xy(pdf.l_margin + 4, y + 4 + index * 4.8)
+            pdf.cell(pdf.epw - 8, 4.8, line)
+        pdf.set_xy(pdf.l_margin, y + height + 3)
 
     def table(self, headers, widths, rows):
         pdf = self.pdf
 
         def draw(values, header=False, alternate=False):
-            pdf.set_font("Report", size=6.5 if header else 7.5)
+            font_size = 9 if header else 9.5
+            pdf.set_font("Report", size=font_size)
+            numeric = [isinstance(v, int) and not isinstance(v, bool) for v in values]
+            values = [
+                f"{v:,}" if isinstance(v, int) and not isinstance(v, bool) else v for v in values
+            ]
             wraps = [
                 pdf.multi_cell(
                     width - 3,
                     4,
-                    _supported_text(str(value)),
+                    "" if isinstance(value, ColourSwatch) else _supported_text(str(value)),
                     dry_run=True,
                     output=MethodReturnValue.LINES,
                 )
@@ -137,17 +196,28 @@ class Layout:
             offset = 0
             while offset < remaining:
                 self.ensure(10)
+                pdf.set_font("Report", size=font_size)
                 capacity = max(1, int((pdf.h - 18 - pdf.get_y() - 3) / 4))
                 count = min(remaining - offset, capacity)
                 height = count * 4 + 3
                 y, x = pdf.get_y(), pdf.l_margin
-                pdf.set_fill_color(*(TEAL if header else PALE if alternate else (255, 255, 255)))
+                background = TEAL if header else PALE if alternate else (255, 255, 255)
+                pdf.set_fill_color(*background)
                 pdf.set_text_color(*((255, 255, 255) if header else NAVY))
-                for width, lines in zip(widths, wraps, strict=False):
+                for column, (width, lines) in enumerate(zip(widths, wraps, strict=False)):
                     pdf.rect(x, y, width, height, style="F")
+                    if isinstance(values[column], ColourSwatch):
+                        pdf.set_fill_color(*values[column].color)
+                        pdf.set_draw_color(*MUTED)
+                        pdf.rect(x + (width - 5) / 2, y + (height - 5) / 2, 5, 5, style="DF")
+                        pdf.set_fill_color(*background)
+                        x += width
+                        continue
                     for line_no, line in enumerate(lines[offset : offset + count]):
                         pdf.set_xy(x + 1.5, y + 1.5 + line_no * 4)
-                        pdf.cell(width - 3, 4, line)
+                        pdf.cell(
+                            width - 3, 4, line, align="R" if not header and numeric[column] else "L"
+                        )
                     x += width
                 pdf.set_xy(pdf.l_margin, y + height)
                 offset += count
@@ -157,14 +227,14 @@ class Layout:
         self.ensure(18)
         draw(headers, header=True)
         for index, row in enumerate(rows):
-            pdf.set_font("Report", size=7.5)
+            pdf.set_font("Report", size=9.5)
             height = (
                 max(
                     len(
                         pdf.multi_cell(
                             width - 3,
                             4,
-                            _supported_text(str(value)),
+                            "" if isinstance(value, ColourSwatch) else _supported_text(str(value)),
                             dry_run=True,
                             output=MethodReturnValue.LINES,
                         )
@@ -229,10 +299,23 @@ def render_summary_steps(document):
         "Template: " + document.metadata["template_version"]
     )
     if document.redacted:
-        layout.paragraph(document.metadata["redaction"], color=COLORS["Partial"])
-    layout.paragraph("Recorded examiner: " + str(case.get("examiner") or "Unknown"))
-    layout.paragraph("Case registered: " + str(case.get("created_at") or "Unknown"))
-    layout.paragraph("Analysis saved: " + str(document.metadata.get("analysed_at") or "Unknown"))
+        layout.notice(document.metadata["redaction"])
+        layout.paragraph(
+            "Alias key: TABLE / DATABASE = schema identifiers; "
+            "FIELD = column; SOURCE = filename; VALUE = other replaced database text or values. "
+            "Examiner and tool metadata, provenance IDs, hashes and timestamps are retained. "
+            "Aliases apply only to this export; "
+            "repeated aliases within a category refer to the same original value.",
+            size=8,
+            color=MUTED,
+        )
+    layout.labels(
+        [
+            ("Recorded examiner", case.get("examiner") or "Unknown"),
+            ("Case registered", case.get("created_at") or "Unknown"),
+            ("Analysis saved", document.metadata.get("analysed_at") or "Unknown"),
+        ]
+    )
     for key, value in sorted(document.metadata["examiner_profile"].items()):
         if value:
             layout.paragraph(key.replace("_", " ").title() + ": " + str(value))
@@ -248,11 +331,18 @@ def render_summary_steps(document):
         x += width
     pdf.set_y(y + 7)
     for _ in layout.table(
-        ["Classification", "Records", "Field / presence comparisons"],
-        [60, 35, 79],
-        [(result, totals["records"][result], totals["fields"][result]) for result in COLORS],
+        ["Colour code", "Classification", "Records", "Field / presence comparisons"],
+        [28, 38, 30, 78],
+        [
+            (ColourSwatch(color), result, totals["records"][result], totals["fields"][result])
+            for result, color in COLORS.items()
+        ],
     ):
         yield {"stage": "rendering classification overview", "processed": pdf.page_no()}
+    layout.paragraph(
+        "Bar segment widths show the proportion of classified records; colours match the table.",
+        size=9,
+    )
     layout.paragraph(
         "Exact and Strong have no individual details. Exceptional findings below are grouped, "
         "not sampled. Record and comparison counts measure different things."
@@ -276,30 +366,37 @@ def render_summary_steps(document):
         layout.paragraph(
             str(row["category"])
             + ": "
-            + str(row["in_scope"])
+            + f"{row['in_scope']:,}"
             + " in scope / "
-            + str(row["stored"])
+            + f"{row['stored']:,}"
             + " stored"
         )
+    layout.ensure(50)
     layout.heading("Classification totals by table")
 
-    def table_totals():
+    def table_totals(measure):
         current = None
         counts = {}
         for row in document.rows("classification_tables"):
+            if row["granularity"] != measure:
+                continue
             key = (row["table"], row["granularity"])
             if current is not None and key != current:
-                yield (*current, *(counts.get(result, 0) for result in COLORS))
+                yield (current[0], *(counts.get(result, 0) for result in COLORS))
                 counts = {}
             current = key
             counts[row["result"]] = row["count"]
         if current is not None:
-            yield (*current, *(counts.get(result, 0) for result in COLORS))
+            yield (current[0], *(counts.get(result, 0) for result in COLORS))
 
-    for index in layout.table(
-        ["Table", "Measure", *COLORS], [40, 26, 18, 18, 18, 18, 18, 18], table_totals()
-    ):
-        yield {"stage": "rendering table totals", "processed": index + 1}
+    for measure, title in [("records", "Records"), ("fields", "Field / presence comparisons")]:
+        pdf.ln(3)
+        layout.ensure(30)
+        layout.paragraph(title, color=NAVY)
+        for index in layout.table(
+            ["Table", *COLORS], [35, 23, 21, 21, 24, 25, 25], table_totals(measure)
+        ):
+            yield {"stage": "rendering table totals", "processed": index + 1}
 
     sections = [
         ("Evidence inventory and recorded acquisition", "evidence"),
@@ -322,18 +419,19 @@ def render_summary_steps(document):
         for index, row in enumerate(rows):
             present = True
             if section == "evidence":
+                layout.ensure(72)
                 layout.paragraph(
                     str(row.get("filename", "Unknown"))
                     + "  |  "
                     + str(row.get("kind", "Unknown"))
                     + "  |  "
-                    + str(row.get("size_bytes", 0))
+                    + f"{row.get('size_bytes', 0):,}"
                     + " bytes  |  "
                     + str(row.get("verification_status", "Unknown")),
-                    size=9,
+                    size=11,
                     color=NAVY,
                 )
-                for label, key in [
+                pairs = [
                     ("Evidence ID", "evidence_id"),
                     ("Source SHA-256", "source_sha256"),
                     ("Working-copy SHA-256", "working_copy_sha256"),
@@ -341,9 +439,11 @@ def render_summary_steps(document):
                     ("Acquisition method", "acquisition_method"),
                     ("Registered", "registered_at"),
                     ("Recorded actor", "actor_username"),
-                ]:
-                    layout.paragraph(label + ": " + str(row.get(key) or "Unknown / not recorded"))
-                pdf.ln(2)
+                ]
+                layout.labels(
+                    [(label, row.get(key) or "Unknown / not recorded") for label, key in pairs]
+                )
+                layout.divider()
             elif section == "processing":
                 layout.paragraph(
                     str(row["tool_name"])
@@ -406,7 +506,7 @@ def render_summary_steps(document):
                 )
             else:
                 layout.paragraph(
-                    str(row["table"]) + "  /  " + str(row["category"]) + ": " + str(row["count"])
+                    str(row["table"]) + "  /  " + str(row["category"]) + f": {row['count']:,}"
                 )
             yield {"stage": "rendering " + section, "processed": index + 1}
         if not present:
@@ -417,24 +517,24 @@ def render_summary_steps(document):
         ("warnings", "Warnings and limitations"),
     ]:
         layout.heading(title)
+        layout.paragraph("Rule explanations are listed once in the Rule guide below.", size=9)
         present = False
         for index, row in enumerate(document.rows(section)):
             present = True
-            layout.ensure(25)
+            layout.ensure(35)
             result = row["result"] or row["severity"].title()
             layout.paragraph(
                 result + "  /  " + row["table"] + (" / " + row["field"] if row["field"] else ""),
-                size=9,
-                color=COLORS.get(result, COLORS["Partial"]),
+                size=11,
+                color=TEXT_COLORS.get(result, TEXT_COLORS["Partial"]),
             )
             layout.paragraph(row["rule_id"] + " — " + row["title"], color=NAVY)
-            layout.paragraph(row["explanation"])
             layout.paragraph(
-                f"Distinct affected records: {row['records']}  |  Occurrences: "
-                f"{row['occurrences']}  |  Context variations: {row['contexts']}  |  "
-                f"Source groups: {row['source_groups']}"
+                f"Distinct affected records: {row['records']:,}  |  Occurrences: "
+                f"{row['occurrences']:,}  |  Context variations: {row['contexts']:,}  |  "
+                f"Source groups: {row['source_groups']:,}"
             )
-            pdf.ln(1)
+            layout.divider()
             yield {"stage": "rendering " + section, "processed": index + 1}
         if not present:
             layout.paragraph(
@@ -442,8 +542,24 @@ def render_summary_steps(document):
                 if section == "findings"
                 else "No stored warning categories. This does not prove complete coverage."
             )
+    layout.heading("Rule guide")
+    seen_rules = set()
+    for section in ("findings", "warnings"):
+        for row in document.rows(section):
+            key = (row["rule_id"], row["title"], row["explanation"])
+            if key in seen_rules:
+                continue
+            seen_rules.add(key)
+            layout.ensure(35)
+            layout.paragraph(row["rule_id"] + " - " + row["title"], size=11, color=NAVY)
+            layout.paragraph(row["explanation"])
+            layout.divider()
+    if not seen_rules:
+        layout.paragraph("No finding or warning rules were recorded.")
     layout.heading("Grouped source references")
+    layout.paragraph("Position ranges show observed endpoints, not continuous coverage.", size=9)
     for index, row in enumerate(document.rows("finding_sources")):
+        layout.ensure(40)
         layout.paragraph(
             row["rule_id"]
             + "  /  "
@@ -468,11 +584,12 @@ def render_summary_steps(document):
             + (f"{low}-{high}" if low is not None else "Unknown")
             + "  |  References without positions: "
             + str(row["unknown_locations"])
-            + ". Ranges show observed endpoints, not continuous coverage."
         )
+        layout.divider()
         yield {"stage": "rendering source references", "processed": index + 1}
     layout.heading("Examiner notes and limitations")
     layout.paragraph(case.get("examiner_notes") or "No recorded examiner notes.")
+    pdf.ln(3)
     for note in document.metadata["limitations"]:
         layout.paragraph(note)
     layout.paragraph(

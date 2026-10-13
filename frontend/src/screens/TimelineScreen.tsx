@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useScreenContext, useScreenQuery, useNextPage, type ScreenPage } from '../lib/useScreenQuery'
+import { LoadingPanel, QueryError } from '../components/LoadingPanel'
 import { Badge } from '../components/Badge'
 import { StatusMessage } from '../components/StatusMessage'
 import { navigationButton } from '../components/buttonStyles'
@@ -86,8 +88,13 @@ function TransactionDetail({ transaction, data }: { transaction: Row; data: Case
   const { time } = useTimeDisplay()
   const [eventPage, setEventPage] = useTablePage(`transaction-events:${String(transaction.id)}`)
   const [showProvenance, setShowProvenance] = useState(false)
-  const events = rows(transaction.events)
-  const pages = Math.max(1, Math.ceil(events.length / 100))
+  const legacy = Array.isArray(transaction.events)
+  const eventPayload = { kind: 'events', bucket: String(transaction.id), offset: eventPage * 100, limit: 100 }
+  const query = useScreenQuery<ScreenPage>('get_screen_page', eventPayload, 'timeline', !legacy)
+  useNextPage(query.value, eventPayload, 'timeline')
+  const events = legacy ? rows(transaction.events) : query.value?.items ?? []
+  const total = legacy ? events.length : Number(transaction.event_count ?? query.value?.total ?? 0)
+  const pages = Math.max(1, Math.ceil(total / 100))
   const currentPage = Math.min(eventPage, pages - 1)
   const sources = sourceIds(transaction.provenance)
   const metadata = [
@@ -117,11 +124,11 @@ function TransactionDetail({ transaction, data }: { transaction: Row; data: Case
     {transaction.synthesised === true && <p className="rounded-md border border-line bg-panel px-3 py-2 text-[11px] text-muted">Synthesised grouping: the evidence does not establish these events as one transaction.</p>}
     <section aria-labelledby="transaction-events-heading" className="overflow-hidden rounded-md border border-line bg-panel">
       <h2 id="transaction-events-heading" className="border-b border-line px-3 py-[9px] text-[12px] font-semibold">{transaction.status === 'committed' ? 'Events in commit order' : 'Events in log order'}</h2>
-      {events.slice(currentPage * 100, (currentPage + 1) * 100).map((grouped, index) => <EventCard key={`${currentPage}:${index}`} grouped={grouped} schemas={data.tables.schemas ?? []} columns={data.tables.schema_columns ?? []} />)}
-      {!events.length && <StatusMessage>No row events available.</StatusMessage>}
+      {(legacy ? events.slice(currentPage * 100, (currentPage + 1) * 100) : events).map((grouped, index) => <EventCard key={`${currentPage}:${index}`} grouped={grouped} schemas={data.tables.schemas ?? []} columns={data.tables.schema_columns ?? []} />)}
+      {!events.length && (!legacy && !query.value ? <LoadingPanel error={query.error} retry={query.retry} label="Loading transaction events" /> : <StatusMessage>No row events available.</StatusMessage>)}
       {pages > 1 && <div className="flex items-center gap-3 border-t border-line px-3 py-2 text-[11px] text-muted">
         <button type="button" className={button} disabled={currentPage === 0} onClick={() => setEventPage(currentPage - 1)}>Previous</button>
-        <span>Page {currentPage + 1} of {pages} · {events.length} events</span>
+        <span>Page {currentPage + 1} of {pages} · {total} events</span>
         <button type="button" className={button} disabled={currentPage + 1 === pages} onClick={() => setEventPage(currentPage + 1)}>Next</button>
       </div>}
       <p className="border-t border-line px-[13px] py-[9px] text-[11.5px] text-muted">
@@ -129,7 +136,7 @@ function TransactionDetail({ transaction, data }: { transaction: Row; data: Case
       </p>
     </section>
     <details className="rounded-md border border-line bg-panel p-3 text-[11px]">
-      <summary className="cursor-pointer font-medium">Transaction outcome, event images and provenance</summary>
+      <summary className="cursor-pointer font-medium">Transaction outcome and provenance</summary>
       <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-all font-mono">{JSON.stringify(transaction, null, 2)}</pre>
     </details>
   </div>
@@ -137,21 +144,31 @@ function TransactionDetail({ transaction, data }: { transaction: Row; data: Case
 
 export function TimelineScreen() {
   const { time, label } = useTimeDisplay()
-  const data = useApp(s => s.data)
+  const { data } = useScreenContext('timeline')
   const selected = useApp(s => s.selectedTx)
-  const transactions = useMemo(() => rows(data?.analysis.grouping?.transactions), [data?.analysis.grouping?.transactions])
+  const [page, setPage] = useTablePage('transactions')
+  const legacy = Array.isArray(data?.analysis.grouping?.transactions)
+  const payload = { kind: 'transactions', offset: page * 100, limit: 100 }
+  const query = useScreenQuery<ScreenPage>('get_screen_page', payload, 'timeline', !legacy)
+  useNextPage(query.value, payload, 'timeline')
+  const transactions = legacy ? rows(data?.analysis.grouping?.transactions) : query.value?.items ?? []
+  const location = useScreenQuery<{ offset: number }>('locate_screen_item', { kind: 'transactions', identity: selected }, 'timeline', !legacy && !!selected && !!query.value && !transactions.some(t => t.id === selected))
+  useEffect(() => { if (location.value) setPage(location.value.offset / 100) }, [location.value, setPage])
   const currentIndex = Math.max(0, transactions.findIndex(transaction => transaction.id === selected))
   const current = transactions[currentIndex]
   const listRef = useRevealRow(String(current?.id ?? ''))
-  const loaded = useAnalysisDetail(data?.case.case_id, 'transaction', current, data?.analysis.grouping?.details_deferred === true)
-  const currentPage = Math.floor(currentIndex / 100)
-  const pages = Math.max(1, Math.ceil(transactions.length / 100))
-  if (!data || !current) return <StatusMessage>No results available yet.</StatusMessage>
+  const loaded = useAnalysisDetail(data?.case.case_id, 'transaction', current, !legacy || data?.analysis.grouping?.details_deferred === true)
+  const currentPage = legacy ? Math.floor(currentIndex / 100) : page
+  const pages = Math.max(1, Math.ceil((legacy ? transactions.length : query.value?.total ?? 0) / 100))
+  if (!data) return <StatusMessage>Open a case to view transactions.</StatusMessage>
+  if (!current) return !legacy && !query.value ? <LoadingPanel error={query.error} retry={query.retry} label="Loading transactions" /> : <StatusMessage>No results available yet.</StatusMessage>
   return <div className="grid max-w-[1240px] items-start gap-4 lg:grid-cols-[268px_minmax(0,1fr)]">
     <section aria-labelledby="transactions-heading" className="min-w-0 overflow-hidden rounded-md border border-line bg-panel">
+      <QueryError error={query.error} retry={query.retry} />
+      <QueryError error={loaded.error} retry={loaded.retry} />
       <h2 id="transactions-heading" className="border-b border-line px-3 py-[9px] text-[12px] font-semibold">Transactions <span className="block text-[10px] font-normal text-muted">Timezone: {label}</span></h2>
-      <div ref={listRef} className="max-h-[640px] overflow-auto">
-        {transactions.slice(currentPage * 100, (currentPage + 1) * 100).map(transaction => <button type="button" key={String(transaction.id)}
+      <div ref={listRef} className="max-h-[640px] overflow-auto" style={{ minHeight: pages > 1 ? 640 : undefined }}>
+        {(legacy ? transactions.slice(currentPage * 100, (currentPage + 1) * 100) : transactions).map(transaction => <button type="button" key={String(transaction.id)}
           data-selected={transaction.id === current.id} aria-pressed={transaction.id === current.id} onClick={() => useApp.getState().selectTx(String(transaction.id))}
           className={'block w-full border-b border-l-2 border-line-soft px-3 py-[9px] text-left hover:bg-thead ' +
             (transaction.id === current.id ? 'border-l-accent bg-accent-soft' : 'border-l-transparent bg-panel')}>
@@ -164,11 +181,11 @@ export function TimelineScreen() {
         </button>)}
       </div>
       {pages > 1 && <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-muted">
-        <button type="button" className={button} disabled={currentPage === 0} onClick={() => useApp.getState().selectTx(String(transactions[(currentPage - 1) * 100].id))}>Previous</button>
+        <button type="button" className={button} disabled={currentPage === 0} onClick={() => { if (legacy) useApp.getState().selectTx(String(transactions[(currentPage - 1) * 100].id)); else { useApp.getState().selectTx(''); setPage(currentPage - 1) } }}>Previous</button>
         <span>{currentPage + 1} / {pages}</span>
-        <button type="button" className={button} disabled={currentPage + 1 === pages} onClick={() => useApp.getState().selectTx(String(transactions[(currentPage + 1) * 100].id))}>Next</button>
+        <button type="button" className={button} disabled={currentPage + 1 === pages} onClick={() => { if (legacy) useApp.getState().selectTx(String(transactions[(currentPage + 1) * 100].id)); else { useApp.getState().selectTx(''); setPage(currentPage + 1) } }}>Next</button>
       </div>}
     </section>
-    {loaded.detail ? <TransactionDetail key={`${data.case.case_id}:${current.id}`} transaction={loaded.detail} data={data} /> : <StatusMessage error={!!loaded.error}>{loaded.error ?? 'Loading transaction…'}</StatusMessage>}
+    {loaded.detail ? <TransactionDetail key={`${data.case.case_id}:${current.id}`} transaction={loaded.detail} data={data} /> : <LoadingPanel error={loaded.error} retry={loaded.retry} label="Loading transaction" />}
   </div>
 }

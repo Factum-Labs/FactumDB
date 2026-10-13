@@ -50,6 +50,13 @@ def test_all_case_routes_deny_other_accounts_and_hide_their_cases(runtime, tmp_p
     assert [case["id"] for case in call(runtime, "list_cases")] == [own_id]
     assert set(runtime.sessions) == {own_id}
     blocked = [
+        ("get_case_header", {"case_id": case_id}),
+        ("get_screen_page", {"case_id": case_id, "kind": "transactions"}),
+        ("get_screen_detail", {"case_id": case_id, "kind": "histories", "identity": "x"}),
+        ("get_screen_context", {"case_id": case_id, "kind": "pipeline"}),
+        ("get_screen_summary", {"case_id": case_id}),
+        ("get_screen_coverage", {"case_id": case_id, "kind": "grouping"}),
+        ("locate_screen_item", {"case_id": case_id, "kind": "transactions", "identity": "x"}),
         ("get_case_data", {"case_id": case_id}),
         ("get_analysis_detail", {"case_id": case_id, "kind": "history", "identity": "x"}),
         ("save_case_notes", {"case_id": case_id, "notes": "overwrite"}),

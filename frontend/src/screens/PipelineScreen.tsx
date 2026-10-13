@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useApp } from '../store'
+import { useScreenContext, useScreenQuery } from '../lib/useScreenQuery'
+import { LoadingPanel } from '../components/LoadingPanel'
 import { StatusMessage } from '../components/StatusMessage'
 import { navigationButton } from '../components/buttonStyles'
 import { display, object, request, rows, type Attempt, type Row } from '../lib/backend'
@@ -143,7 +145,10 @@ function ExecutionLog({ tools, caseId }: { tools: Row[]; caseId: string }) {
 
 export function PipelineScreen() {
   const state = useApp()
-  const data = state.data
+  const context = useScreenContext('pipeline')
+  const data = context.data
+  const needsSummary=!!state.preview && ['transactions','records','exact','unresolved','gaps'].some(key=>state.preview?.pipeline.metrics[key]==null)
+  const saved = useScreenQuery<{ summaries: Record<string, Row> }>('get_screen_summary', {}, 'pipeline', needsSummary && !!state.preview?.run?.complete)
   const preview = state.preview
   if (!data && !preview) return <StatusMessage>Open or create a case first.</StatusMessage>
   const run = preview?.run ?? data?.run
@@ -188,6 +193,14 @@ export function PipelineScreen() {
   ]
   const metricKeys = ['evidence', 'verified', 'tables', 'transactions', 'records', 'exact', 'unresolved', 'gaps']
   if (preview) metrics.forEach((metric, index) => { const value = preview.pipeline.metrics[metricKeys[index]]; metric.value = value == null ? '?' : display(value) })
+  if (saved.value) {
+    const summary = saved.value.summaries
+    const values = [undefined, undefined, undefined, summary.grouping?.transactions, summary.correlation?.records, summary.reconciliation?.exact, summary.reconciliation?.unresolved, summary.grouping?.gaps]
+    values.forEach((value,index) => { if (value != null) metrics[index].value = display(value) })
+    for (const [stage, key, suffix] of [['group_transactions','grouping','transactions'],['correlate_records','correlation','records'],['reconstruct_state','reconstruction','histories'],['reconcile_records','reconciliation','comparisons']]) {
+      if (summary[key]?.[suffix] != null) summaries[stage] = `${display(summary[key][suffix])} ${suffix}`
+    }
+  }
   return <div className="grid min-h-0 max-w-[1240px] items-start gap-4 lg:h-full lg:grid-cols-[minmax(0,1fr)_minmax(280px,400px)] lg:grid-rows-[minmax(0,1fr)]">
     <section aria-labelledby="pipeline-heading" className="min-h-0 min-w-0 overflow-auto rounded-md border border-line bg-panel lg:max-h-full">
       <div className="flex flex-wrap items-center justify-between gap-2.5 px-3 py-[9px]">
@@ -229,7 +242,7 @@ export function PipelineScreen() {
           <dd className={'mt-0.5 font-mono text-[18px] font-semibold ' + (metric.tone ?? 'text-ink')}>{metric.value}</dd>
         </div>)}
       </dl>
-      {data ? <ExecutionLog tools={toolRuns} caseId={data.case.case_id} /> : <p role="status">{state.analysisError ? 'Execution history unavailable until analysis loads.' : 'Loading execution history?'}</p>}
+      {data && context.value ? <><ExecutionLog tools={toolRuns} caseId={data.case.case_id} />{toolRuns.length===100 && <p className="text-xs text-muted">Latest 100 tool runs. Earlier runs are available in Provenance.</p>}</> : <LoadingPanel error={context.error} retry={context.retry} label="Loading execution history" />}
     </aside>
   </div>
 }

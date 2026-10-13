@@ -260,6 +260,108 @@ class DesktopRuntime:
         connection, stores, pipelines = self.session(case_id)
         return case_view(case_id, connection, stores, pipelines)
 
+    def case_header(self, payload):
+        case_id = _validate(payload, ("case_id",))["case_id"]
+        connection, stores, pipelines = self.session(case_id)
+        return case_preview(case_id, connection, stores, pipelines, fast=True)
+
+    def screen_query(self, command, payload):
+        from adapters.persistence.sqlite_screen_repository import ScreenRepository
+        from adapters.persistence.case_export import _row, _TABLES
+        from sidecar.views import _present, _findings, history_details
+        allowed = {'case_id', 'kind', 'offset', 'limit', 'bucket', 'identity'}
+        if set(payload) - allowed:
+            raise ValueError('Unsupported screen query fields')
+        case_id = _validate({'case_id': payload.get('case_id')}, ('case_id',))['case_id']
+        connection, _, _ = self.session(case_id)
+        repository = ScreenRepository(connection)
+        kind = payload.get('kind')
+        if kind in {'tool_runs', 'reports'} and command in {'page', 'locate'}:
+            from_clause = 'tool_runs' if kind=='tool_runs' else 'reports'
+            sort = 'started_at,tool_run_id' if kind=='tool_runs' else 'created_at,report_id'
+            id_column = 'tool_run_id' if kind=='tool_runs' else 'report_id'
+            if command == 'locate':
+                identity = _validate({'identity': payload.get('identity')}, ('identity',))['identity']
+                row = connection.execute(f'SELECT position FROM (SELECT {id_column},row_number() OVER (ORDER BY {sort})-1 AS position FROM {from_clause} WHERE case_id=?) WHERE {id_column}=?', (case_id, identity)).fetchone()
+                if row is None:
+                    raise NotFoundError('Selected item not found')
+                return dict(offset=row[0] // 100 * 100)
+            offset,limit = payload.get('offset',0),payload.get('limit',100)
+            if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 100:
+                raise ValueError('Invalid page bounds')
+            total = connection.execute(f'SELECT count(*) FROM {from_clause} WHERE case_id=?', (case_id,)).fetchone()[0]
+            items = [_row(r) for r in connection.execute(f'SELECT * FROM {from_clause} WHERE case_id=? ORDER BY {sort} LIMIT ? OFFSET ?', (case_id,limit,offset))]
+            return _present(dict(items=items,total=total,offset=offset,limit=limit))
+        if command == 'summary':
+            for stage in ('grouping','correlation','reconstruction','reconciliation'):
+                repository.legacy_summary(case_id, stage)
+            return _present(dict(summaries=repository.summaries(case_id)))
+        if command == 'coverage':
+            if kind not in {'grouping', 'reconciliation'}:
+                raise ValueError('Unsupported coverage kind')
+            repository.ensure(case_id, (kind,))
+            row = connection.execute('SELECT coverage_json FROM screen_coverage WHERE case_id=? AND stage=?', (case_id, kind)).fetchone()
+            if row is None:
+                row = connection.execute("SELECT json_extract(result_json,'$.coverage') FROM analysis_results WHERE case_id=? AND stage=?", (case_id, kind)).fetchone()
+                if row and row[0]:
+                    with connection:
+                        connection.execute('INSERT OR REPLACE INTO screen_coverage VALUES (?,?,?)', (case_id,kind,row[0]))
+            return _present(dict(coverage=json.loads(row[0]) if row else None))
+        if command == 'locate':
+            identity = _validate({'identity': payload.get('identity')}, ('identity',))['identity']
+            return repository.locate(case_id, kind, identity, payload.get('bucket'))
+        if command == 'detail':
+            identity = _validate({'identity': payload.get('identity')}, ('identity',))['identity']
+            detail = repository.detail(case_id, kind, identity, payload.get('bucket'))
+            if kind == 'histories':
+                result = history_details(connection, case_id, [detail])[0]
+                comparisons = repository.page(case_id, 'comparisons', identity=identity)
+                result['detail']['comparisons'] = comparisons['items']
+                result['detail']['comparison_count'] = comparisons['total']
+                return result
+            found = {}; _findings(detail, found)
+            return _present(dict(detail=detail, findings=list(found.values())))
+        if command == 'context':
+            if kind not in {'timeline', 'record', 'pipeline', 'prov', 'report', 'gaps'}:
+                raise ValueError('Unsupported screen context')
+            tables = {}
+            names = {'timeline': {'schemas', 'schema_columns'}, 'record': {'schemas', 'schema_columns'},
+                     'pipeline': {'tool_runs'}, 'prov': {'tool_runs'}, 'report': {'reports'}, 'gaps': set()}[kind]
+            for name, sql in _TABLES:
+                if name in names:
+                    if kind=='pipeline' and name=='tool_runs':
+                        sql = 'SELECT * FROM (SELECT * FROM tool_runs WHERE case_id=? ORDER BY started_at DESC,tool_run_id DESC LIMIT 100) ORDER BY started_at,tool_run_id'
+                    tables[name] = [_row(r) for r in connection.execute(sql, (case_id,))]
+            if kind == 'report':
+                tables['reports'] = [_row(r) for r in connection.execute('SELECT * FROM reports WHERE case_id=? ORDER BY created_at,report_id', (case_id,))]
+            return _present(dict(tables=tables))
+        if kind == 'finding_groups':
+            groups = repository.groups(case_id)
+            offset, limit = payload.get('offset', 0), payload.get('limit', 100)
+            if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 100:
+                raise ValueError('Invalid finding group page bounds')
+            return _present(dict(items=groups[offset:offset+limit], total=len(groups), offset=offset, limit=limit,
+                                 counts=dict(warning=sum(g['severity']=='warning' for g in groups), notice=sum(g['severity']=='notice' for g in groups)), summaries=repository.summaries(case_id)))
+        if kind in {'warning_groups', 'warning_entries'}:
+            offset, limit = payload.get('offset', 0), payload.get('limit', 100)
+            if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 100:
+                raise ValueError('Invalid warning page bounds')
+            if kind == 'warning_groups':
+                groups = [dict(id=json.dumps([r[0], r[1] or '', r[2] or ''], separators=(',', ':')), code=r[0], evidenceId=r[1] or '', toolRunId=r[2] or '', occurrences=r[3], entries=[])
+                          for r in connection.execute('SELECT code,evidence_id,tool_run_id,count(*) FROM warnings WHERE case_id=? GROUP BY code,evidence_id,tool_run_id ORDER BY code,evidence_id,tool_run_id', (case_id,))]
+                return dict(items=groups[offset:offset+limit], total=len(groups), offset=offset, limit=limit)
+            bucket = payload.get('bucket')
+            code, evidence, tool = json.loads(bucket)
+            where = "case_id=? AND code=? AND coalesce(evidence_id,'')=? AND coalesce(tool_run_id,'')=?"
+            args = (case_id, code, evidence, tool)
+            total = connection.execute(f'SELECT count(*) FROM warnings WHERE {where}', args).fetchone()[0]
+            items = [_row(r) for r in connection.execute(f'SELECT * FROM warnings WHERE {where} ORDER BY warning_id LIMIT ? OFFSET ?', (*args, limit, offset))]
+            return _present(dict(items=items, total=total, offset=offset, limit=limit))
+        result = repository.page(case_id, kind, payload.get('offset', 0), payload.get('limit', 100), payload.get('bucket'), payload.get('identity'))
+        if kind == 'history_steps':
+            result['events'] = history_details(connection, case_id, [dict(steps=result['items'])])[0]['detail']['events']
+        return _present(result)
+
     def delete_case(self, payload):
         self.auth.require_user()
         values = _validate(payload, ("case_id", "confirmation"))
@@ -866,6 +968,13 @@ class DesktopRuntime:
         router.register("delete_case", self.delete_case)
         router.register("get_case_data", self.case_data)
         router.register("get_case_preview", self.case_preview)
+        router.register("get_case_header", self.case_header)
+        router.register("get_screen_page", lambda payload: self.screen_query('page', payload))
+        router.register("get_screen_detail", lambda payload: self.screen_query('detail', payload))
+        router.register("get_screen_context", lambda payload: self.screen_query('context', payload))
+        router.register("locate_screen_item", lambda payload: self.screen_query('locate', payload))
+        router.register("get_screen_coverage", lambda payload: self.screen_query('coverage', payload))
+        router.register("get_screen_summary", lambda payload: self.screen_query('summary', payload))
         router.register("get_analysis_detail", self.analysis_detail)
         for name, kind in (("get_history_tables", "tables"), ("get_history_page", "page"), ("locate_history_record", "locate")):
             router.register(name, lambda payload, kind=kind: self.history_query(kind, payload))

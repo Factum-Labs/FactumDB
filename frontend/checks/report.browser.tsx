@@ -41,12 +41,14 @@ mockIPC((command, args) => {
     data: btoa(fixture.slice(Number(payload.offset), Number(payload.offset) + Number(payload.length))),
   }
   if (method === 'export_case') return { path: payload.path }
+  if (method === 'get_screen_page') return {items:[{ report_id: 'browser-case:pdf:v1', format: 'pdf', version: 1,
+      actor_id: '1', actor_username: 'Examiner', created_at: '2026-10-12T12:00:00Z' }],total:1,offset:0,limit:100}
   if (method === 'get_case_data') return { case: { case_id: 'browser-case' }, tables: {
     reports: [{ report_id: 'browser-case:pdf:v1', format: 'pdf', version: 1,
       actor_id: '1', actor_username: 'Examiner', created_at: '2026-10-12T12:00:00Z' }],
   } }
   throw new Error(`Unexpected backend command ${method}`)
 })
-useApp.setState({ data: { case: { case_id: 'browser-case' } } as CaseData,
+useApp.setState({ data: { case: { case_id: 'browser-case' },tables:{},analysis:{},findings:[],run:null } as CaseData, user:{username:'Examiner'},screen:'report',
   pipelineComplete: true, busy: false, reportFormat: 'PDF' })
 createRoot(document.getElementById('root')!).render(<ReportScreen />)

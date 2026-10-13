@@ -1,6 +1,10 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useApp } from '../store'
-import { defaultPreferences, display, pickExportPath, request, rows, type CaseData } from '../lib/backend'
+import { useScreenQuery, useNextPage, type ScreenPage } from '../lib/useScreenQuery'
+import { useTablePage } from '../lib/useTablePage'
+import { TablePagination } from '../components/TablePagination'
+import { LoadingPanel } from '../components/LoadingPanel'
+import { defaultPreferences, display, pickExportPath, request, rows } from '../lib/backend'
 import { navigationButton } from '../components/buttonStyles'
 import { formatTime } from '../lib/timeDisplay'
 
@@ -18,7 +22,12 @@ interface Preparation { preparation_token: string; stage: string; processed: num
 
 export function ReportScreen() {
   const state = useApp()
-  const history = rows(state.data?.tables?.reports)
+  const [historyPage,setHistoryPage] = useTablePage('report-history')
+  const legacyHistory = Array.isArray(state.data?.tables?.reports)
+  const historyPayload = {kind:'reports',offset:historyPage*100,limit:100}
+  const historyQuery = useScreenQuery<ScreenPage>('get_screen_page',historyPayload,'report',!legacyHistory)
+  useNextPage(historyQuery.value,historyPayload,'report')
+  const history = legacyHistory ? rows(state.data?.tables?.reports) : historyQuery.value?.items ?? []
   const caseId = state.data?.case.case_id
   const [path, setPath] = useState('')
   const [redacted, setRedacted] = useState(true)
@@ -127,8 +136,7 @@ export function ReportScreen() {
       if (ticket !== generation.current || currentKey.current !== requestKey || useApp.getState().data?.case.case_id !== caseId) return
       setPreview(null)
       useApp.setState({ notice: `Export saved to ${result.path}` })
-      const data = await request<CaseData>('get_case_data', { case_id: caseId })
-      if (useApp.getState().data?.case.case_id === caseId) useApp.setState({ data })
+      historyQuery.retry()
     } catch (error) {
       if (ticket === generation.current) { setPreview(null); state.setError(error) }
     } finally { if (ticket === generation.current) setWorking(false) }
@@ -157,7 +165,7 @@ export function ReportScreen() {
         </select>
       </label>
       <p className="text-xs leading-relaxed text-muted">{redacted
-        ? 'Values and text identifiers become aliases. Personal metadata, paths, commands and diagnostic text are removed. Original case data stays intact.'
+        ? 'Database identifiers and values and evidence filenames become aliases. Case names, examiner identity, tool metadata, provenance IDs, hashes, timestamps and acquisition methods are included. Notes, paths, commands and diagnostics are withheld. Original case data stays intact.'
         : 'Includes original identifiers and sensitive metadata. JSON retains all evidence values; PDF presents grouped summaries.'}</p>
       <button type="button" className={`${navigationButton} w-full justify-center`}
         disabled={disabled} onClick={() => { void makePreview() }}>
@@ -175,11 +183,12 @@ export function ReportScreen() {
       <p className="text-[11px] text-muted">Review a fresh preview before exporting. Existing exports are never overwritten.</p>
       <section aria-label="Export history" className="space-y-2 border-t border-line pt-4">
         <h2 className="text-xs font-semibold">Export history</h2>
-        {history.length === 0 && <p className="text-xs text-muted">No recorded exports.</p>}
+        {!legacyHistory && !historyQuery.value ? <LoadingPanel error={historyQuery.error} retry={historyQuery.retry} label="Loading export history" /> : history.length === 0 && <p className="text-xs text-muted">No recorded exports.</p>}
         {history.map(report => <p key={display(report.report_id)} className="break-words text-xs text-muted">
           {display(report.format).toUpperCase()} v{display(report.version)} · {formatTime(display(report.created_at), state.settings?.preferences ?? defaultPreferences)}
           <br />Exported by {report.actor_username ? display(report.actor_username) : 'Unknown (historical export)'}
         </p>)}
+        {!legacyHistory && historyQuery.value && <TablePagination page={historyPage} count={historyQuery.value.total} onPage={setHistoryPage} label="exports" />}
       </section>
     </form>
     <section aria-label="Export preview" aria-busy={working}
