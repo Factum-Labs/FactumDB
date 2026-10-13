@@ -35,7 +35,9 @@ version 2, engine revision 2 and analysis format version 2.
 
 This is the internal store for one case. Everything the adapters extract goes in here, and Yasiru's domain services and the UI read it back out. The original evidence files are never stored inside the database - they stay in the case folder and we only keep their paths and hashes.
 
-The tables map fairly directly onto the models in `canonical-model.md`. Where a model field is a dict or a list it is stored as a JSON column, which is explained in the decisions at the bottom.
+The tables map fairly directly onto the models in `canonical-model.md`. Where a model field is a dict or a list it is stored as a JSON column, which is explained in the decisions at the bottom. How the adapters fill these tables, and how every row keeps the tool run it came from, is in `adapters.md`.
+
+`schema.sql` creates 29 tables. Sections 1 to 16 below are the evidence and analysis tables. The other 13 were added by Nisal and Yasiru for their parts of the app and are listed under "Tables added by other components", with one more, `pipeline_runs`, that the pipeline creates itself.
 
 Written against SQLite 3.46.1 (the version in Ubuntu 26.04).
 
@@ -61,14 +63,19 @@ CREATE TABLE cases (
     case_id        TEXT PRIMARY KEY,
     case_name      TEXT NOT NULL,
     examiner       TEXT NOT NULL,
+    examiner_notes TEXT NOT NULL DEFAULT '',
     workspace_path TEXT NOT NULL,
-    created_at     TEXT NOT NULL
+    created_at     TEXT NOT NULL,
+    engine_revision INTEGER NOT NULL DEFAULT 2,
+    reanalysis_required INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 ```
 
 The fields follow Nisal's `Case` model in `backend/core/domain/models/case.py`. The column names stay `case_id` and `case_name` rather than the model's `id` and `name`, because a bare `id` is ambiguous once several tables are joined. The mapping happens in the repository, which is what that layer is for.
 
 `workspace_path` is the directory the case owns. Working copies and preserved raw output live under it, so the path belongs with the case rather than being recomputed.
+
+Yasiru added `examiner_notes` for the examiner's notes on a case, and `engine_revision` and `reanalysis_required` for engine upgrades, which the notes at the top of this document explain.
 
 ---
 
@@ -88,7 +95,9 @@ CREATE TABLE evidence_files (
     working_copy_path   TEXT,
     working_copy_sha256 TEXT,
     acquisition_method  TEXT NOT NULL DEFAULT '',
-    registered_at       TEXT NOT NULL
+    registered_at       TEXT NOT NULL,
+    actor_id            TEXT,
+    actor_username      TEXT
 ) STRICT;
 
 CREATE INDEX idx_evidence_case ON evidence_files(case_id);
@@ -102,6 +111,8 @@ The working copy columns are nullable because of when the row is written. A file
 `binlog_index` is in the type list because of `mysql-bin.index`. It is not a log itself but it is evidence, since it is how we find out a log file is missing.
 
 `acquisition_method` records how the file was taken, for example "FLUSH TABLES FOR EXPORT + cp". That matters because it is what shows the page image is internally consistent rather than copied while the server was mid-write, so the method is part of the evidence rather than a footnote.
+
+`actor_id` and `actor_username` say which signed-in examiner registered the file. They came with sign-in (`authentication.md`) and are nullable, because a file registered before sign-in existed has no examiner on record, and one is never filled in from whoever is signed in now. `tool_runs` and `reports` have the same two columns.
 
 ---
 
@@ -127,7 +138,9 @@ CREATE TABLE tool_runs (
     stdout_size_bytes INTEGER,
     stderr_path       TEXT,
     stderr_sha256     TEXT,
-    stderr_size_bytes INTEGER
+    stderr_size_bytes INTEGER,
+    actor_id          TEXT,
+    actor_username    TEXT
 ) STRICT;
 
 CREATE INDEX idx_tool_runs_evidence ON tool_runs(evidence_id);
@@ -136,13 +149,13 @@ CREATE INDEX idx_tool_runs_case ON tool_runs(case_id);
 
 This is the most important table in the schema. Almost every other table has a `tool_run_id`, so any value we show in a report can be traced back to the exact command that produced it. That is the whole "how do you know that?" requirement.
 
-`tool_version` matters because these tools change their output format between versions. It is read from the tool's own `--version` the first time each tool runs, not written into configuration, because a system update can change it without anything in the project changing - the MySQL utilities here went from 8.4.10 to 8.4.11 that way. The MySQL tools print `innochecksum  Ver 8.4.11-0ubuntu0.26.04.1 for Linux...` and only the part after `Ver` is kept. `ibd2sql` prints `ibd2sql v2.3-20260526`, which is kept as printed.
+`tool_version` matters because these tools change their output format between versions. It is read from the tool's own `--version` the first time each tool runs, not written into configuration, because a system update can change it without anything in the project changing - the MySQL utilities here went from 8.4.10 to 8.4.11 that way. The MySQL tools print `innochecksum  Ver 8.4.11-0ubuntu0.26.04.1 for Linux...` and only the part after `Ver` is kept. `ibd2sql` prints `ibd2sql v2.4-20260921`, which is kept as printed.
 
 `executable_path` and `executable_sha256` identify the binary itself. A version string can be shared by several builds; a hash of the file cannot, so the claim is about one specific executable rather than a label. For `ibd2sql`, which is a Python script, the executable recorded is `main.py`, not `python3`. Hashing the interpreter would say which Python ran, not which `ibd2sql` produced the rows.
 
 `arguments_json` holds the arguments as a JSON array instead of one command string. Re-joining arguments into a line loses the boundary between them as soon as a path contains a space, and then it is no longer possible to say exactly what was run.
 
-`stdout` and `stderr` are recorded separately, each with its own path, hash and size. Both are needed: `innochecksum` reports a damaged page on stderr, so keeping only stdout would record an empty success for a file the tool had just called invalid.
+`stdout` and `stderr` are recorded separately, each with its own path, hash and size. Both are needed: `innochecksum` reports a damaged page on stderr, so keeping only stdout would record an empty success for a file the tool had just called invalid. The paths point at `raw-output/<tool_run_id>/stdout.bin` and `stderr.bin` in the case folder, where the audit service saves the exact bytes the tool printed (section 7 of `adapters.md`).
 
 The index is on `evidence_id` because "show me every tool run for this file" is the query the UI will use most. The one on `case_id` is for listing a whole case's runs, which the case export does.
 
@@ -209,7 +222,9 @@ CREATE INDEX idx_physical_evidence
     ON physical_records(evidence_id, database_name, table_name);
 ```
 
-`page_no` and `page_offset` are nullable because we might not always be able to work them out, and a null is honest about that. In the scenario 2 evidence the deleted row is at page 4, offset 170.
+`page_no` and `page_offset` are nullable because we might not always be able to work them out, and a null is honest about that. At the moment they are always null: `ibd2sql` does not say where on the page it found a row, and FactumDB has no page reader of its own (limitation 1 in `adapters.md`). The columns stay, so a page reader can fill them later without changing the schema. Reading the page by hand shows what they would hold: in the scenario 2 evidence the deleted row, account 102, starts at page 4, offset 170.
+
+Live and deleted rows come from two separate `ibd2sql` runs, so each row's `tool_run_id` is the run that found it.
 
 The index on `is_deleted` is there because "show me all recovered deleted rows" is going to be one of the main things an investigator asks for, and it is also one of the main screens to demonstrate.
 
@@ -241,6 +256,7 @@ CREATE TABLE binlog_events (
 
 CREATE INDEX idx_binlog_table ON binlog_events(database_name, table_name);
 CREATE INDEX idx_binlog_time  ON binlog_events(event_time_utc);
+CREATE INDEX idx_binlog_row_ref ON binlog_events(source_file, log_position, row_index);
 ```
 
 `before_json` and `after_json` are nullable on purpose, because an INSERT has no before image and a DELETE has no after image. That is the `None` rule from the canonical model.
@@ -256,6 +272,8 @@ This was found by feeding a two-row event through the adapter: it produced two r
 `source_file` is the binlog's own name, `mysql-bin.000006`, as it was registered - the same name in `transactions`. The adapter reads a working copy, which the filesystem layer names `<evidence id>-mysql-bin.000006`, so the decode is stored under the registered name instead. The domain orders the logs by finding these names in `mysql-bin.index`; with the working-copy names it found none of them and fell back to ordering by evidence id, which put the logs in the wrong order.
 
 `event_time_utc` is indexed because building a timeline means sorting by time, and that is the main thing this tool does.
+
+`idx_binlog_row_ref`, added by Yasiru, finds one row change from its reference, the file, position and row index. That is the lookup behind a finding's provenance (`provenance_for`).
 
 ---
 
@@ -326,7 +344,9 @@ CREATE TABLE integrity_results (
 CREATE INDEX idx_integrity_evidence ON integrity_results(evidence_id);
 ```
 
-`page_counts_json` holds the full page type breakdown from `innochecksum -S`, including the ones that are zero. In the first evidence set `Undo log page` is 0, and that zero is the reason the original balance of 5000 cannot be recovered from the `.ibd` file at all. It would be easy to drop zeros as noise but that would throw away the finding.
+`page_counts_json` holds the full page type breakdown from `innochecksum -S`, including the ones that are zero. In the scenario 1 evidence `Undo log page` is 0. MySQL keeps undo logs in their own undo tablespaces, not in a table's `.ibd`, and that is why the original balance of 5000, which the in-place update left only in the undo log, cannot be recovered from the `.ibd` file at all. It would be easy to drop zeros as noise but that would throw away the finding.
+
+`tool_run_id` is the `innochecksum -S` run that produced the counts. The plain checksum run before it is in `tool_runs` too (section 1 of `adapters.md`).
 
 There is no table name in this table because `innochecksum` does not know about tables, only pages. `integrity_for(database, table)` finds the right row by joining through `schemas` on `evidence_id`, since the schema extracted from an `.ibd` says which table that file holds. So an integrity result can only be found by table once that file's schema has been extracted.
 
@@ -429,13 +449,17 @@ CREATE TABLE analysis_results (
     saved_at    TEXT NOT NULL,
     PRIMARY KEY (case_id, stage)
 ) STRICT;
+
+CREATE INDEX idx_analysis_revision ON analysis_results(case_id, stage, saved_at);
 ```
 
-The four results of Yasiru's domain services, one JSON document per case and stage. His `correlation-engine-output-schema.md` describes a fully relational design instead, which would let single findings be queried in SQL. The UI reads results through the sidecar, which loads a whole result at a time anyway, so one document per stage does the job for now. Tables can replace it later without changing the `DomainRepository` interface.
+The four results of Yasiru's domain services, one JSON document per case and stage. His `correlation-engine-output-schema.md` describes a fully relational design instead, which would let single findings be queried in SQL. That turned out not to be needed: this table stays the one authoritative copy, and the screens read small pages from tables built from it when a result is saved (see "Tables added by other components"). The reconciliation result, the largest of the four, is stored in Nisal's compact format (`reconciliation-storage.md`).
 
 The round trip has to be exact, because each stage reads the previous stage's result back from here. Column values keep the tags from decision D, so a `Decimal` cannot come back as a string, and everything else is rebuilt from the type hints of the dataclass it belongs to (`_results.py`). All 48 results from Yasiru's 12 golden datasets load back equal, with the same type at every level - which matters because his enums are `StrEnum`s and would compare equal to plain strings.
 
 The results build on each other, so saving one stage deletes the stages after it, and normalizing the case again deletes all of them. A later stage can then never load a result made from an older version of an earlier one: it finds nothing, and the use case says which stage has to run first.
+
+Saving a result also rebuilds the screen tables for that stage, and the history summaries for the reconstruction, in the same transaction, and saving the reconciliation clears `cases.reanalysis_required`. Triggers on this table clear those derived tables when a result is changed or deleted, so a screen never shows an older analysis. `idx_analysis_revision`, added by Yasiru, lets the screens check which analysis they are showing without reading `result_json` itself.
 
 ---
 
@@ -467,6 +491,23 @@ The JSON and PDF exports record themselves (`case_export.py`). Only JSON and PDF
 
 ---
 
+## Tables added by other components
+
+These tables are documented by the people who added them. They are listed here so that every table in a case database is accounted for in this document.
+
+| Table | Added by | What it holds | Described in |
+|---|---|---|---|
+| `table_creations` | Yasiru | Each `CREATE TABLE` seen in the binlogs, with its file and position, for the presence comparisons | the notes at the top of this document |
+| `physical_extractions` | Yasiru | The `ibd2sql` run that examined each tablespace, so a file with no live rows still counts as examined | the notes at the top of this document |
+| `history_summaries`, `history_summary_ready` | Nisal | A short summary of each record history, so Record History can list 100 at a time and filter by table | `record-history-filter.md` |
+| `screen_items`, `screen_summary`, `screen_coverage`, `screen_finding_pool`, `screen_groups`, `screen_group_ready` | Yasiru | Pages, counts and coverage for the analysis screens, so a screen never loads a whole result | `progressive-case-loading.md` |
+| `screen_legacy_pages`, `screen_legacy_ready`, `screen_legacy_findings` | Yasiru | The same for cases saved before those tables existed, built the first time a screen is opened | `progressive-case-loading.md` |
+| `pipeline_runs` | Yasiru | The state of each pipeline run and its stages. Created by `sqlite_pipeline_repository.py`, not `schema.sql` | `application-layer.md` |
+
+The history and screen tables are derived data. They are built from `analysis_results` and can be rebuilt from it at any time, so `analysis_results` stays the record of what the analysis found.
+
+---
+
 ## Design decisions
 
 **A. IDs are text, not auto-increment integers.** Nisal's `Case` model already generates a UUID string for `case_id`, so the same style is used everywhere rather than having two different kinds of ID in one database. Consistency across the team is worth more here than the small speed difference.
@@ -477,7 +518,7 @@ The microseconds are always written, even when they are zero. Text only sorts in
 
 **C. Dict and list fields are stored as JSON columns**, except where a real table is clearly better. Row values, page counts and the file lists are JSON. Schema columns and transaction events are real tables, because those two get looked up constantly and need foreign keys. A fully normalised design (one row per column value) would be more "correct" but it is a lot more work, and the project runs to 8 weeks, so the simpler design is used and the tradeoff documented.
 
-**D. Undecodable values are stored inside the JSON as `{"__undecodable__": "reason"}`.** This is safe because MySQL column values are always scalars - a number, a string, a date, or NULL. They are never dictionaries. So any dict appearing where a value should be can only be our marker, and it can never collide with real data.
+**D. Undecodable values are stored inside the JSON as `{"__undecodable__": "reason"}`.** This is safe because MySQL column values are always scalars - a number, a string, a date, or NULL. They are never dictionaries. So any dict appearing where a value should be can only be our marker, and it can never collide with real data. `Decimal` values, `datetime` values and columns a row image did not include are tagged the same way (`__decimal__`, `__datetime__`, `__unobserved__`), so each comes back as what it was (`_values.py`). The case exports keep all four tags and explain them, and the desktop app reads them.
 
 **E. Every table that holds extracted data has a `tool_run_id`.** That is what makes the provenance requirement actually true rather than just something we say in the report. When rows are read for the analysis, each one comes back with a `ProvenanceReference` rebuilt from its `evidence_id`, `tool_run_id` and the run's tool name (`_provenance.py`), so the findings the domain services make can point to the run behind them. It is rebuilt on every read rather than stored twice, so it can never disagree with the row.
 
@@ -487,8 +528,6 @@ The microseconds are always written, even when they are zero. Text only sorts in
 
 ---
 
-## TODO
+## Open points
 
-- Agree decision D with Nisal since he owns the storage side of the pipeline.
-- Check with Yasiru whether the domain services need anything from `transaction_events` that is not there yet.
-- If the UI needs to query single findings or record histories in SQL, replace the JSON documents in `analysis_results` with tables following `correlation-engine-output-schema.md`.
+- `page_no` and `page_offset` in `physical_records` stay empty until FactumDB has a page reader of its own (section 6).
