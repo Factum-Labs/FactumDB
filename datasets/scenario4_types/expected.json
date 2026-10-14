@@ -1,138 +1,53 @@
 {
   "scenario": "scenario4_types",
-  "acquired": "2026-10-05",
+  "acquired": "2026-10-13",
   "mysql_version": "8.4.11",
   "timestamp_time_zone": "Asia/Colombo (+05:30)",
   "evidence": [
     {
       "file": "attachments.ibd",
       "bytes": 114688,
-      "sha256": "6e3df0b4f98e403b30c032f11df63189c0a1430be199fd2cb5612a73495c2e44"
+      "sha256": "c10f12b9b9a89a60c08d29d909483e688282abc775921fb98f0293d9cc04b2dc"
     },
     {
-      "file": "mysql-bin.000024",
-      "bytes": 526,
-      "sha256": "0fce93bfda3849712f9c2698cde79ce4d8ec34334fcf8780c4ce7ea7721bb0b0"
+      "file": "mysql-bin.000001",
+      "bytes": 205,
+      "sha256": "63ccbcfb2103e4d50406157db5f938a3dee460fe32238411d3d3f146920b6f01"
     },
     {
-      "file": "mysql-bin.000025",
+      "file": "mysql-bin.000002",
+      "bytes": 205,
+      "sha256": "eca72d69ea911684d801c49f8bfbd25f4d195f83aba49500c68fd3bb5833facd"
+    },
+    {
+      "file": "mysql-bin.000003",
+      "bytes": 533,
+      "sha256": "19f7842177d42964785aaf78535e02f9df1e6ffe800de7e86d61899a7de84094"
+    },
+    {
+      "file": "mysql-bin.000004",
+      "bytes": 7100,
+      "sha256": "0dcf29a156495bdc15cd363ec183677166dba54d8b5cbe9bf24da904957712b1"
+    },
+    {
+      "file": "mysql-bin.000005",
       "bytes": 198,
-      "sha256": "6799edd631a3f8a9ca9e60c09984e8f757da9c83b76b8c9f29cc173aa63c0d72"
-    },
-    {
-      "file": "mysql-bin.000026",
-      "bytes": 221,
-      "sha256": "2ef17325eda63520548216da9cd41d81f6e10fd6c3c1a0471ee82e53ecac9813"
-    },
-    {
-      "file": "mysql-bin.000027",
-      "bytes": 481,
-      "sha256": "406638471c4c798a31e3adb059ac231a8bf5828f57079df2006a37fddfe651b1"
-    },
-    {
-      "file": "mysql-bin.000028",
-      "bytes": 198,
-      "sha256": "98713b68b23a289f0d85a39e2666fa0363bbe7b2be374b5d516320bed22f44f7"
-    },
-    {
-      "file": "mysql-bin.000029",
-      "bytes": 245,
-      "sha256": "b5a9749833ec71eca8449ee1b35911e88cdc0c0eed2c0c43c344f25a18fe2a60"
-    },
-    {
-      "file": "mysql-bin.000030",
-      "bytes": 198,
-      "sha256": "c5e50a1e988a5ad56f2bca058a35829d5c51d597706156b8c765828b1f172ac5"
-    },
-    {
-      "file": "mysql-bin.000031",
-      "bytes": 245,
-      "sha256": "94d6525d53c3fe90c1577c167e82e7ab91b6ad7814f949c29541aa65a74b2243"
-    },
-    {
-      "file": "mysql-bin.000032",
-      "bytes": 198,
-      "sha256": "50d9215b6b7d889e7cc866037898557da234c702b578d79138d22c997f1e62a8"
-    },
-    {
-      "file": "mysql-bin.000033",
-      "bytes": 198,
-      "sha256": "b84d968478f0f44b6e60f4f5f8a35aa9981e8b3cd3d8b9dfd34b4a0937764831"
-    },
-    {
-      "file": "mysql-bin.000034",
-      "bytes": 198,
-      "sha256": "f748bf3ce5040f0a3fc1e0f1c267b25389e8fa4707136949f6d1f59794fb14d3"
-    },
-    {
-      "file": "mysql-bin.000035",
-      "bytes": 198,
-      "sha256": "8d46ea5ed97c5c2e3c220370a3c9bed0c70acde7eba5376e8300608d40b06d17"
-    },
-    {
-      "file": "mysql-bin.000036",
-      "bytes": 198,
-      "sha256": "2929724821a2be1dcb45bfeb27ed6605f8646c850b0c4c321b25defc857881cb"
-    },
-    {
-      "file": "mysql-bin.000037",
-      "bytes": 245,
-      "sha256": "46276bfc66fa933c01d7a22b3d4d54fa12d28b116fce01838d1ac3363c3c7e3e"
-    },
-    {
-      "file": "mysql-bin.000038",
-      "bytes": 198,
-      "sha256": "ec420cd80e836e89e3b58f864774027b0ddaed1625eeb4e0cd71da54d75eb15f"
-    },
-    {
-      "file": "mysql-bin.000039",
-      "bytes": 245,
-      "sha256": "b7716ad1f87c6e5c5e2dfcb54446106e837e9c4a18fcc65279ec2a2c2630da5f"
-    },
-    {
-      "file": "mysql-bin.000040",
-      "bytes": 198,
-      "sha256": "44c4a4655ec5a6cfa840c80de15e42a2f7ab1cee07fe38b0a4cd5159a02babb3"
-    },
-    {
-      "file": "mysql-bin.000041",
-      "bytes": 245,
-      "sha256": "1929c26dbf538937210c92919133a795290c65ac450d87840976a9af43387eb8"
-    },
-    {
-      "file": "mysql-bin.000042",
-      "bytes": 198,
-      "sha256": "4e87c4be9a53650261dfaa86e15193793eca6650c7a49c0a746e3930489e7f11"
-    },
-    {
-      "file": "mysql-bin.000043",
-      "bytes": 245,
-      "sha256": "ee5bebb2cf8c6a13f0413b16a1648b95f1c47dd1c183e33d0569aea0b9eb5e59"
-    },
-    {
-      "file": "mysql-bin.000044",
-      "bytes": 7091,
-      "sha256": "d0e744169f542b483d870f7a2bc188e24be53298d0b1048004532e34d2443dfc"
-    },
-    {
-      "file": "mysql-bin.000045",
-      "bytes": 198,
-      "sha256": "9a5c1bc718439ee6b735253be233d00881b769d7773817c898be0b266d70ab45"
+      "sha256": "bc836b27bc6dee9c1271c0f7104d7bdf1a7f9e2b5893e30e8f7dc823e2db4518"
     },
     {
       "file": "mysql-bin.index",
-      "bytes": 704,
-      "sha256": "e77da2dfcb996c42df199ad167b3ddef088f59edf225fc9bbadd7d4f7baf35ae"
+      "bytes": 95,
+      "sha256": "433206c2d49dd4edd28a6d36d38cff724c7079d7649f2b32727f14a0644abc3e"
     },
     {
       "file": "order_items.ibd",
       "bytes": 114688,
-      "sha256": "7d32800a3c4ca4cd5ec07675e793792d8f3447aefc7a992319eff8db7d8dee20"
+      "sha256": "bb3153e4c050d9c26c9a4437a2df522792aca575c235cf8fb403368192b35e5f"
     },
     {
       "file": "payments.ibd",
       "bytes": 114688,
-      "sha256": "e977f3bc0e35f15ebe2567e5fb135018bf862d71571e3a7b9aaab8f79120080c"
+      "sha256": "7cc90ff6b0df5f1f29a90303350e3807a48d1cb12795a218d8a558db2a2957fb"
     }
   ],
   "columns": {

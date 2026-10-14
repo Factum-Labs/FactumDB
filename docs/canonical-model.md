@@ -91,6 +91,8 @@ From the `ibd2sql` adapter. One row as it exists in the `.ibd` file right now.
 
 Note for implementation: `ibd2sql` does **not** report the page number or offset - its option list was checked. So the adapter has to read the `.ibd` page itself to fill these two fields. That is extra work but it is the same page-walking we would need anyway if we ever want more than what `ibd2sql` prints.
 
+Not built yet: there is no page reader, so both fields are always `None` (limitation 1 in `adapters.md`). The location above was worked out by hand.
+
 This was verified on the test evidence. Row 102 (`Nimal`) was inserted, deleted, and the `.ibd` exported. `SELECT` in MySQL does not show it any more and normal `ibd2sql` does not show it either, but `--delete only` brought the whole row back. The reason is that InnoDB does not actually erase a deleted row - it just sets a delete flag in the record header (bit `0x20`) and unlinks the record from the page's linked list. The bytes stay there until purge cleans them up. In the exported file the record header byte for row 102 is `0x20`, while rows 101 and 103 are `0x00`.
 
 A deleted row is still a physical record, so a flag is used rather than a separate model.
@@ -116,6 +118,7 @@ From the `mysqlbinlog` adapter. One row change.
 | `thread_id` | int or None | `13` |
 | `log_position` | int | `1112` |
 | `source_file` | str | `"mysql-bin.000006"` |
+| `row_index` | int | `0` |
 
 `event_type` is `"INSERT"`, `"UPDATE"` or `"DELETE"`, always uppercase.
 
@@ -132,6 +135,8 @@ Both dicts use real column names, not `@N`. Converting the positions is the adap
 The timestamp needs care. `mysqlbinlog` prints the time in the server's local timezone and does not put any timezone marker on it. Our server is `+0530`, so the DELETE that printed as `260816 0:36:25` is really `2026-08-15 19:06:25` UTC. If we stored what was printed, then the moment we get evidence from a server in another timezone our event ordering would quietly be wrong, and ordering events is the main thing this tool does. Timestamps are therefore converted to UTC, with the original text kept in `raw_timestamp` so the report can show exactly what the tool printed.
 
 `log_position` is the `end_log_pos` of the row event. It is only unique inside one binlog file (positions start again at 4 in each new file), so it always has to be used together with `source_file`.
+
+`row_index` is needed because one binlog event can hold several rows, all at the same position, for example a three-row `INSERT` or an `UPDATE` that matches two rows (scenario 4). It is the row's place inside its event, 0 for the first, so `(source_file, log_position, row_index)` names exactly one row change.
 
 ---
 
@@ -176,7 +181,7 @@ From the `innochecksum` adapter. The physical condition of one `.ibd` file.
 
 Worth noting: when every page is fine, `innochecksum` prints nothing at all and exits 0. So silence means success, not a parsing failure, and the adapter has to turn that empty output into an explicit `"valid"` result.
 
-`page_counts` keeps the whole page-type breakdown from `innochecksum -S`, including the types that are zero. That may look pointless, but in the first test evidence set `Undo log page` is `0`, and that zero is exactly why the original balance of 5000 cannot be recovered from the `.ibd` at all - the undo history had already been purged. Dropping the zeros would throw away an important finding.
+`page_counts` keeps the whole page-type breakdown from `innochecksum -S`, including the types that are zero. That may look pointless, but in the first test evidence set `Undo log page` is `0`, and that zero is exactly why the original balance of 5000 cannot be recovered from the `.ibd` at all: MySQL keeps undo logs in their own undo tablespaces, not in a table's `.ibd`, and the in-place update left the old value only in the undo log. Dropping the zeros would throw away an important finding.
 
 ---
 
@@ -191,6 +196,7 @@ Where a piece of information came from.
 | `tool_run_id` | str | `"run_3f21c8de"` |
 | `source_file` | str | `"mysql-bin.000006"` |
 | `log_position` | int or None | `1112` |
+| `row_index` | int or None | `0` |
 
 In forensics it is not enough to say "the balance is 4000". We have to be able to answer "how do you know that?" for every value we show. This model is what makes that possible.
 
@@ -217,6 +223,8 @@ Codes expected to be needed:
 | `UNVALIDATED_MYSQL_VERSION` | evidence is not from a MySQL 8.4.x server |
 | `SCHEMA_NOT_FOUND` | a binlog event mentions a table we have no schema for |
 
+What was built: `SCHEMA_NOT_FOUND`, and `COLUMN_POSITION_UNKNOWN` for an `@N` that has no column. The other three were not. Unsupported types and undecodable values show up in the reconciliation as Unsupported verdicts instead, and partial row images and the MySQL version are limitations 5 and 8 in `adapters.md`.
+
 This is a model and not just a log line because warnings have to end up in the final report. If an adapter quietly skipped a column the investigator needs to know, because it changes how much they can trust the conclusion.
 
 ---
@@ -227,19 +235,19 @@ Used inside `values`, `before` and `after` when the adapter could read that a co
 
 | Field | Type | Example |
 |---|---|---|
-| `reason` | str | `"BLOB type not supported"` |
+| `reason` | str | `"binary data is not decoded"` |
 
 So a row with one bad column looks like this:
 
 ```
-{"account_id": 102, "owner": "Nimal", "photo": UndecodableValue("BLOB type not supported")}
+{"account_id": 102, "owner": "Nimal", "photo": UndecodableValue("binary data is not decoded")}
 ```
 
 The team decided we need a separate marker for this instead of just putting `None`. The reason is that `None` already means a real SQL NULL, and "the database stored NULL here" and "we could not read this" are completely different facts. Mixing them up would let the tool report a NULL that was never in the database, which is exactly the kind of mistake that would destroy the report's credibility.
 
-When this gets saved to SQLite as JSON it needs a shape that cannot collide with real data, something like `{"__undecodable__": "BLOB type not supported"}`. TODO: confirm this with Nisal since he owns the storage side of the pipeline.
+When this gets saved to SQLite as JSON it needs a shape that cannot collide with real data: `{"__undecodable__": "binary data is not decoded"}`. That is decision D in `sqlite-schema.md`, and the case exports and the desktop app read the same marker.
 
-Every `UndecodableValue` should also produce a `Warning`, so it shows up in the report and not only inside a row.
+Every `UndecodableValue` should also produce a `Warning`, so it shows up in the report and not only inside a row. This was not built: an undecodable value reaches the report as an Unsupported verdict for its field (R-RECON-007), not as a warning.
 
 ---
 
@@ -270,7 +278,7 @@ Worth noting: the index file stores **absolute paths**, like `/var/log/mysql/mys
 
 **4. Provenance is its own model instead of a field on everything else.** Keeps the models small. The link is not lost because the SQLite tables store `tool_run_id` on every row.
 
-**5. `PhysicalRecord` stores the page number and offset where the row was found.** Agreed with the team. It means anything we report can be checked against the raw bytes, which matters for a forensic tool. The cost is that the adapter has to walk the `.ibd` page itself because `ibd2sql` does not give us this.
+**5. `PhysicalRecord` stores the page number and offset where the row was found.** Agreed with the team. It means anything we report can be checked against the raw bytes, which matters for a forensic tool. The cost is that the adapter has to walk the `.ibd` page itself because `ibd2sql` does not give us this. Not built yet: the two fields exist but are always empty (limitation 1 in `adapters.md`).
 
 **6. An undecodable value gets its own marker, not `None`.** Agreed with the team. `None` already means a real SQL NULL, and reporting "the value was NULL" when we actually mean "we could not read it" would be a false statement about the evidence.
 

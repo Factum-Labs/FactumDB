@@ -1,221 +1,147 @@
-# FactumDB
+﻿# FactumDB
 
-FactumDB is a digital forensics project for reconstructing and reconciling MySQL/InnoDB evidence. It is designed as a **Layered Modular Monolith** using **Hexagonal Architecture**, with a **Pipe-and-Filter** style processing workflow.
+## 1. Project overview
 
-The main goal of this README is to help team members understand how the project folders connect to the system architecture described in [docs/Architecture.md](docs/Architecture.md).
+FactumDB is a desktop digital forensics application for examining MySQL/InnoDB database evidence. It reconstructs record changes from binary logs and compares the reconstructed state with physical records extracted from `.ibd` tablespace files.
 
-## Architecture Overview
+A tablespace shows physical records, while binary logs describe changes over time. FactumDB brings these sources together to help investigators identify agreements, conflicts, and gaps in the available evidence. Findings retain references to supporting evidence and extraction outputs.
 
-The desktop frontend is connected to the Python backend. See
-[Desktop setup and workflow](docs/desktop-runtime.md) for prerequisites, tool
-configuration, case storage, supported exports, and integration checks.
-See [Local examiner accounts](docs/authentication.md) for sign-up, device
-verification, Windows/Linux setup and the shared authentication architecture.
-Build the Windows installer with `npm run bundle:windows`; it includes Python,
-the MySQL utilities and ibd2sql. See [Windows bundling](docs/windows-bundle.md).
-Build the Ubuntu 24.04 x86-64 desktop installer with `npm run bundle:linux`
-from Linux or WSL. See [Linux bundling and headless checks](docs/linux-bundle.md).
+The application is intended for digital forensic investigators, researchers, and students. The packaged utilities target MySQL 8.4; compatibility with other evidence versions depends on the selected utilities and evidence format. Analysis runs locally without a live MySQL server or AWS deployment.
 
-FactumDB separates user interaction, workflow coordination, forensic domain logic, and technology-specific integrations into clear layers.
+## 2. Features
+
+- **Local examiner accounts:** sign-up with native device verification, password sign-in, session locking, and examiner-scoped case access.
+- **Case management:** create and reopen cases, register evidence, and maintain case notes.
+- **Evidence integrity:** SHA-256 hashing and verified working copies, preserving original evidence during processing.
+- **Evidence extraction:** InnoDB page validation, schema and physical-row extraction, and binary-log decoding, with pipeline progress and retry support.
+- **Forensic analysis:** transaction grouping, record correlation, state reconstruction, and reconciliation against physical records.
+- **Investigation views:** transaction timelines, record histories, correlation graphs, evidence gaps, and warnings.
+- **Provenance and reporting:** extraction command records, preserved tool outputs, full JSON exports, and summary PDF reports.
+- **Workspace settings:** extraction-tool configuration and workspace backup/restore subject to ownership checks.
+
+## 3. Architecture and technologies
+
+FactumDB uses a **layered modular monolith** with **hexagonal architecture** and a staged processing pipeline. The React interface communicates through Tauri with a persistent Python backend. SQLite stores case data locally.
+
+| Component | Technologies and responsibility |
+| --- | --- |
+| `frontend/` | React 19, TypeScript, Vite, Tailwind CSS, and Zustand: investigator screens and frontend state. |
+| `src-tauri/` | Tauri 2 and Rust: desktop integration, native authentication, and JSON-lines communication with the backend. |
+| `backend/core/application/` | Python use cases, authentication, orchestration, and adapter contracts. |
+| `backend/core/domain/` | Transaction grouping, record correlation, state reconstruction, and reconciliation rules. |
+| `backend/adapters/` | Filesystem operations, hashing, SQLite persistence, extraction utilities, and report generation. |
+| Extraction utilities | MySQL `innochecksum`, `ibd2sdi`, and `mysqlbinlog`, plus `ibd2sql`. |
+| PDF generation | `fpdf2`, `uharfbuzz`, and bundled fonts. |
+
+The application layer controls processing order, the domain layer interprets evidence, and adapters handle technology-specific operations. Forensic reasoning stays in the Python backend.
 
 ![FactumDB high-level architecture](images/High%20level%202.png)
 
-At a high level:
+See [Architecture](docs/Architecture.md) for the detailed design.
 
-- The frontend presents the application to the investigator.
-- Tauri bridges frontend actions into backend requests.
-- The application layer coordinates use cases and pipeline execution.
-- The domain layer performs forensic reasoning.
-- The adapters layer handles external tools, storage, files, and reports.
+## 4. Prerequisites
 
-The central architecture rule is:
+### Building from source
 
-> The application layer decides when and in what order work is performed, the domain layer decides how forensic evidence is interpreted, and adapters perform technology-specific operations.
+| Requirement | Windows | Linux |
+| --- | --- | --- |
+| Build target | Windows x64 | Ubuntu 24.04 x86-64 |
+| Source control | Git | Git |
+| JavaScript tooling | Node.js 22.12+ with npm; Node.js 24 recommended | Native Linux Node.js 22.12+ with npm; Node.js 24 recommended |
+| Rust | Current stable MSVC toolchain with `x86_64-pc-windows-msvc` | Current stable native Linux toolchain |
+| Python | Python 3.11+ with the `py` launcher | Python 3.11+ as `python3` |
+| Native build tools | Visual Studio 2022 Build Tools: Desktop development with C++, MSVC, and Windows SDK | Compiler and GTK/WebKit packages listed below |
+| Initial sign-up | Windows Hello configured for the current Windows user | Desktop session with a running polkit authentication agent |
 
-## Project Folder Structure
+Initial builds need internet access for dependencies, pinned runtimes, extraction utilities, and corresponding source archives. Allow space for downloads, build outputs, and evidence working copies; packaged source archives alone occupy several hundred megabytes.
 
-```text
-FactumDB/
-├── frontend/
-├── src-tauri/
-├── backend/
-|   ├── core/
-|   |   ├── application/
-|   |   └── domain/
-|   └── adapters/
-├── docs/
-├── images/
-└── README.md
+Windows staging requires the pinned Visual C++ redistributable DLLs from Visual Studio's `14.44.35112/x64/Microsoft.VC143.CRT` directory. If automatic discovery fails, set `FACTUMDB_VC_REDIST_DIR` to that directory. Different DLL versions fail the checksum check. See [Windows bundling](docs/windows-bundle.md) for details.
+
+### Running an installer
+
+The Windows installer includes Python, extraction utilities, and Visual C++ runtime DLLs. It can download WebView2 if missing. The Ubuntu `.deb` includes extraction utilities and PDF libraries; apt installs Python and required system libraries. Neither installer needs a MySQL server.
+
+Earlier Ubuntu versions, ARM systems, and other Linux distributions are not verified targets. WSL can build the Linux package, but interactive sign-up requires a desktop authentication agent.
+
+## 5. Build and run instructions
+
+### Windows
+
+After installing the prerequisites, open PowerShell:
+
+```powershell
+git clone https://github.com/Factum-Labs/FactumDB.git
+cd FactumDB
+npm ci
+npm --prefix frontend ci
 ```
 
-## How Folders Align With the Architecture
+For an existing checkout, open PowerShell in its repository root and run the two `npm ci` commands.
 
-### `frontend/` - Presentation Layer
+#### Run in development mode
 
-The `frontend/` folder contains the investigator-facing user interface.
-
-This layer is responsible for:
-
-- creating and opening cases;
-- importing evidence files such as `.ibd` files and binary logs;
-- displaying verification, extraction, and analysis progress;
-- presenting transaction timelines, record histories, reconciliation results, and evidence gaps; and
-- allowing report export actions.
-
-The frontend should not contain forensic algorithms, direct database access, or direct command-line tool execution. It should communicate with the backend through the Tauri bridge.
-
-### `src-tauri/` - Input Adapter and Frontend-Backend Bridge
-
-The `src-tauri/` folder acts as the bridge between the frontend and backend.
-
-In the architecture, this folder maps to the **Input Adapter**. It translates UI actions into backend requests and returns backend responses to the frontend.
-
-Typical responsibilities include:
-
-- receiving frontend commands;
-- validating or shaping request data;
-- invoking backend use cases;
-- returning results in a UI-friendly format; and
-- forwarding progress, warnings, or errors back to the frontend.
-
-Example flow:
-
-```text
-User clicks "Run Complete Analysis"
-        |
-Frontend sends a Tauri command
-        |
-src-tauri input adapter receives the request
-        |
-Backend application use case is invoked
+```powershell
+npm run tauri:dev
 ```
 
-### `backend/core/application/` - Application Layer
+The pre-launch script automatically stages missing Windows runtime resources. The first run may take time to download and verify them. Vite serves the interface at `http://localhost:1420`, Rust builds the desktop application, and the FactumDB sign-in window opens. Tauri starts the Python backend automatically.
 
-The `backend/core/application/` folder contains the application layer.
+Expected console output includes the Vite local URL and Rust compilation/startup messages. Exact timings and paths vary. Backend operations require the desktop window; opening the Vite URL in a browser alone is insufficient. Stop development with `Ctrl+C` in the terminal.
 
-This layer coordinates what the system does. It should contain use cases, orchestration logic, and port definitions that describe what external capabilities the application needs.
+#### Build and run the installer
 
-Expected responsibilities include:
-
-- use cases such as creating cases, registering evidence, verifying evidence, running analysis, and generating reports;
-- the pipeline orchestrator that controls processing order;
-- prerequisite checks before each pipeline stage;
-- progress and failure handling; and
-- ports that adapters implement.
-
-The application layer should coordinate the workflow, but it should not contain the detailed forensic interpretation logic. That belongs in the domain layer.
-
-Typical pipeline order:
-
-```text
-Evidence Registration
-        |
-SHA-256 Hashing
-        |
-Verified Working-Copy Creation
-        |
-InnoDB Page Validation
-        |
-Schema Extraction
-        |
-Physical-Row Extraction
-        |
-Binary-Log Decoding
-        |
-Normalization
-        |
-Transaction Grouping
-        |
-Record Correlation
-        |
-State Reconstruction
-        |
-Reconciliation
-        |
-Result Persistence
-        |
-Report Generation
+```powershell
+npm run bundle:windows
 ```
 
-### `backend/core/domain/` - Domain Layer
-
-The `backend/core/domain/` folder contains FactumDB's core forensic logic.
-
-This layer works with normalized forensic objects, not raw command-line output or UI data. It should remain independent from React, Tauri, SQLite, filesystem paths, and external tools.
-
-The domain layer is responsible for:
-
-- transaction grouping;
-- record correlation;
-- state reconstruction; and
-- reconciliation between reconstructed log state and physical `.ibd` state.
-
-Important domain concepts include:
-
-- grouping binary-log events into committed, rolled-back, incomplete, or unresolved transactions;
-- linking events to records using table identity, primary keys, composite keys, before images, and after images;
-- replaying correlated events chronologically to reconstruct record history; and
-- classifying final comparisons as exact, strong, partial, conflicting, unresolved, or unsupported.
-
-### `backend/adapters/` - Infrastructure and Hexagonal Adapters
-
-The `backend/adapters/` folder contains technology-specific implementations.
-
-In Hexagonal Architecture, adapters sit outside the application core. They implement ports defined by the application layer and translate between external systems and FactumDB's internal models.
-
-This layer may include adapters for:
-
-- MySQL utilities such as `innochecksum`, `ibd2sdi`, `ibd2sql`, and `mysqlbinlog`;
-- SQLite persistence;
-- filesystem operations;
-- SHA-256 hashing and verified working-copy creation;
-- raw output preservation; and
-- report generation.
-
-Adapters should not decide the overall workflow order and should not contain domain reasoning. Their role is to connect FactumDB to external tools and infrastructure.
-
-### `docs/` - Project Documentation
-
-The `docs/` folder contains architecture, workflow, project planning, and supporting documentation.
-
-Key files:
-
-- [docs/Architecture.md](docs/Architecture.md) explains the finalized architecture and end-to-end workflow.
-- Other documents may describe the complete project scope, work distribution, milestones, and evaluation approach.
-
-### `images/` - Diagrams and Visual Assets
-
-The `images/` folder stores architecture diagrams and other visual assets used by the documentation.
-
-The high-level architecture diagram used in this README is:
+This stages the pinned runtime, builds the application, and produces an NSIS `.exe` installer in:
 
 ```text
-images/High level 2.png
+src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/
 ```
 
-## Dependency Rules
+Open the generated installer, complete installation, and launch **FactumDB** from the Start menu. Expected startup is the sign-in window. Creating the first examiner account requires Windows Hello verification.
 
-To keep the architecture clean, follow these dependency rules:
+### Linux (Ubuntu 24.04 x86-64)
 
-1. `frontend/` should communicate through `src-tauri/`, not directly with backend internals.
-2. `src-tauri/` should act as an input adapter and should delegate business actions to backend use cases.
-3. `backend/core/application/` should coordinate use cases, pipeline flow, ports, progress, and failures.
-4. `backend/core/domain/` should contain forensic interpretation logic and should not depend on infrastructure.
-5. `backend/adapters/` should implement application ports using external tools, SQLite, filesystem access, and report generation.
+Install native Linux Node.js/npm and Rust as listed above, then install the system dependencies:
 
-## Developer Guidance
+```bash
+sudo apt update
+sudo apt install build-essential curl file libwebkit2gtk-4.1-dev \
+  libayatana-appindicator3-dev librsvg2-dev patchelf pkg-config libssl-dev \
+  libaio1t64 libnuma1 polkitd pkexec python3 python3-pip git
+```
 
-When adding new functionality, place code according to its responsibility:
+Clone the repository and build from its root:
 
-- UI screens, components, and frontend state belong in `frontend/`.
-- Tauri commands and frontend-backend bridging belong in `src-tauri/`.
-- Use-case coordination and pipeline orchestration belong in `backend/core/application/`.
-- Forensic algorithms and domain services belong in `backend/core/domain/`.
-- Tool execution, database storage, file access, and report generation belong in `backend/adapters/`.
+```bash
+git clone https://github.com/Factum-Labs/FactumDB.git
+cd FactumDB
+python3 scripts/build_linux_bundle.py
+```
 
-If a module starts mixing responsibilities, move the logic closer to the layer that owns it. For example, parsing `mysqlbinlog` output belongs in an adapter, but deciding how decoded events are grouped into transactions belongs in the domain layer.
+The script downloads and verifies pinned tools, installs locked npm dependencies, builds in a native Linux workspace under `~/.cache/factumdb/`, and checks the resulting package. It copies the `.deb` and SHA-256 file to `dist/linux/` in the checkout. Successful output ends with lines identifying the installer and native build workspace.
 
-## Final Architecture Statement
+The equivalent npm command is `npm run bundle:linux`. In WSL, use Linux `node`, `npm`, `cargo`, and `rustc`; Windows executables cannot build the Linux package.
 
-FactumDB is structured so that each part of the project has a clear architectural role. The frontend supports investigator interaction, Tauri acts as the input bridge, the application layer coordinates the forensic pipeline, the domain layer performs forensic reasoning, and adapters connect the system to external tools and infrastructure. This separation supports repeatability, testability, maintainability, and realistic implementation within the project timeline.
+#### Install and run
+
+For the current project version:
+
+```bash
+sudo apt install ./dist/linux/FactumDB_0.1.0_amd64.deb
+factumdb
+```
+
+If the version changes, use the filename printed by the build script. You can also open **FactumDB** from the desktop application menu. Expected startup is the sign-in window; a successful graphical launch does not require a particular terminal message. Initial sign-up prompts for native authentication through polkit.
+
+See [Linux bundling](docs/linux-bundle.md) for additional packaging details.
+
+### Runtime configuration
+
+Packaged builds select bundled extraction tools automatically. In **Settings**, **Use bundled tools** restores these paths after custom overrides. For custom tools compatible with your evidence, configure `innochecksum`, `ibd2sdi`, `mysqlbinlog`, the `ibd2sql` project's `main.py`, and its Python interpreter.
+
+Initial custom tool paths can also come from `FACTUMDB_INNOCHECKSUM_PATH`, `FACTUMDB_IBD2SDI_PATH`, `FACTUMDB_MYSQLBINLOG_PATH`, and `FACTUMDB_IBD2SQL_PATH`. For development, `FACTUMDB_PYTHON` selects a backend Python executable; a custom interpreter needs the dependencies in `backend/pyproject.toml` for PDF export.
+
+Cases, settings, working copies, and results are stored in Tauri's application data directory. On Ubuntu this is `~/.local/share/lk.ac.uom.factumdb/`. Original evidence remains at its source location; extraction operates on verified working copies.

@@ -21,47 +21,51 @@ The `payments` table has one column of each common type: `INT`, `VARCHAR`, `CHAR
 
 ## Creating and acquiring the evidence
 
-On the test server (MySQL 8.4 with `binlog_format=ROW`), open a MySQL session as root in one terminal:
+On a test server with no other binlog history (see `../README.md` for the root session and the paths on macOS and Ubuntu), in a root MySQL session.
 
-```bash
-sudo mysql
-```
-
-At the `mysql>` prompt, create the scenario and lock the three tables for a consistent copy:
+**1. One change to a table outside the evidence.** The case should hold one binlog event for a table whose tablespace is not part of it, to check the `SCHEMA_NOT_FOUND` warning. Recreate `finance.accounts` from scenario 3 without logging it, then log only the insert of account 104, the change scenario 3 ends with:
 
 ```sql
-SOURCE /home/user/factumdb/github/FactumDB/datasets/scenario4_types/generate.sql
+SET SESSION sql_log_bin = 0;
+SOURCE <repo>/datasets/scenario3_quotes/generate.sql
+DELETE FROM finance.accounts WHERE account_id = 104;
+SET SESSION sql_log_bin = 1;
+INSERT INTO finance.accounts VALUES (104, 'Perera, A. O''Brien', 9000, 'active');
+```
+
+**2. The scenario.** Create it and lock the three tables for a consistent copy:
+
+```sql
+SOURCE <repo>/datasets/scenario4_types/generate.sql
 FLUSH TABLES shop.payments, shop.order_items, shop.attachments FOR EXPORT;
 ```
 
 Leave that session open - the tables stay consistent only while it holds the lock. In a second terminal, copy the tablespaces:
 
 ```bash
-mkdir -p ~/factumdb/evidence/scenario4_types
-sudo cp /var/lib/mysql/shop/{payments,order_items,attachments}.ibd ~/factumdb/evidence/scenario4_types/
+mkdir -p <evidence>/scenario4_types
+cp <datadir>/shop/{payments,order_items,attachments}.ibd <evidence>/scenario4_types/
 ```
 
 Back in the first terminal, release the lock: `UNLOCK TABLES;` then `exit`. Then copy every binlog and the index, so the inventory has nothing missing:
 
 ```bash
-sudo cp /var/log/mysql/mysql-bin.[0-9]* /var/log/mysql/mysql-bin.index ~/factumdb/evidence/scenario4_types/
-sudo chown -R "$USER": ~/factumdb/evidence/scenario4_types
+cp <binlogdir>/mysql-bin.[0-9]* <binlogdir>/mysql-bin.index <evidence>/scenario4_types/
 ```
 
 ## Notes
 
-- Created on MySQL 8.4.11 (scenarios 1 to 3 were 8.4.10).
-- The server deletes binlogs older than `binlog_expire_logs_seconds` (30 days by default) and removes them from `mysql-bin.index` too. When this scenario was acquired, `mysql-bin.000001` to `000023` had already gone that way, so the index started at `000024`. An inventory can only show logs missing from what the server still remembers: logs that expired before acquisition leave no trace in it.
-- The newer binlogs and the index are readable by the `mysql` user only, so they are copied with `sudo`.
+- The reference copy was acquired on 2026-10-13 from MySQL 8.4.11 on macOS. The first copy was acquired on 2026-10-05 on Linux.
+- Step 1 recreates on purpose what the first copy had by accident: its oldest binlog still held the insert of account 104 from scenario 3, because the logs before it had expired. The server deletes binlogs older than `binlog_expire_logs_seconds` (30 days by default) and removes them from `mysql-bin.index` too, so an inventory can only show logs missing from what the server still remembers: logs that expired before acquisition leave no trace in it.
 - The session time zone is fixed to `+05:30`, so the `TIMESTAMP` values are predictable.
 - The delete is the last change, so payment 2 is likely still on the page as a delete-marked record. If purge has already removed it, that is a valid result too: the row is gone from the page and only the binlog records it.
-- `mysql-bin.000024` is also in scenario 3. That copy was taken while it was the active log; this one after the server closed it, so the two differ in MySQL's one-byte "in use" flag and have different hashes, with identical events.
+- `mysql-bin.000005` was the server's active log when it was copied, so it carries MySQL's "in use" flag (see scenario 3's notes).
 
 ## Expected results
 
-Checked against the copy acquired on 2026-10-05.
+Checked against the reference copy acquired on 2026-10-13 (hashes in `expected.json`).
 
-**Files.** The scenario's changes are all in `mysql-bin.000044`; `mysql-bin.index` lists `000024` to `000045` (22 files), and all of them were copied.
+**Files.** The scenario's changes are all in `mysql-bin.000004`, and step 1's insert of account 104 is in `000003`; `000001` and `000002` hold no row events. `mysql-bin.index` lists `000001` to `000005`, and all five were copied.
 
 **How each tool prints the same value** - the reason for decision 8 in `docs/canonical-model.md`:
 
@@ -81,7 +85,7 @@ Checked against the copy acquired on 2026-10-05.
 - `payments`: payment 2 as deleted (fee `2.000`, `paid`), two earlier versions of payment 2, payment 3 under its old key, and payment 1 as first inserted (`5000.00`, `pending`).
 - `order_items`: `(101, 1)` as deleted, and `(100, 2)` under its old key.
 
-**Transactions and warnings.** 14 committed transactions: 13 from the scenario, and one in `mysql-bin.000024` that inserted account 104 into `finance.accounts` (scenario 3). No tablespace of that table is in this evidence, so its columns cannot be named: one `SCHEMA_NOT_FOUND` warning, and the row is not stored as an event.
+**Transactions and warnings.** 14 committed transactions: 13 from the scenario, and one in `mysql-bin.000003` that inserted account 104 into `finance.accounts` (step 1). No tablespace of that table is in this evidence, so its columns cannot be named: one `SCHEMA_NOT_FOUND` warning, and the row is not stored as an event.
 
 **Records and verdicts.** Binlog coverage is complete, so values that agree are Exact. Every column of payment 2's `DELETE` before image equals its deleted remnant on the page.
 
