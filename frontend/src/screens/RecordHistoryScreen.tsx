@@ -4,6 +4,7 @@ import { useScreenContext, useScreenQuery, useNextPage, type ScreenPage } from '
 import { LoadingPanel, QueryError } from '../components/LoadingPanel';
 import { useMemo } from "react";
 import { Badge } from "../components/Badge";
+import { RuleCatalogue } from "../components/RuleCatalogue";
 import { StatusMessage } from "../components/StatusMessage";
 import { navigationButton } from "../components/buttonStyles";
 import { RESULT_TONE, type ReconResult } from "../data/types";
@@ -850,6 +851,7 @@ export function RecordHistoryScreen() {
           </nav>
         )}
       </section>
+      <div className="min-w-0 space-y-3">
       {current && loaded?.detail ? (
         <HistoryDetail
           key={`${data.case.case_id}:${object(current.record).table}:${object(current.record).id}`}
@@ -859,6 +861,8 @@ export function RecordHistoryScreen() {
       ) : (
         current || list.loading ? <LoadingPanel error={detail.error || list.error} retry={detail.error ? detail.retry : list.retry} label="Loading record history" /> : <StatusMessage>No record history selected.</StatusMessage>
       )}
+        <RuleCatalogue compact />
+      </div>
     </div>
   );
 }

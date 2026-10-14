@@ -2,6 +2,10 @@
 
 Prepared on 11 October 2026 for the finished application on **12 October 2026**. Nothing is scheduled and no AWS resources are running. Start the campaign explicitly after the application is ready. Rebuild artifacts after the final changes; today's harness archive is a preparation snapshot.
 
+Execution started on 14 October 2026 against application revision `c03a50be48ab798220db59ab78502667f67243c8`. The updated harness includes PDF test dependencies, packaged fonts/SQL/policies, synthetic scenario metadata and rule documentation. Production engine measurements use the packaged Windows interpreter/backend and the packaged Ubuntu backend. Later guests continue independent engine measurements after a workload failure so lower-memory diagnostics still cover both CPU limits.
+
+Guest artifact transfers now use the narrowly scoped EC2 role. AWS login credentials rotate after about 15 minutes, which can invalidate a signed result-upload URL before a longer test completes. `benchmarks/aws/cleanup.py` can recover full teardown from a recorded campaign after a controller interruption; it verifies project identity and stack ownership before deleting anything.
+
 ## What is ready
 
 - `benchmarks/aws/campaign.json`: seven sequential configurations, Ubuntu at 1/2/4/8 GiB and Windows Server at 2/4/8 GiB, two EC2 vCPUs each. Application process affinity compares two CPUs with one.
@@ -58,3 +62,17 @@ The local `dist/aws-campaign/campaign-state.json` contains each stack, instance,
 The independent watchdog terminates expired campaign-owned compute even if the local controller disconnects. Its role cannot terminate other project resources. **It does not delete the full stack.** Stack-wide deletion is the controller's responsibility; if the laptop stops or loses credentials, resume cleanup using AWS MCP and the recorded manifest. Terminate owned instances first, wait for disk deletion, download results, empty the private bucket (including incomplete multipart uploads), then delete only the named campaign stack and verify completion. Reconcile tagged instances, volumes, buckets, roles, profiles, rules, Lambda functions and log groups afterwards. Report leftovers explicitly; never modify existing project resources.
 
 Desktop rendering, interactive native authentication/file dialogs, real-evidence extraction/export throughput and Windows 11 compatibility still require separate finished-application workflows. This harness measures packaged backend readiness, correctness and a synthetic analysis/graph projection; it must not be presented as a complete desktop performance benchmark. RSS is sampled and can double-count shared pages across processes; short-lived child CPU use can be missed. EC2 affinity and different instance families do not reproduce physical CPU clock-speed changes.
+
+## Execution and interrupted-run recovery — 14 October 2026
+
+The current campaign uses revision `c03a50be48ab798220db59ab78502667f67243c8` plus the recorded harness corrections. The Ubuntu installer was compared against 140 backend source and asset hashes. Windows workloads use the packaged embedded Python 3.13.16 runtime; Ubuntu workloads use the packaged backend with Ubuntu 24.04's system Python. Harness dependencies include the current PDF/font requirements.
+
+Guest artifact transfers and result uploads use the disposable guest's instance role rather than URLs tied to a short-lived interactive login. Host uploads use two threads, 16 MiB multipart chunks and bounded SDK retries. The repeatability test explicitly encodes subprocess output as UTF-8 on both sides, including on Windows.
+
+`resume.py STATE` resumes exactly one recorded, running, stack-owned guest without extending its expiry. It rejects guests with commands already submitted or insufficient remaining time. `cleanup.py STATE` recovers full cleanup after an interrupted controller. Completed archives remain local. For a fresh retry campaign, `controller.py --only windows:8 ... --prior-estimated-spend AMOUNT` selects configurations and counts a conservative previous-spend reservation against the USD 16 scheduling limit. These commands execute real AWS operations under the same existing authorization and budget.
+
+`report.py STATE [STATE ...] --output DIRECTORY` combines saved results offline. Keep setup failures in the report; they do not establish application memory requirements. The final report must distinguish Windows Server 2022 from Windows 11 and backend measurements from desktop UI testing.
+
+The full source suite timed out after five minutes on Windows 2 GiB and Ubuntu 1 GiB, while it passed on the corresponding 4 GiB and 8 GiB guests. A focused retry uses `--skip-low-memory-correctness` to keep source-to-package and installed backend checks on these small guests and measure their workload capacity. The retry report marks that the full source suite was skipped there. The initial timeouts remain recorded and should not be mistaken for proof of an application memory failure.
+
+The 14 October campaign finished with all disposable stacks deleted. The final combined report is `dist/aws-benchmark-results-20261014/benchmark-report.md`, with machine-readable JSON/CSV beside it. A separate `resource-inventory.json` records the authenticated AWS inventory and Free Tier API snapshot after cleanup. Following the user's request to stop repetitions, the Windows 2 GiB retry was stopped after its already completed results were uploaded; the Ubuntu 1 GiB retry ran one execution per workload size and CPU limit. Its final attempt was cancelled after out-of-memory events and an overlong response, so only observed early results and the kernel log are available for that guest. Do not infer unrecorded results from that missing archive.

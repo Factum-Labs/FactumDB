@@ -3,6 +3,7 @@
 Default invocation is offline preparation. Only --execute creates AWS resources.
 """
 import argparse
+import base64
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -76,20 +77,28 @@ def zip_resources(source, target):
                     archive.write(path, 'backend/' + str(path.relative_to(backend)))
 
 
-def commands(os_name, harness_url, native_url, config, results_url, expires):
+def commands(os_name, bucket, config, expires, skip_correctness=False):
     """Commands run only on the newly created guest through SSM."""
+    correctness_flag = ' --skip-correctness' if skip_correctness else ''
     if os_name == 'ubuntu':
         return [
             'set -eu', 'mkdir -p /opt/factumdb-benchmark', 'cd /opt/factumdb-benchmark',
             'apt-get update -qq', 'DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv unzip libaio1t64 libnuma1',
-            f'curl --fail --location {json.dumps(harness_url)} --output harness.zip',
-            'unzip -q -o harness.zip', f'curl --fail --location {json.dumps(native_url)} --output application.deb',
-            'python3 -m venv .venv', '.venv/bin/python -m pip install -r benchmarks/aws/requirements.txt',
+            'python3 -m venv .venv', '.venv/bin/python -m pip install boto3==1.43.111',
+            ".venv/bin/python -c 'import boto3; s=boto3.client(\"s3\",region_name=\"ap-southeast-2\"); "
+            f"s.download_file(\"{bucket}\",\"input/harness.zip\",\"harness.zip\"); "
+            f"s.download_file(\"{bucket}\",\"input/application\",\"application.deb\")'",
+            'unzip -q -o harness.zip', 'mkdir -p .bundle-cache',
+            '.venv/bin/python -m pip install -r benchmarks/aws/requirements.txt',
             # Preserve output even when the tests fail; the SSM command itself records the failure code.
-            'set +e', f'.venv/bin/python benchmarks/aws/guest.py --resources application.deb --output results --deadline-utc {json.dumps(expires)}',
+            'set +e', f'.venv/bin/python benchmarks/aws/guest.py --resources application.deb --output results --deadline-utc {json.dumps(expires)}{correctness_flag}',
             'result=$?',
-            f'.venv/bin/python benchmarks/aws/upload_results.py {json.dumps(results_url)} || exit 90',
+            f'.venv/bin/python benchmarks/aws/upload_results.py --bucket {bucket} || exit 90',
             'cat results/summary.json', 'exit "$result"']
+    transfer = ("import boto3; s=boto3.client('s3',region_name='ap-southeast-2'); "
+                f"s.download_file('{bucket}','input/harness.zip','harness.zip'); "
+                f"s.download_file('{bucket}','input/application','application.zip')")
+    encoded_transfer = base64.b64encode(transfer.encode()).decode()
     return [
         "$ErrorActionPreference = 'Stop'", "$ProgressPreference = 'SilentlyContinue'",
         r"New-Item -ItemType Directory -Force C:\FactumDBBenchmark | Out-Null", r"Set-Location C:\FactumDBBenchmark",
@@ -97,22 +106,34 @@ def commands(os_name, harness_url, native_url, config, results_url, expires):
         "Invoke-WebRequest https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe -OutFile python-installer.exe",
         r"if ((Get-AuthenticodeSignature .\python-installer.exe).Status -ne 'Valid') { throw 'Python installer signature invalid' }",
         r"Start-Process .\python-installer.exe -ArgumentList '/quiet InstallAllUsers=1 PrependPath=1 Include_test=0' -Wait -WindowStyle Hidden",
-        f"Invoke-WebRequest '{harness_url}' -OutFile harness.zip", "Expand-Archive harness.zip -DestinationPath . -Force",
-        f"Invoke-WebRequest '{native_url}' -OutFile application.zip", "Expand-Archive application.zip -DestinationPath application -Force",
+        r"$python = 'C:\Program Files\Python311\python.exe'",
+        "& $python -m pip install boto3==1.43.111",
+        "if ($LASTEXITCODE -ne 0) { throw 'Transfer SDK installation failed' }",
+        f'& $python -c "import base64; exec(base64.b64decode(\'{encoded_transfer}\'))"',
+        "if ($LASTEXITCODE -ne 0) { throw 'Artifact transfer failed' }",
+        "Expand-Archive harness.zip -DestinationPath . -Force",
+        "New-Item -ItemType Directory -Force .bundle-cache | Out-Null",
+        "Expand-Archive application.zip -DestinationPath application -Force",
         r"$python = 'C:\Program Files\Python311\python.exe'",
         "& $python -m pip install -r benchmarks/aws/requirements.txt",
         "if ($LASTEXITCODE -ne 0) { throw 'Harness dependencies failed' }",
-        f"& $python benchmarks/aws/guest.py --resources application --output results --deadline-utc '{expires}'",
+        f"& $python benchmarks/aws/guest.py --resources application --output results --deadline-utc '{expires}'{correctness_flag}",
         "$result = $LASTEXITCODE",
-        f"& $python benchmarks/aws/upload_results.py '{results_url}'",
+        f"& $python benchmarks/aws/upload_results.py --bucket {bucket}",
         "if ($LASTEXITCODE -ne 0) { throw 'Result archive upload failed' }",
         "Get-Content results/summary.json -Raw", "exit $result"]
 
 
 def execute(options):
     import boto3
+    from boto3.s3.transfer import TransferConfig
     from botocore.config import Config
     config = json.loads((ROOT / 'benchmarks/aws/campaign.json').read_text(encoding='utf-8'))
+    if options.only:
+        selected = set(options.only)
+        config['matrix'] = [row for row in config['matrix'] if f'{row["os"]}:{row["ram_gib"]}' in selected]
+        if not config['matrix']:
+            raise ValueError('No configurations selected')
     if config['region'] != 'ap-southeast-2' or config['budget_usd'] != 20:
         raise ValueError('Region/budget differs from the authorized campaign')
     if not options.ubuntu_deb or not options.windows_resources:
@@ -126,7 +147,10 @@ def execute(options):
     package(output)
     zip_resources(options.windows_resources, output / 'windows-resources.zip')
     session = boto3.Session(profile_name=config['profile'], region_name=config['region'])
-    settings = Config(retries={'mode': 'standard', 'total_max_attempts': 3}, connect_timeout=10, read_timeout=30)
+    settings = Config(retries={'mode': 'standard', 'total_max_attempts': 8}, connect_timeout=10, read_timeout=60,
+                      request_checksum_calculation='when_required', response_checksum_validation='when_required')
+    transfer_settings = TransferConfig(max_concurrency=2, multipart_chunksize=16 * 1024 * 1024,
+                                       preferred_transfer_client='classic')
     clients = {name: session.client(name, config=settings) for name in
                ('ec2', 's3', 'ssm', 'lambda', 'cloudformation', 'sts', 'service-quotas')}
     ec2, s3, ssm, lam, cfn = [clients[n] for n in ('ec2', 's3', 'ssm', 'lambda', 'cloudformation')]
@@ -158,6 +182,12 @@ def execute(options):
         prices.append({'instance': row['instance_type'], 'os': os_name,
                        'on_demand': [{'unit': 'Hrs', 'usd': rates[0]['pricePerUnit']['USD']}]})
     estimate = forecast(config, {'prices': prices})
+    from decimal import Decimal
+    prior = Decimal(str(options.prior_estimated_spend))
+    if prior < 0 or prior + Decimal(estimate['forecast_usd']) > Decimal(config['scheduling_limit_usd']):
+        raise ValueError('Combined prior and planned spend exceeds the USD 16 scheduling limit')
+    estimate['prior_estimated_spend_usd'] = str(prior)
+    estimate['combined_forecast_usd'] = str(prior + Decimal(estimate['forecast_usd']))
     template = json.dumps(build())
     cfn.validate_template(TemplateBody=template)
     subnets = [s for page in ec2.get_paginator('describe_subnets').paginate()
@@ -228,17 +258,16 @@ def execute(options):
                 raise RuntimeError(f'Watchdog probe failed: {response}')
             ec2.describe_instances(InstanceIds=[instance])
             wait_until(lambda: ssm.describe_instance_information(Filters=[{'Key':'InstanceIds','Values':[instance]}])['InstanceInformationList'], 600)
-            s3.upload_file(str(output / 'harness.zip'), bucket, 'input/harness.zip')
+            s3.upload_file(str(output / 'harness.zip'), bucket, 'input/harness.zip', Config=transfer_settings)
             native = options.ubuntu_deb if row['os'] == 'ubuntu' else output / 'windows-resources.zip'
-            s3.upload_file(str(native), bucket, 'input/application')
-            urls = [s3.generate_presigned_url('get_object', Params={'Bucket':bucket,'Key':key}, ExpiresIn=5400)
-                    for key in ('input/harness.zip','input/application')]
-            results_url = s3.generate_presigned_url('put_object',
-                Params={'Bucket':bucket,'Key':'results/guest.zip'}, ExpiresIn=5400)
+            s3.upload_file(str(native), bucket, 'input/application', Config=transfer_settings)
             run['native_sha256'] = hashlib.sha256(native.read_bytes()).hexdigest()
+            skip_correctness = options.skip_low_memory_correctness and row['ram_gib'] <= 2
+            if skip_correctness:
+                run['correctness_note'] = 'Full source suite skipped after successful larger-guest verification; package checks retained.'
             send = ssm.send_command(InstanceIds=[instance],
                 DocumentName='AWS-RunPowerShellScript' if row['os']=='windows' else 'AWS-RunShellScript',
-                Parameters={'commands': commands(row['os'], *urls, config, results_url, expires.isoformat()), 'executionTimeout':['4500']},
+                Parameters={'commands': commands(row['os'], bucket, config, expires.isoformat(), skip_correctness), 'executionTimeout':['4500']},
                 TimeoutSeconds=600, OutputS3BucketName=bucket, OutputS3KeyPrefix='results/ssm')['Command']
             run['command_id'] = send['CommandId']
             run['status'] = 'running'
@@ -291,6 +320,11 @@ def main():
     parser.add_argument('--ubuntu-deb', type=Path)
     parser.add_argument('--windows-resources', type=Path)
     parser.add_argument('--output', type=Path, default=ROOT / 'dist/aws-campaign')
+    parser.add_argument('--only', action='append', choices=['ubuntu:1','ubuntu:2','ubuntu:4','ubuntu:8','windows:2','windows:4','windows:8'])
+    parser.add_argument('--prior-estimated-spend',type=float,default=0,
+                        help='Conservative prior campaign spend reservation, counted against USD 16')
+    parser.add_argument('--skip-low-memory-correctness', action='store_true',
+                        help='Keep package checks but skip full source suite on <=2 GiB retry guests')
     options = parser.parse_args()
     if not options.execute:
         subprocess.run([sys.executable, str(Path(__file__).with_name('prepare.py')), '--output', str(options.output)], check=True)

@@ -16,6 +16,7 @@ introduction and the architecture decisions - is written by hand and preserved.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -28,6 +29,7 @@ BEGIN = "<!-- BEGIN GENERATED RULES -->"
 END = "<!-- END GENERATED RULES -->"
 
 DOC_PATH = Path(__file__).resolve().parents[2] / "docs" / "correlation-rules.md"
+CATALOGUE_PATH = Path(__file__).resolve().parents[2] / "frontend" / "src" / "data" / "ruleCatalogue.ts"
 
 SERVICE_TITLES = {
     "values": "Value comparison",
@@ -145,6 +147,20 @@ def splice(existing: str, generated: str) -> str:
     return existing[:start] + generated + existing[end:]
 
 
+def render_catalogue() -> str:
+    entries = [
+        dict(id=d.id, category=SERVICE_TITLES[d.service], description=d.title,
+             result=d.result.value if d.result else None)
+        for service in SERVICES for d in RULES.values() if d.service == service
+    ]
+    return (
+        "// Generated from core.domain.rules; update with backend/tools/render_rules_doc.py --write.\n"
+        "import type { ReconResult } from './types'\n\n"
+        "export const ruleCatalogue: readonly { id: string; category: string; description: string; result: ReconResult | null }[] = "
+        + json.dumps(entries, ensure_ascii=False, indent=2) + "\n"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="fail if the doc is stale")
@@ -153,14 +169,21 @@ def main() -> int:
 
     existing = DOC_PATH.read_text(encoding="utf-8")
     updated = splice(existing, render())
+    catalogue = render_catalogue()
 
     if args.write:
         DOC_PATH.write_text(updated, encoding="utf-8", newline="\n")
+        CATALOGUE_PATH.write_text(catalogue, encoding="utf-8", newline="\n")
         print(f"wrote {DOC_PATH}")
+        print(f"wrote {CATALOGUE_PATH}")
         return 0
 
     if updated != existing:
         print("docs/correlation-rules.md is stale; run tools/render_rules_doc.py --write")
+        return 1
+
+    if not CATALOGUE_PATH.exists() or CATALOGUE_PATH.read_text(encoding="utf-8") != catalogue:
+        print("frontend rule catalogue is stale; run tools/render_rules_doc.py --write")
         return 1
 
     print("docs/correlation-rules.md is up to date")

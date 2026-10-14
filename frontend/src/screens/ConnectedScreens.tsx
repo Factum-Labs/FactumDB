@@ -12,6 +12,7 @@ import { useTablePage } from '../lib/useTablePage'
 import { useScreenQuery, useNextPage, type ScreenPage } from '../lib/useScreenQuery'
 import { LoadingPanel, QueryError } from '../components/LoadingPanel'
 import { CoverageDetails } from '../components/CoverageDetails'
+import { RuleCatalogue } from '../components/RuleCatalogue'
 import { useRevealRow } from '../lib/useRevealRow'
 import { RESULT_TONE, type CorrelationEdge, type ReconResult, type ReconRow, type RecordRef, type Transaction, type TxStatus, type EventType } from '../data/types'
 
@@ -202,7 +203,8 @@ function RecordComparisons({ recordId, comparisons, data }: { recordId: string; 
   const query = useScreenQuery<ScreenPage>('get_screen_page', payload, 'recon', !legacy)
   useNextPage(query.value, payload, 'recon')
   const fields = legacy ? comparisons : query.value?.items ?? []
-  const loaded = useAnalysisDetail(data.case.case_id, 'comparison', detail ?? undefined, !legacy || data.analysis.reconciliation?.details_deferred === true, detail ? String(detail.field) : undefined)
+  const sourceComparison = detail ?? fields[0]
+  const loaded = useAnalysisDetail(data.case.case_id, 'comparison', sourceComparison, !legacy || data.analysis.reconciliation?.details_deferred === true, sourceComparison ? String(sourceComparison.field) : undefined)
   return <div className="space-y-3">
     <QueryError error={query.error || loaded.error} retry={query.error ? query.retry : loaded.retry} />
     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -283,6 +285,7 @@ export function ReconciliationScreen() {
     {data?.analysis.reconciliation?.coverage && <Detail value={data.analysis.reconciliation.coverage} title="Coverage and limits" />}
     {!legacy && data && <><Button onClick={() => setShowGraphs(!showGraphs)}>{showGraphs ? 'Hide' : 'Show'} correlation graphs</Button>{showGraphs && <ProgressiveGraphs data={data} />}</>}
     {!legacy && <CoverageDetails kind="reconciliation" screen="recon" title="Coverage and limits" />}
+    <RuleCatalogue />
   </div>
 }
 

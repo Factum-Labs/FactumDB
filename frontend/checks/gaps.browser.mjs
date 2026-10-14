@@ -91,7 +91,7 @@ try {
   await waitFor(`document.body.textContent.includes('Decode warning 100')`)
   assert.equal(await evaluate(`document.body.textContent.includes('column:status')`), true)
   await click(next('findings groups pagination'))
-  await waitFor(`!document.body.textContent.includes('Values agree under limited coverage')`)
+  await waitFor(`!Array.from(document.querySelectorAll('td')).some(cell => !cell.closest('details') && cell.textContent.includes('Values agree under limited coverage'))`)
   await click(button('Other screen'))
   await click(button('Gaps screen'))
   await waitFor(`(${nav('findings groups pagination')})?.textContent.includes('Page 2 of 2')`)

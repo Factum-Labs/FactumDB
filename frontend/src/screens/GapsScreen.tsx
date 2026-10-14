@@ -10,6 +10,7 @@ import { useApp } from '../store'
 import { useScreenQuery, useNextPage, type ScreenPage } from '../lib/useScreenQuery'
 import { LoadingPanel, QueryError } from '../components/LoadingPanel'
 import { CoverageDetails } from '../components/CoverageDetails'
+import { RuleCatalogue } from '../components/RuleCatalogue'
 
 type Column<T> = { title: string; render: (value: T) => ReactNode }
 const cell = 'px-3 py-2 align-top'
@@ -155,5 +156,6 @@ export function GapsScreen() {
     ]} expand={group => <WarningEntries group={group} data={data} />} />}
     {data.analysis.grouping?.coverage && <details className="rounded-md border border-line bg-panel p-4"><summary className="cursor-pointer text-xs font-medium">Binary log coverage</summary><pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">{JSON.stringify(data.analysis.grouping.coverage, null, 2)}</pre></details>}
     {!legacy && <CoverageDetails kind="grouping" screen="gaps" title="Binary log coverage" />}
+    <RuleCatalogue />
   </div>
 }

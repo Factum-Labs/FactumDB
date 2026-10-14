@@ -8,6 +8,7 @@ import platform
 import subprocess
 import sys
 import time
+import tempfile
 
 import psutil
 
@@ -88,6 +89,8 @@ def main():
     parser.add_argument('--config', type=Path, default=ROOT / 'benchmarks/aws/campaign.json')
     parser.add_argument('--output', type=Path, default=ROOT / 'dist/benchmark-results')
     parser.add_argument('--smoke', action='store_true', help='Tiny harness check; not a requirements benchmark')
+    parser.add_argument('--skip-correctness', action='store_true',
+                        help='Skip full source suite when separately verified on larger guests; retain package checks')
     parser.add_argument('--resources', type=Path, help='Fresh packaged application resources or Ubuntu .deb')
     parser.add_argument('--deadline-utc', help='Absolute VM expiration; leave two minutes for uploading results')
     options = parser.parse_args()
@@ -96,6 +99,10 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     results = []
     fingerprints = {}
+    workload_failures = []
+    extracted = None
+    workload_python = sys.executable
+    packaged_backend = None
     report = {'started_utc': datetime.now(timezone.utc).isoformat(), 'platform': platform.platform(),
               'python': sys.version, 'cpu_description': platform.processor(),
               'logical_cpus': psutil.cpu_count(), 'ram_bytes': psutil.virtual_memory().total,
@@ -126,12 +133,28 @@ def main():
 
     try:
         if not options.smoke:
-            execute('correctness', [sys.executable, '-m', 'pytest', '-q', '--strict-markers'], ROOT / 'backend')
+            if options.skip_correctness:
+                report['correctness_note'] = 'Full source suite skipped for this guest; package checks still run.'
+            else:
+                execute('correctness', [sys.executable, '-m', 'pytest', '-q', '--strict-markers'], ROOT / 'backend')
             if options.resources is None:
                 raise ValueError('Full run requires fresh --resources; source-only runs cannot establish packaged requirements')
             execute('release-source-match', [sys.executable, str(ROOT / 'benchmarks/aws/verify_release.py'), str(options.resources)])
             script = 'check_windows_bundle.py' if os.name == 'nt' else 'check_linux_bundle.py'
             execute('packaged-backend', [sys.executable, str(ROOT / 'scripts' / script), str(options.resources)])
+            if os.name == 'nt':
+                workload_python = str(options.resources.resolve() / 'runtime/windows/python/python.exe')
+                packaged_backend = options.resources.resolve() / 'backend'
+            else:
+                extracted = tempfile.TemporaryDirectory(prefix='factumdb-measured-release-')
+                subprocess.run(['dpkg-deb', '-x', str(options.resources), extracted.name], check=True)
+                matches = list(Path(extracted.name).glob('usr/lib/*/runtime/linux/manifest.json'))
+                if len(matches) != 1:
+                    raise ValueError('Unexpected Linux runtime layout')
+                packaged_backend = matches[0].parents[2] / 'backend'
+                workload_python = '/usr/bin/python3'
+            report['measured_interpreter'] = workload_python
+            report['measured_backend'] = str(packaged_backend)
         sizes = [10] if options.smoke else config['sizes']
         limits = [1] if options.smoke else config['cpu_limits']
         for cpus in limits:
@@ -139,7 +162,14 @@ def main():
                 iterations = 1 if options.smoke else config['warmups'] + config['repetitions']
                 for iteration in range(iterations):
                     name = f'engine-{size}-cpu{cpus}-run{iteration}'
-                    execute(name, [sys.executable, str(ROOT / 'benchmarks/aws/workload.py'), '--rows', str(size)], cpus=cpus)
+                    command = [workload_python, str(ROOT / 'benchmarks/aws/workload.py'), '--rows', str(size)]
+                    if packaged_backend:
+                        command += ['--backend', str(packaged_backend)]
+                    try:
+                        execute(name, command, cpus=cpus)
+                    except RuntimeError as error:
+                        workload_failures.append({'name': name, 'error': str(error)})
+                        continue
                     result = results[-1]
                     result['warmup'] = not options.smoke and iteration < config['warmups']
                     result['workload'] = json.loads((output / f'{name}.stdout').read_text(encoding='utf-8'))
@@ -147,11 +177,15 @@ def main():
                     if size in fingerprints and fingerprints[size] != digest:
                         raise RuntimeError(f'Non-repeatable output for {size} rows')
                     fingerprints[size] = digest
-        report['status'] = 'passed'
+        report['status'] = 'partial' if workload_failures else 'passed'
+        if workload_failures:
+            report['workload_failures'] = workload_failures
     except Exception as error:
         report['status'] = 'failed'
         report['error'] = str(error)
     finally:
+        if extracted:
+            extracted.cleanup()
         report['finished_utc'] = datetime.now(timezone.utc).isoformat()
         (output / 'summary.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     print(json.dumps({'status': report['status'], 'summary': str(output / 'summary.json')}))
