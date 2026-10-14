@@ -73,6 +73,18 @@ def test_relative_paths_blank_lines_and_crlf_are_handled(tmp_path) -> None:
     assert MysqlBinlogIndexAdapter().read(str(path)) == ("mysql-bin.000001", "mysql-bin.000002")
 
 
+def test_windows_server_paths_become_file_names_on_any_system(tmp_path) -> None:
+    """An index from a Windows server uses backslashes. Read on Linux or macOS,
+    those paths were kept whole, and every listed log looked missing."""
+    path = tmp_path / "mysql-bin.index"
+    path.write_bytes(
+        b"C:\\ProgramData\\MySQL\\Data\\mysql-bin.000001\r\n"
+        b"C:\\ProgramData\\MySQL\\Data\\mysql-bin.000002\r\n"
+    )
+
+    assert MysqlBinlogIndexAdapter().read(str(path)) == ("mysql-bin.000001", "mysql-bin.000002")
+
+
 def test_a_log_listed_twice_is_refused(tmp_path) -> None:
     """MySQL never writes that, so the file was edited or damaged."""
     path = tmp_path / "mysql-bin.index"
