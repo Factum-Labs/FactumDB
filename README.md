@@ -8,6 +8,8 @@ A tablespace shows physical records, while binary logs describe changes over tim
 
 The application is intended for digital forensic investigators, researchers, and students. The packaged utilities target MySQL 8.4; compatibility with other evidence versions depends on the selected utilities and evidence format. Analysis runs locally without a live MySQL server or AWS deployment.
 
+For instructions on using the application, see the [FactumDB User Guide (PDF)](docs/FactumDB_User_Guide.pdf).
+
 ## 2. Features
 
 - **Local examiner accounts:** sign-up with native device verification, password sign-in, session locking, and examiner-scoped case access.
