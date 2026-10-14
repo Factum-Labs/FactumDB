@@ -1,5 +1,7 @@
 # Test datasets
 
+- [Five-minute evaluation demo](demo_500/DEMO_GUIDE.md): 500 starting rows,
+  real MySQL evidence, verified findings and a timed presentation script.
 - [Attack evidence lab](attack_lab/README.md): five simplified attack subjects and
   one clean control, with generated MySQL binlogs, `.ibd` tablespaces, exact
   expected-findings checklists, acquisition manifests and reproducible scripts.

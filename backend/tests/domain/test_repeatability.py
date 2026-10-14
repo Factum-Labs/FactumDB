@@ -176,8 +176,9 @@ def digest_in_subprocess(dataset_id: str, hash_seed: str) -> str:
         [sys.executable, "-c", DIGEST_SCRIPT % (str(BACKEND_ROOT), dataset_id)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         cwd=BACKEND_ROOT,
-        env={"PYTHONHASHSEED": hash_seed, "PATH": ""},
+        env={"PYTHONHASHSEED": hash_seed, "PYTHONUTF8": "1", "PATH": ""},
         check=False,
     )
     assert completed.returncode == 0, completed.stderr

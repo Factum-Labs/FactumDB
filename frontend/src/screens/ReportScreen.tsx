@@ -37,7 +37,7 @@ export function ReportScreen() {
   const [path, setPath] = useState('')
   const [redacted, setRedacted] = useState(true)
   const [definitions, setDefinitions] = useState<ExportDefinition[]>([])
-  const [zoom, setZoom] = useState(1)
+  const [zoom, setZoom] = useState(0)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [working, setWorking] = useState(false)
   const [progress, setProgress] = useState<ReportProgressDetails>({ label: '', amount: '' })
@@ -151,6 +151,12 @@ export function ReportScreen() {
   }
   const turnPage = async (page: number) => {
     if (!ready || !preview) return
+    if (preview.format === 'PDF') {
+      const updated = { ...preview, page }
+      previews.current.set(requestKey, { value: updated, at: Date.now() })
+      setPreview(updated)
+      return
+    }
     const ticket = ++generation.current
     setWorking(true)
     try {
@@ -267,12 +273,13 @@ export function ReportScreen() {
           <label className="mb-3 flex items-center gap-2 text-xs">Zoom
             <select value={zoom} onChange={event => setZoom(Number(event.target.value))}
               className="rounded border border-line-input bg-panel p-1">
-              {[0.75, 1, 1.25, 1.5].map(value => <option key={value} value={value}>{value * 100}%</option>)}
+              <option value={0}>Fit page</option>
+              {[0.5, 0.75, 1, 1.25, 1.5].map(value => <option key={value} value={value}>{value * 100}%</option>)}
             </select>
           </label>
           <Suspense fallback={<p role="status">Loading PDF viewer?</p>}>
             <PdfPreview token={preview.preview_token} size={preview.size_bytes} page={preview.page}
-              zoom={zoom} onError={error => { setPreview(null); state.setError(error) }} />
+              zoom={zoom} onPageChange={page => { void turnPage(page) }} onError={error => { setPreview(null); state.setError(error) }} />
           </Suspense>
         </> : <div data-testid="export-preview-content" className="space-y-3 text-sm">
           <h3 className="font-semibold">Full case JSON</h3>

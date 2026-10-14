@@ -73,7 +73,7 @@ useApp.setState({ user: { username: 'Examiner' }, ready: true, authChecked: true
   settings: { workspace: '', preferences: defaultPreferences, tools: { innochecksum_path: '', ibd2sdi_path: '', ibd2sql_path: '', mysqlbinlog_path: '', python_path: '', include_deleted: false } },
 })
 createRoot(document.getElementById('root')!).render(<App />)
-const visible = <T extends Element>(selector: string) => [...document.querySelectorAll<T>(selector)].filter(el => !el.closest('[hidden]'))
+const visible = <T extends Element>(selector: string) => [...document.querySelectorAll<T>(selector)].filter(el => !el.closest('[hidden]') && !el.closest('details:not([open])') && el.getClientRects().length > 0)
 const button = (label: string) => { const found = visible<HTMLButtonElement>('button').find(el => el.textContent?.replace(/[▴▾▲▼‹›]/g, '').trim() === label); assert(found, `Missing button ${label}`); return found! }
 async function until(condition: () => boolean) {
   const start = Date.now()
@@ -112,6 +112,12 @@ Object.assign(window, { runCasePreviewChecks: async () => {
   assert(visible<HTMLTextAreaElement>('textarea')[0] === textarea && textarea.value === 'Unsaved edits', 'Navigation preserves the notes editor')
   await useApp.getState().refreshSelected()
   assert(visible<HTMLTextAreaElement>('textarea')[0] === textarea && textarea.value === 'Unsaved edits', 'Refresh preserves unsaved notes')
+  const selectedCase = useApp.getState()
+  button('Cases').click(); await wait(30)
+  assert(useApp.getState().activeCaseId === selectedCase.activeCaseId && useApp.getState().data === selectedCase.data
+    && useApp.getState().caseOpening === selectedCase.caseOpening, 'Returning to Cases preserves the selected case and loaded data')
+  button('Evidence').click(); await wait(30)
+  assert(visible<HTMLTextAreaElement>('textarea')[0] === textarea && textarea.value === 'Unsaved edits', 'Returning through Cases preserves the notes editor')
   button('Reconciliation').click()
   await until(() => visible('tbody tr').length === 100)
   assert(!calls.some(c => c.kind === 'comparisons'), 'Comparisons are deferred')
@@ -148,6 +154,13 @@ Object.assign(window, { runCasePreviewChecks: async () => {
   await until(()=>!active && !visible('[role=alert]').length)
   assert(!calls.some(c => c.command === 'get_case_data'), 'No screen triggers a full-case read')
   assert(maximum === 1, 'IPC requests share one lane')
+  const previousOpening = useApp.getState().caseOpening
+  button('Cases').click(); await wait(30)
+  assert(useApp.getState().activeCaseId === 'case-a', 'Cases keeps the old selection until View is clicked')
+  button('View').click()
+  await until(() => visible('textarea').length === 1 && !active)
+  assert(useApp.getState().caseOpening === previousOpening + 1, 'View starts a fresh case view')
+  assert(visible<HTMLTextAreaElement>('textarea')[0] !== textarea && visible<HTMLTextAreaElement>('textarea')[0].value === 'Saved notes', 'View replaces the previous case view and its unsaved editor')
   // Reopening an already completed saved case automatically prepares both reports.
   savedComplete = true; revision = 'saved-complete'; reportSteps.clear()
   await useApp.getState().refreshSelected()

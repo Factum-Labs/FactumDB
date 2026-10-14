@@ -183,8 +183,15 @@ Object.assign(window, { runHistoryChecks: async () => {
   await waitFor(() => records().length === 100 && useApp.getState().selectedRecord === 'accounts:100')
   assert(document.querySelector('select')?.value === 'credit.accounts', 'History filter lost within the same opening')
   assert(document.querySelector('[data-testid="table-page"]')?.textContent === '1', 'Table page lost within the same opening')
+  const selectedCase = useApp.getState()
   useApp.getState().go('cases')
-  assert(useApp.getState().activeCaseId === null && useApp.getState().data === null, 'Cases navigation did not close the case')
+  assert(useApp.getState().activeCaseId === selectedCase.activeCaseId && useApp.getState().data === selectedCase.data
+    && useApp.getState().caseOpening === selectedCase.caseOpening, 'Cases navigation did not preserve the case')
+  await waitFor(() => document.body.textContent === 'Other screen')
+  useApp.getState().go('record')
+  await waitFor(() => records().length === 100 && useApp.getState().selectedRecord === 'accounts:100')
+  assert(document.querySelector('select')?.value === 'credit.accounts', 'History filter lost after Cases navigation')
+  assert(document.querySelector('[data-testid="table-page"]')?.textContent === '1', 'Table page lost after Cases navigation')
   await open(data.case.case_id)
   button('Next').click()
   button('Probe next').click()
@@ -197,7 +204,7 @@ Object.assign(window, { runHistoryChecks: async () => {
   button('Next').click()
   await waitFor(() => useApp.getState().selectedRecord === 'accounts:100')
   await open(data.case.case_id)
-  return `PASS: cached navigation (${cachedNavigationMs.toFixed(1)} ms), filtering, stale responses, refresh, lock/unmount, background failure recovery, state retained within an opening, reset on close/reopen and A/B/A switching.`
+  return `PASS: cached navigation (${cachedNavigationMs.toFixed(1)} ms), filtering, stale responses, refresh, lock/unmount, background failure recovery, state retained through Cases navigation, reset on explicit reopening and A/B/A switching.`
 } })
 Object.assign(window, { loadLongHistoryPage: async () => {
   const started = performance.now()

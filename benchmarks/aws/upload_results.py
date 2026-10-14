@@ -9,7 +9,8 @@ import zipfile
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('url')
+    parser.add_argument('url', nargs='?')
+    parser.add_argument('--bucket')
     parser.add_argument('--directory', type=Path, default=Path('results'))
     options = parser.parse_args()
     target = options.directory.with_suffix('.zip')
@@ -17,6 +18,12 @@ def main():
         for path in options.directory.rglob('*'):
             if path.is_file():
                 archive.write(path, str(path.relative_to(options.directory)))
+    if options.bucket:
+        import boto3
+        boto3.client('s3', region_name='ap-southeast-2').upload_file(str(target), options.bucket, 'results/guest.zip')
+        return
+    if not options.url:
+        parser.error('Provide --bucket or a signed URL')
     url = urlsplit(options.url)
     if url.scheme != 'https' or not url.hostname or not url.hostname.endswith('.amazonaws.com'):
         raise ValueError('Expected an HTTPS S3 URL')

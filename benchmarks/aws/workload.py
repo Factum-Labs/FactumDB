@@ -61,9 +61,12 @@ def run(size):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--rows', type=int, required=True)
+    parser.add_argument('--backend', type=Path)
     options = parser.parse_args()
     if not 1 <= options.rows <= 100000:
         parser.error('Rows must be between 1 and 100000')
+    if options.backend:
+        sys.path.insert(0, str(options.backend.resolve()))
     print(json.dumps(run(options.rows)))
 
 

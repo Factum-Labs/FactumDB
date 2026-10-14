@@ -33,10 +33,14 @@ def forecast(config, prices):
 
 def package(output):
     tracked = subprocess.check_output(['git', 'ls-files', '-co', '--exclude-standard', '-z', '--', 'backend'], cwd=ROOT).decode().split('\0')
-    paths = [ROOT / p for p in tracked if p and (Path(p).suffix in ('.py', '.toml')
+    paths = [ROOT / p for p in tracked if p and (Path(p).suffix in ('.py', '.toml', '.sql', '.ttf', '.otf', '.policy', '.txt', '.md')
              or (p.startswith('backend/tests/golden/') and Path(p).suffix == '.json'))
              and p != 'backend/context.md']
     paths += list((ROOT / 'benchmarks/aws').glob('*.py'))
+    # Only tracked synthetic scenario metadata; never upload ignored .ibd/binlog evidence.
+    fixture_paths = subprocess.check_output(['git', 'ls-files', '-z', '--', 'datasets/scenario*'], cwd=ROOT).decode().split('\0')
+    paths += [ROOT / p for p in fixture_paths if p and Path(p).suffix in ('.json', '.sql', '.md')]
+    paths += [ROOT / 'docs/correlation-rules.md']
     paths += [ROOT / 'benchmarks/aws/campaign.json', ROOT / 'benchmarks/aws/requirements.txt',
               ROOT / 'scripts/check_windows_bundle.py', ROOT / 'scripts/check_linux_bundle.py']
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()

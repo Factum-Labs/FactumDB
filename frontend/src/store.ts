@@ -186,7 +186,6 @@ export const useApp = create<AppState>((set, get) => {
     recordNavigation: 0, reconciliationNavigation: 0, selectedRecordTable: '', selectedTx: '', selectedRecord: '', selectedTool: '', reportFormat: 'JSON', expandedGroups: [],
     go: screen => {
       if (get().busy && screen === 'cases') return
-      if (screen === 'cases' && get().activeCaseId) releaseSelected()
       set({ screen })
     },
     setError: error => {

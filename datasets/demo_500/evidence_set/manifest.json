@@ -1,0 +1,119 @@
+{
+  "database": "demo_market",
+  "baseline_rows": {
+    "customers": 80,
+    "orders": 80,
+    "order_lines": 160,
+    "payments": 160,
+    "staff": 20
+  },
+  "source_live_rows": {
+    "customers": 80,
+    "orders": 81,
+    "order_lines": 160,
+    "payments": 158,
+    "staff": 20
+  },
+  "mysql_version": "C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqld.exe  Ver 8.0.43 for Win64 on x86_64 (MySQL Community Server - GPL)",
+  "acquired_at_utc": "2026-10-14T07:01:19.768357+00:00",
+  "acquisition": "Clean private-server shutdown; no binary corruption or omitted logs.",
+  "binlog_format": "ROW",
+  "default_row_image": "FULL",
+  "include_deleted_for_demo": false,
+  "files": [
+    {
+      "path": "ibd/customers.ibd",
+      "bytes": 114688,
+      "sha256": "4adbe7b013b8e4b6652fabe0e24655dbdf19b9c0265bc0a8671379edcf293530"
+    },
+    {
+      "path": "ibd/order_lines.ibd",
+      "bytes": 114688,
+      "sha256": "227bc851242377dfb0c27c22cb4b2e3656b87bf3543997c58e3f47c1e48d234b"
+    },
+    {
+      "path": "ibd/orders.ibd",
+      "bytes": 114688,
+      "sha256": "15a55e9b15a09b534ab9e97135b3b068535b610058f91ec53f40bccd14fed1d3"
+    },
+    {
+      "path": "ibd/payments.ibd",
+      "bytes": 114688,
+      "sha256": "73688e9d0e577ea5f93c1d60f5ea28faa54fda838604adbe97bc173b60847bf3"
+    },
+    {
+      "path": "ibd/staff.ibd",
+      "bytes": 114688,
+      "sha256": "d5c1982d971d624d084c35691057a487a4643b92297e602f167b3164ca7adb42"
+    },
+    {
+      "path": "binlog/mysql-bin.000001",
+      "bytes": 20535,
+      "sha256": "66223de5f4fa45cbaef730f5eb0447d5ec804a418a804895861874b9af8987d9"
+    },
+    {
+      "path": "binlog/mysql-bin.000002",
+      "bytes": 2929,
+      "sha256": "cf48b0c6d56ce182c9cb93f08af7ef8d81a0c0b52da6eebbc1fa5c7a0b590a5b"
+    },
+    {
+      "path": "binlog/mysql-bin.000003",
+      "bytes": 590,
+      "sha256": "f57fa731b419299d1960cad5824688a35ea90cb99f03b89adf19daa845972e8a"
+    },
+    {
+      "path": "binlog/mysql-bin.index",
+      "bytes": 369,
+      "sha256": "d3be230494a110c2d278632024dbc49ab44711cb75ce356460d69e6370db12c7"
+    }
+  ],
+  "utility_validation": {
+    "ibd": {
+      "customers.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "order_lines.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "orders.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "payments.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      },
+      "staff.ibd": {
+        "checksum_valid": true,
+        "sdi_readable": true,
+        "diagnostic": ""
+      }
+    },
+    "binlog": {
+      "mysql-bin.000001": {
+        "checksum_valid": true,
+        "event_count": 40,
+        "row_images": 500,
+        "diagnostic": ""
+      },
+      "mysql-bin.000002": {
+        "checksum_valid": true,
+        "event_count": 40,
+        "row_images": 8,
+        "diagnostic": ""
+      },
+      "mysql-bin.000003": {
+        "checksum_valid": true,
+        "event_count": 8,
+        "row_images": 1,
+        "diagnostic": ""
+      }
+    }
+  }
+}

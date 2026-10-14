@@ -3,7 +3,7 @@
 - AWS experience: new AWS experience; selected Region: ap-southeast-2 (Sydney).
 - AWS CLI profile: factumdb-benchmark.
 - help_level: MEDIUM. This preference is already selected; do not ask again.
-- The current integration phase authorizes tool installation, browser authentication, toolkit configuration and read-only capability checks. Do not launch benchmark resources in this phase.
+- The user authorized execution of the prepared Windows and Ubuntu AWS benchmarks on 14 October 2026, including necessary setup, resource creation and cleanup within the budget below.
 - The later Windows and Ubuntu benchmark campaign has a combined USD 20 credit budget. Stop scheduling work at USD 16 estimated spend, reserving USD 4 for cleanup and uncertainty.
 - The user already authorized automatic shutdown and deletion of resources created for testing. Do not ask again whether to retain disposable benchmark resources; preserve existing project resources.
 - All benchmark regional resources must stay in ap-southeast-2. Agent Toolkit setup/catalog and global Free Tier APIs may use their documented us-east-1 endpoints; this does not authorize compute or storage there.
